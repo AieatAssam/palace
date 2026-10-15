@@ -7,6 +7,7 @@ import { usePalace } from '../store';
 import { Fretboard } from './Fretboard';
 import { COLORS } from './palette';
 import { markerPoint, regionBounds } from './layout';
+import { LITE } from './quality';
 import { renderInfo, setProjector, useView } from './view';
 
 const FOV = 30;
@@ -22,6 +23,7 @@ export interface Quality {
 }
 
 function initialQuality(): Quality {
+  if (LITE) return { tier: 0, dpr: 1 };
   const mobile = isCoarsePointer() || (typeof innerWidth !== 'undefined' && innerWidth < 700);
   const deviceDpr = typeof devicePixelRatio === 'undefined' ? 1 : devicePixelRatio;
   const dpr = Math.min(deviceDpr, mobile ? 1.75 : 2);
@@ -154,7 +156,7 @@ function Studio() {
       <hemisphereLight args={['#fff8ee', '#c9b9a4', 0.5]} />
       <directionalLight position={[-4, 9, 5]} intensity={1.4} color="#fff3e0" />
       <directionalLight position={[6, 4, -6]} intensity={0.45} color="#e8eef2" />
-      <Environment resolution={256} frames={1}>
+      <Environment resolution={LITE ? 64 : 256} frames={1}>
         {/* High window key, soft fill and a warm rim — gives metal and pearl something to reflect. */}
         <Lightformer form="rect" intensity={2.2} color="#fff4e2" position={[0, 6, 2]} rotation={[Math.PI / 2, 0, 0]} scale={[10, 4, 1]} />
         <Lightformer form="rect" intensity={1.2} color="#e8eef2" position={[-6, 2, 0]} rotation={[0, Math.PI / 2, 0]} scale={[6, 3, 1]} />
@@ -198,9 +200,9 @@ export function Scene() {
     <Canvas
       className="scene"
       data-testid="scene"
-      dpr={[1, maxDpr]}
+      dpr={LITE ? 1 : [1, maxDpr]}
       camera={{ fov: FOV, near: 0.5, far: 120, position: [0, 20, 6] }}
-      gl={{ antialias: quality.tier < 2, powerPreference: 'high-performance', preserveDrawingBuffer: false }}
+      gl={{ antialias: !LITE && quality.tier < 2, powerPreference: 'high-performance', preserveDrawingBuffer: false }}
       onCreated={({ gl }) => {
         gl.toneMapping = THREE.ACESFilmicToneMapping;
         gl.toneMappingExposure = 0.95;
@@ -208,14 +210,16 @@ export function Scene() {
     >
       <color attach="background" args={[COLORS.plaster]} />
       <fog attach="fog" args={[COLORS.plaster, 30, 70]} />
-      <PerformanceMonitor
-        onDecline={() =>
-          setQuality((q) => ({
-            tier: q.tier > 0 ? ((q.tier - 1) as Quality['tier']) : 0,
-            dpr: Math.max(1, q.dpr - 0.25),
-          }))
-        }
-      />
+      {!LITE && (
+        <PerformanceMonitor
+          onDecline={() =>
+            setQuality((q) => ({
+              tier: q.tier > 0 ? ((q.tier - 1) as Quality['tier']) : 0,
+              dpr: Math.max(1, q.dpr - 0.25),
+            }))
+          }
+        />
+      )}
       <Studio />
       <NeckRig>
         <Fretboard />
@@ -234,7 +238,7 @@ function ContactShadowsForNeck() {
       key={String(portrait)}
       position={[0, -0.94, 0]}
       scale={60}
-      resolution={512}
+      resolution={LITE ? 128 : 512}
       blur={2.8}
       far={2}
       opacity={0.26}
