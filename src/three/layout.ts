@@ -8,9 +8,9 @@ import { type Position, STRING_COUNT } from '../game/notes';
 export const SCALE = 26;
 export const RENDERED_FRETS = 15;
 export const HEADSTOCK_GAP = 0.95; // open-string tap zone behind the nut
-export const NUT_WIDTH = 2.3;
+export const NUT_WIDTH = 2.55;
 export const BOARD_TAPER = 0.36; // extra width by the 12th fret
-export const EDGE_MARGIN = 0.17;
+export const EDGE_MARGIN = 0.19;
 export const BOARD_THICKNESS = 0.16;
 export const STRING_HEIGHT_NUT = 0.11;
 export const STRING_HEIGHT_FAR = 0.2;
@@ -71,4 +71,41 @@ export function regionBounds(maxFret: number): { x0: number; x1: number; z0: num
   const x1 = fretX(maxFret);
   const half = neckWidth(x1) / 2;
   return { x0: -HEADSTOCK_GAP - 0.2, x1: x1 + 0.35, z0: -half, z1: half };
+}
+
+/** Extra reach for tap cells whose neighbour is off the board or locked. */
+export const EDGE_REACH = 0.5;
+/** How far beyond a cell boundary (fraction of string spacing) a tap is forgiven toward a target. */
+export const FORGIVE = 0.3;
+
+/**
+ * Tap rectangle for an unlocked position: the plain cell, widened outward
+ * when the neighbouring string is absent or locked, so edge strings are
+ * comfortably tappable on a phone.
+ */
+export function tapRect(p: Position, unlockedStrings: readonly number[]): [number, number, number, number] {
+  const [x0, x1, z0, z1] = cellRect(p);
+  const xc = Math.max(0, (x0 + x1) / 2);
+  const sp = stringSpacing(xc);
+  // Lower strings sit at +Z: string - 1 is the +Z neighbour, string + 1 the -Z one.
+  const plusOpen = !unlockedStrings.includes(p.string - 1);
+  const minusOpen = !unlockedStrings.includes(p.string + 1);
+  return [x0, x1, minusOpen ? z0 - sp * EDGE_REACH : z0, plusOpen ? z1 + sp * EDGE_REACH : z1];
+}
+
+/**
+ * Resolve a tap at local (x, z) to a position, preferring an adjacent
+ * `preferred` position (e.g. an unfound Find-all target) when the tap lands
+ * within FORGIVE × string spacing of it.
+ */
+export function resolveTap(hit: Position, x: number, z: number, preferred: readonly Position[]): Position {
+  if (preferred.some((q) => q.string === hit.string && q.fret === hit.fret)) return hit;
+  const sx = Math.max(0, x);
+  const sp = stringSpacing(sx);
+  for (const q of preferred) {
+    if (q.fret !== hit.fret || Math.abs(q.string - hit.string) !== 1) continue;
+    const d = Math.abs(z - stringZ(q.string, sx));
+    if (d <= sp * (0.5 + FORGIVE)) return q;
+  }
+  return hit;
 }

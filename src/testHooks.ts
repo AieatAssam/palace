@@ -1,7 +1,7 @@
 import { type Position, noteAt } from './game/notes';
 import { stagePositions } from './game/unlocks';
 import { usePalace } from './store';
-import { projectPosition } from './three/view';
+import { projectPosition, renderInfo } from './three/view';
 
 /**
  * `window.__palace`: read-only hooks for end-to-end tests (and curious
@@ -18,8 +18,11 @@ export interface PalaceTestHooks {
   positions(): (Position & { note: string })[];
   leftHanded(): boolean;
   session(): { answered: number; correct: number; streak: number };
+  /** Find-all positions found so far in the current question. */
+  found(): Position[];
   /** Page CSS-pixel coordinates of a position on the 3D neck (null before first frame). */
   project(p: Position): { x: number; y: number } | null;
+  render(): { frames: number; meshes: number; triangles: number };
 }
 
 declare global {
@@ -42,6 +45,8 @@ export function installTestHooks() {
     positions: () => stagePositions(s().stage()).map((p) => ({ ...p, note: noteAt(p) })),
     leftHanded: () => s().saved.settings.leftHanded,
     session: () => s().session,
+    found: () => s().found,
     project: (p) => projectPosition(p),
+    render: () => ({ ...renderInfo }),
   };
 }

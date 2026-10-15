@@ -7,7 +7,7 @@ import { usePalace } from '../store';
 import { Fretboard } from './Fretboard';
 import { COLORS } from './palette';
 import { markerPoint, regionBounds } from './layout';
-import { setProjector, useView } from './view';
+import { renderInfo, setProjector, useView } from './view';
 
 const FOV = 30;
 
@@ -99,6 +99,7 @@ function NeckRig({ children }: { children: React.ReactNode }) {
   useEffect(() => setFocus(target.D), [target, setFocus]);
 
   useFrame((_, dt) => {
+    renderInfo.frames++;
     if (first.current) {
       camera.position.copy(target.pos);
       lookNow.current.copy(target.look);
@@ -112,8 +113,19 @@ function NeckRig({ children }: { children: React.ReactNode }) {
     camera.lookAt(lookNow.current);
   });
 
-  // Register a projector for the e2e test hooks.
+  // Register a projector (and scene stats) for the e2e test hooks.
   useEffect(() => {
+    let meshes = 0;
+    let triangles = 0;
+    group.current?.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      meshes++;
+      const g = mesh.geometry;
+      triangles += (g.index ? g.index.count : g.attributes.position!.count) / 3;
+    });
+    renderInfo.meshes = meshes;
+    renderInfo.triangles = Math.round(triangles);
     const v = new THREE.Vector3();
     setProjector((p) => {
       const g = group.current;
@@ -225,7 +237,7 @@ function ContactShadowsForNeck() {
       resolution={512}
       blur={2.8}
       far={2}
-      opacity={0.38}
+      opacity={0.26}
       color="#3a2a20"
       frames={1}
     />

@@ -32,3 +32,6 @@ export function setProjector(fn: Projector | null) {
 export function projectPosition(p: Position) {
   return projector ? projector(p) : null;
 }
+
+/** Render statistics for tests: frames drawn, meshes and triangles in the scene. */
+export const renderInfo = { frames: 0, meshes: 0, triangles: 0 };

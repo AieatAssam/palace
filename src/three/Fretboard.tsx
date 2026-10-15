@@ -14,13 +14,14 @@ import {
   RENDERED_FRETS,
   STRING_RADII,
   WOUND,
-  cellRect,
   fretX,
   markerPoint,
   neckWidth,
+  resolveTap,
   stringHeight,
   stringSpacing,
   stringZ,
+  tapRect,
 } from './layout';
 import { COLORS } from './palette';
 import { makeGlow, makeRosewood, makeVeil, makeWindingNormal } from './textures';
@@ -525,11 +526,25 @@ function HitCells() {
     for (let s = 0; s < STRING_COUNT; s++)
       for (let f = 0; f <= MAX_FRET; f++) {
         const p = { string: s, fret: f };
-        if (isUnlocked(stage, p)) out.push({ p, rect: cellRect(p) });
+        if (isUnlocked(stage, p)) out.push({ p, rect: tapRect(p, stage.strings) });
       }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stageIdx]);
+  const local = useMemo(() => new THREE.Vector3(), []);
+
+  const onDown = (p: Position) => (e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation();
+    const { question, found } = usePalace.getState();
+    let target = p;
+    if (question.kind === 'find' && e.object.parent) {
+      // Forgive near-misses toward an unfound target on the adjacent string.
+      e.object.parent.worldToLocal(local.copy(e.point));
+      const open = question.targets.filter((t) => !found.some((f) => samePosition(f, t)));
+      target = resolveTap(p, local.x, local.z, open);
+    }
+    tap(target);
+  };
 
   return (
     <group>
@@ -539,10 +554,7 @@ function HitCells() {
           position={[(x0 + x1) / 2, 0.15, (z0 + z1) / 2]}
           rotation={[-Math.PI / 2, 0, 0]}
           material={hitMaterial}
-          onPointerDown={(e: ThreeEvent<PointerEvent>) => {
-            e.stopPropagation();
-            tap(p);
-          }}
+          onPointerDown={onDown(p)}
           onPointerOver={() => (document.body.style.cursor = 'pointer')}
           onPointerOut={() => (document.body.style.cursor = '')}
         >
