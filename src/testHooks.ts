@@ -1,7 +1,7 @@
 import { type Position, noteAt } from './game/notes';
 import { stagePositions } from './game/unlocks';
 import { usePalace } from './store';
-import { projectPosition, renderInfo } from './three/view';
+import { type HighlightReport, inspectHighlight, projectPosition, renderInfo } from './three/view';
 
 /**
  * `window.__palace`: read-only hooks for end-to-end tests (and curious
@@ -25,6 +25,12 @@ export interface PalaceTestHooks {
   /** Page CSS-pixel coordinates of a position on the 3D neck (null before first frame). */
   project(p: Position): { x: number; y: number } | null;
   render(): { frames: number; meshes: number; triangles: number };
+  /**
+   * The current question's highlight as rendered: the position it was made for,
+   * plus the string and fret space it actually sits on, measured from the
+   * string, nut and fret meshes on screen (null before first frame / in Find-all).
+   */
+  highlight(): HighlightReport | null;
 }
 
 declare global {
@@ -51,5 +57,6 @@ export function installTestHooks() {
     found: () => s().found,
     project: (p) => projectPosition(p),
     render: () => ({ ...renderInfo }),
+    highlight: () => inspectHighlight(),
   };
 }

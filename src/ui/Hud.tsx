@@ -3,7 +3,7 @@ import { NOTE_NAMES, type NoteName } from '../game/notes';
 import { stageProgress } from '../game/unlocks';
 import { usePalace } from '../store';
 import { useView } from '../three/view';
-import { STRING_NAMES, ordinal, pretty } from './format';
+import { positionLabel, pretty } from './format';
 
 function useInsetReporter() {
   const top = useRef<HTMLElement>(null);
@@ -60,10 +60,7 @@ function Prompt() {
   const found = usePalace((s) => s.found);
   const feedback = usePalace((s) => s.feedback);
   if (q.kind === 'name') {
-    const where =
-      q.position.fret === 0
-        ? `open ${STRING_NAMES[q.position.string]} string`
-        : `${STRING_NAMES[q.position.string]} string, ${ordinal(q.position.fret)} fret`;
+    const where = positionLabel(q.position);
     let line = 'Name the glowing note';
     if (feedback?.kind === 'correct') line = pretty(q.answer);
     if (feedback?.kind === 'miss') line = `It's ${pretty(q.answer)}`;
@@ -72,7 +69,9 @@ function Prompt() {
         <h1 className={`prompt-title ${feedback?.kind ?? ''}`} data-testid="prompt">
           {line}
         </h1>
-        <p className="prompt-sub">{where}</p>
+        <p className="prompt-sub" data-testid="prompt-where">
+          {where}
+        </p>
       </div>
     );
   }

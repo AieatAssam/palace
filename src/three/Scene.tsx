@@ -1,14 +1,14 @@
 import { ContactShadows, Environment, Lightformer, PerformanceMonitor } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Bloom, DepthOfField, EffectComposer, Vignette } from '@react-three/postprocessing';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { usePalace } from '../store';
 import { Fretboard } from './Fretboard';
 import { COLORS } from './palette';
-import { markerPoint, regionBounds } from './layout';
+import { markerPoint, neckMatrix, neckToWorld, regionBounds } from './layout';
 import { LITE } from './quality';
-import { renderInfo, setProjector, useView } from './view';
+import { renderInfo, setInspector, setProjector, useView } from './view';
 
 const FOV = 30;
 
@@ -54,21 +54,17 @@ function NeckRig({ children }: { children: React.ReactNode }) {
   const gl = useThree((s) => s.gl);
   const group = useRef<THREE.Group>(null);
 
+  const view = useMemo(() => ({ portrait, leftHanded }), [portrait, leftHanded]);
+
   const target = useMemo(() => {
     const stage = usePalace.getState().stage();
     const b = regionBounds(stage.maxFret);
-    // Local → world mapping: portrait rotates the neck so +X points down-screen.
     const corners = [
-      [b.x0, b.z0],
-      [b.x1, b.z0],
-      [b.x0, b.z1],
-      [b.x1, b.z1],
-    ].map(([x, z]) => {
-      let wx = portrait ? -z! : x!;
-      const wz = portrait ? x! : z!;
-      if (leftHanded) wx = -wx;
-      return [wx, wz] as const;
-    });
+      neckToWorld(b.x0, b.z0, view),
+      neckToWorld(b.x1, b.z0, view),
+      neckToWorld(b.x0, b.z1, view),
+      neckToWorld(b.x1, b.z1, view),
+    ];
     const xs = corners.map((c) => c[0]);
     const zs = corners.map((c) => c[1]);
     const minX = Math.min(...xs);
@@ -93,7 +89,7 @@ function NeckRig({ children }: { children: React.ReactNode }) {
     const pos = look.clone().add(new THREE.Vector3(0, D * Math.cos(tilt), D * Math.sin(tilt)));
     return { look, pos, D };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [portrait, size.width, size.height, insets.top, insets.bottom, leftHanded, stageIdx]);
+  }, [view, portrait, size.width, size.height, insets.top, insets.bottom, stageIdx]);
 
   const lookNow = useRef(target.look.clone());
   const first = useRef(true);
@@ -138,14 +134,67 @@ function NeckRig({ children }: { children: React.ReactNode }) {
       const rect = gl.domElement.getBoundingClientRect();
       return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height };
     });
-    return () => setProjector(null);
+    setInspector(() => {
+      const g = group.current;
+      if (!g) return null;
+      g.updateWorldMatrix(true, true);
+      camera.updateMatrixWorld();
+      const rect = gl.domElement.getBoundingClientRect();
+      const toPage = (w: THREE.Vector3) => {
+        const n = w.clone().project(camera);
+        return new THREE.Vector2(rect.left + ((n.x + 1) / 2) * rect.width, rect.top + ((1 - n.y) / 2) * rect.height);
+      };
+      let glow: THREE.Object3D | undefined;
+      const strings: THREE.Mesh[] = [];
+      const frets: { fret: number; x: number }[] = [];
+      g.traverse((o) => {
+        const d = o.userData as { role?: string; fret?: number };
+        if (d.role === 'highlight' && o.userData.question) glow = o;
+        else if (d.role === 'string') strings.push(o as THREE.Mesh);
+        else if (d.role === 'fret') frets.push({ fret: d.fret!, x: g.worldToLocal(o.getWorldPosition(new THREE.Vector3())).x });
+      });
+      if (!glow) return null;
+      const centre = glow.getWorldPosition(new THREE.Vector3());
+      const at = toPage(centre);
+      // Nearest string on screen: distance to each rendered string segment.
+      let renderedString = -1;
+      let best = Infinity;
+      for (const mesh of strings) {
+        const h = (mesh.geometry as THREE.CylinderGeometry).parameters.height;
+        const a = toPage(new THREE.Vector3(0, -h / 2, 0).applyMatrix4(mesh.matrixWorld));
+        const b = toPage(new THREE.Vector3(0, h / 2, 0).applyMatrix4(mesh.matrixWorld));
+        const ab = b.clone().sub(a);
+        const t = THREE.MathUtils.clamp(at.clone().sub(a).dot(ab) / ab.lengthSq(), 0, 1);
+        const dist = a.addScaledVector(ab, t).distanceTo(at);
+        if (dist < best) {
+          best = dist;
+          renderedString = mesh.userData.string as number;
+        }
+      }
+      // Fret space: count the nut/fret wires between the headstock and the highlight
+      // (an open-string highlight sits on the nut itself, so the nut doesn't count).
+      const lx = g.worldToLocal(centre.clone()).x;
+      const renderedFret = frets.filter((f) => f.x < lx - 0.01).reduce((m, f) => Math.max(m, f.fret + 1), 0);
+      const d = glow.userData as { string: number; fret: number; tone: string };
+      return { string: d.string, fret: d.fret, tone: d.tone, screen: { x: at.x, y: at.y }, renderedString, renderedFret };
+    });
+    return () => {
+      setProjector(null);
+      setInspector(null);
+    };
   }, [camera, gl]);
 
+  // Orientation and mirroring come from the same mapping the framing uses.
+  useLayoutEffect(() => {
+    const g = group.current;
+    if (!g) return;
+    g.matrix.set(...(neckMatrix(view) as Parameters<THREE.Matrix4['set']>));
+    g.matrixWorldNeedsUpdate = true;
+  }, [view]);
+
   return (
-    <group scale={[leftHanded ? -1 : 1, 1, 1]}>
-      <group ref={group} rotation={[0, portrait ? -Math.PI / 2 : 0, 0]}>
-        {children}
-      </group>
+    <group ref={group} matrixAutoUpdate={false}>
+      {children}
     </group>
   );
 }
@@ -162,9 +211,11 @@ function Studio() {
         <Lightformer form="rect" intensity={1.2} color="#e8eef2" position={[-6, 2, 0]} rotation={[0, Math.PI / 2, 0]} scale={[6, 3, 1]} />
         <Lightformer form="rect" intensity={1.6} color="#f3d9b0" position={[6, 2, -2]} rotation={[0, -Math.PI / 2, 0]} scale={[6, 2, 1]} />
         <Lightformer form="ring" intensity={1.2} color="#ffffff" position={[2, 4, 6]} scale={2} />
+        {/* A warm, dim room. A pale one mirrors into the wood at grazing angles and
+            washes the far end of the neck out to a haze. */}
         <mesh scale={30}>
           <sphereGeometry args={[1, 16, 16]} />
-          <meshBasicMaterial color="#d9cfc0" side={THREE.BackSide} />
+          <meshBasicMaterial color="#5a4436" side={THREE.BackSide} />
         </mesh>
       </Environment>
     </>
@@ -178,15 +229,16 @@ function Effects({ tier }: { tier: Quality['tier'] }) {
     return (
       <EffectComposer multisampling={0}>
         <Bloom mipmapBlur intensity={0.45} luminanceThreshold={0.92} luminanceSmoothing={0.2} resolutionScale={0.5} />
-        <Vignette offset={0.32} darkness={0.32} />
+        <Vignette offset={0.4} darkness={0.22} />
       </EffectComposer>
     );
   }
   return (
     <EffectComposer multisampling={4}>
-      <DepthOfField worldFocusDistance={focus} worldFocusRange={focus * 0.9} bokehScale={1.6} />
-      <Bloom mipmapBlur intensity={0.6} luminanceThreshold={0.9} luminanceSmoothing={0.2} />
-      <Vignette offset={0.3} darkness={0.35} />
+      {/* Just a hint of depth: the whole unlocked region stays sharp. */}
+      <DepthOfField worldFocusDistance={focus} worldFocusRange={focus * 2.5} bokehScale={0.6} />
+      <Bloom mipmapBlur intensity={0.5} luminanceThreshold={0.92} luminanceSmoothing={0.2} />
+      <Vignette offset={0.4} darkness={0.22} />
     </EffectComposer>
   );
 }
@@ -209,7 +261,6 @@ export function Scene() {
       }}
     >
       <color attach="background" args={[COLORS.plaster]} />
-      <fog attach="fog" args={[COLORS.plaster, 30, 70]} />
       {!LITE && (
         <PerformanceMonitor
           onDecline={() =>

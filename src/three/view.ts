@@ -33,5 +33,29 @@ export function projectPosition(p: Position) {
   return projector ? projector(p) : null;
 }
 
+/**
+ * What the scene actually shows for the question's highlight, measured from
+ * the rendered meshes rather than from the data that placed them.
+ */
+export interface HighlightReport {
+  /** Position the highlight was created for. */
+  string: number;
+  fret: number;
+  tone: string;
+  /** Page CSS-pixel centre of the highlight. */
+  screen: { x: number; y: number };
+  /** String mesh nearest the highlight on screen. */
+  renderedString: number;
+  /** Fret space the highlight sits in, from the nut and fret meshes (0 = open). */
+  renderedFret: number;
+}
+let inspector: (() => HighlightReport | null) | null = null;
+export function setInspector(fn: (() => HighlightReport | null) | null) {
+  inspector = fn;
+}
+export function inspectHighlight() {
+  return inspector ? inspector() : null;
+}
+
 /** Render statistics for tests: frames drawn, meshes and triangles in the scene. */
 export const renderInfo = { frames: 0, meshes: 0, triangles: 0 };

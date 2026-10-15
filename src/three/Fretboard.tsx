@@ -10,29 +10,32 @@ import {
   BOARD_TAPER,
   BOARD_THICKNESS,
   EDGE_MARGIN,
+  HEADSTOCK_LEN,
+  HEADSTOCK_TILT,
   INLAY_FRETS,
-  NUT_DEPTH,
   NUT_WIDTH,
+  NUT_X0,
+  OPEN_HALO,
   RENDERED_FRETS,
   STRING_RADII,
   WOUND,
   fretX,
+  headstockPoint,
   markerPoint,
   neckWidth,
+  postPoint,
   resolveTap,
   stringHeight,
+  stringPoint,
   stringSpacing,
-  stringZ,
   tapRect,
+  wrapPoint,
 } from './layout';
 import { COLORS } from './palette';
 import { LITE } from './quality';
-import { makeGlow, makeRosewood, makeWindingNormal } from './textures';
+import { makeGlow, makeHalo, makePearl, makeRosewood, makeWindingNormal } from './textures';
 
 const STRING_END = 30; // strings run off-frame towards the bridge
-const NUT_X0 = -NUT_DEPTH;
-const HEADSTOCK_LEN = 4.2;
-const HEADSTOCK_TILT = 0.16;
 
 /* ------------------------------------------------------------------ */
 /* Materials                                                          */
@@ -47,8 +50,10 @@ function physical(params: THREE.MeshPhysicalMaterialParameters): THREE.MeshStand
     iridescence: _i,
     iridescenceIOR: _ii,
     iridescenceThicknessRange: _it,
+    iridescenceThicknessMap: _itm,
     sheen: _s,
     sheenColor: _sc,
+    sheenRoughness: _sr,
     ...rest
   } = params;
   return new THREE.MeshStandardMaterial(rest);
@@ -98,7 +103,8 @@ function injectLock(shader: THREE.WebGLProgramParametersWithUniforms, lock: Lock
   float across = uLockStrings * (1.0 - smoothstep(edge - 0.12, edge + 0.04, vNeck.z));
   float locked = max(beyond, across);
   float luma = dot(outgoingLight, vec3(0.2126, 0.7152, 0.0722));
-  outgoingLight = mix(outgoingLight, vec3(luma) * vec3(1.0, 0.96, 0.92), 0.72 * locked) * (1.0 - 0.4 * locked);
+  // Darken and soften the colour, but keep it warm: locked wood stays wood, not grey.
+  outgoingLight = mix(outgoingLight, vec3(luma) * vec3(1.12, 0.94, 0.8), 0.4 * locked) * (1.0 - 0.45 * locked);
 }
 #include <opaque_fragment>`,
     );
@@ -106,6 +112,34 @@ function injectLock(shader: THREE.WebGLProgramParametersWithUniforms, lock: Lock
 
 function withLock<M extends THREE.Material>(mat: M, lock: LockUniforms): M {
   mat.onBeforeCompile = (shader) => injectLock(shader, lock);
+  return mat;
+}
+
+/**
+ * Nacre's play of colour: pastel hues that drift across the shell's growth
+ * bands and shift with viewing angle. Physical iridescence only tints the
+ * specular reflection, which a dim room barely shows; this carries the
+ * colour in the body of the pearl too (and survives the lite path).
+ */
+function withNacre(mat: THREE.MeshStandardMaterial, bands: THREE.Texture, lock: LockUniforms) {
+  mat.onBeforeCompile = (shader) => {
+    injectLock(shader, lock);
+    shader.uniforms.uNacre = { value: bands };
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uNacre;')
+      .replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>
+{
+  float ndv = clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0);
+  float band = texture2D(uNacre, vMapUv).g;
+  float ph = band * 0.9 + (1.0 - ndv) * 1.2;
+  vec3 hue = 0.5 + 0.5 * cos(6.2831853 * (ph + vec3(0.0, 0.33, 0.67)));
+  diffuseColor.rgb *= mix(vec3(1.0), 0.66 + 0.5 * hue, 0.48);
+  totalEmissiveRadiance += diffuseColor.rgb * hue * 0.06 * (0.4 + band);
+}`,
+      );
+  };
   return mat;
 }
 
@@ -123,8 +157,11 @@ function useMaterials() {
       normalMap: wood.normalMap,
       normalScale: new THREE.Vector2(0.7, 0.7),
       roughness: 1,
-      clearcoat: 0.12,
-      clearcoatRoughness: 0.55,
+      // Oiled, not lacquered: a faint coat, and little environment, so the far
+      // end (seen at a grazing angle) stays rosewood instead of mirroring the room.
+      clearcoat: 0.06,
+      clearcoatRoughness: 0.6,
+      envMapIntensity: 0.55,
     });
     const neck = physical({
       color: COLORS.oak,
@@ -147,22 +184,32 @@ function useMaterials() {
       clearcoat: 0.5,
       clearcoatRoughness: 0.2,
     });
+    const shell = LITE ? makePearl(128) : makePearl();
     const pearl = physical({
-      color: '#d9d1c2',
-      roughness: 0.3,
+      color: '#ddd6cb',
+      map: shell.map,
+      roughness: 1,
+      roughnessMap: shell.roughnessMap,
       clearcoat: 1,
-      clearcoatRoughness: 0.06,
+      clearcoatRoughness: 0.05,
       iridescence: 1,
-      iridescenceIOR: 1.4,
-      iridescenceThicknessRange: [180, 620],
-      sheen: 0.6,
-      sheenColor: new THREE.Color('#e4eeff'),
+      iridescenceIOR: 1.35,
+      iridescenceThicknessRange: [260, 820],
+      iridescenceThicknessMap: shell.thickness,
+      sheen: 0.35,
+      sheenRoughness: 0.35,
+      sheenColor: new THREE.Color('#dbe7ff'),
+      envMapIntensity: 1.3,
     });
-    for (const mat of [board, neck, nut, pearl]) withLock(mat, lock);
+    // The seat the pearl is set into: a hairline of dark glue and shadow.
+    const inlaySeat = withLock(new THREE.MeshStandardMaterial({ color: '#1c110c', roughness: 0.8 }), lock);
+    for (const mat of [board, neck, nut]) withLock(mat, lock);
+    withNacre(pearl, shell.thickness, lock);
     const winding = makeWindingNormal();
     winding.repeat.set(1, 220);
     const glow = makeGlow();
-    return { board, neck, headstock, post, brass, woundWire, plainWire, nut, pearl, winding, glow, lock };
+    const halo = makeHalo();
+    return { board, neck, headstock, post, brass, woundWire, plainWire, nut, pearl, inlaySeat, winding, glow, halo, lock };
   }, []);
 }
 
@@ -217,15 +264,6 @@ function neckBackGeometry(): THREE.BufferGeometry {
   return g;
 }
 
-/** Rotate a point about the nut pivot to follow the headstock's back-angle. */
-function headstockPoint(x: number, y: number, z: number): THREE.Vector3 {
-  const px = NUT_X0;
-  const dx = x - px;
-  const c = Math.cos(HEADSTOCK_TILT);
-  const s = Math.sin(HEADSTOCK_TILT);
-  return new THREE.Vector3(px + dx * c - y * s, dx * s + y * c, z);
-}
-
 const UP = new THREE.Vector3(0, 1, 0);
 
 function placeBetween(obj: THREE.Object3D, a: THREE.Vector3, b: THREE.Vector3) {
@@ -249,18 +287,13 @@ function Board({ m }: { m: Materials }) {
   );
 }
 
-/** Inline tuner posts, one per string, each directly behind its slot in the nut. */
-function postX(string: number) {
-  return -1.15 - string * 0.46;
-}
-
 function Headstock({ m, thick }: { m: Materials; thick: number }) {
   const { rotation, position } = useMemo(() => {
-    const centre = headstockPoint(NUT_X0 - HEADSTOCK_LEN / 2, -0.11, 0);
+    const centre = new THREE.Vector3(...headstockPoint(NUT_X0 - HEADSTOCK_LEN / 2, -0.11, 0));
     return { rotation: HEADSTOCK_TILT, position: centre };
   }, []);
   const posts = useMemo(
-    () => Array.from({ length: STRING_COUNT }, (_, s) => ({ string: s, pos: headstockPoint(postX(s), 0, stringZ(s, 0)) })),
+    () => Array.from({ length: STRING_COUNT }, (_, s) => ({ string: s, pos: new THREE.Vector3(...postPoint(s)) })),
     [],
   );
   return (
@@ -279,29 +312,24 @@ function Headstock({ m, thick }: { m: Materials; thick: number }) {
         </group>
       ))}
       {/* Strings run straight back from the nut to their posts. */}
-      {posts.map(({ pos, string }) => (
-        <BehindNutString key={`b${string}`} string={string} post={pos} m={m} thick={thick} />
+      {posts.map(({ string }) => (
+        <BehindNutString key={`b${string}`} string={string} m={m} thick={thick} />
       ))}
     </group>
   );
 }
 
-function BehindNutString({ string, post, m, thick }: { string: number; post: THREE.Vector3; m: Materials; thick: number }) {
+function BehindNutString({ string, m, thick }: { string: number; m: Materials; thick: number }) {
   const ref = useRef<THREE.Mesh>(null);
-  const a = useMemo(() => new THREE.Vector3(NUT_X0, stringHeight(0) - 0.005, stringZ(string, 0)), [string]);
-  const b = useMemo(() => {
-    const c = Math.cos(HEADSTOCK_TILT);
-    const s = Math.sin(HEADSTOCK_TILT);
-    // Wrap point near the top of the post (post-local y ≈ 0.12).
-    return post.clone().add(new THREE.Vector3(-0.12 * s, 0.12 * c, 0));
-  }, [post]);
+  const a = useMemo(() => new THREE.Vector3(...stringPoint(string, NUT_X0 - 1e-6)), [string]);
+  const b = useMemo(() => new THREE.Vector3(...wrapPoint(string)), [string]);
   const len = a.distanceTo(b);
   useEffect(() => {
     if (ref.current) placeBetween(ref.current, a, b);
   }, [a, b]);
   const r = visualRadius(string, thick);
   return (
-    <mesh ref={ref} material={WOUND[string] ? m.woundWire : m.plainWire}>
+    <mesh ref={ref} material={WOUND[string] ? m.woundWire : m.plainWire} userData={{ role: 'string', string }}>
       <cylinderGeometry args={[r, r, len, 8, 1, true]} />
     </mesh>
   );
@@ -310,7 +338,7 @@ function BehindNutString({ string, post, m, thick }: { string: number; post: THR
 function Nut({ m }: { m: Materials }) {
   const h = stringHeight(0) + 0.02;
   return (
-    <mesh position={[NUT_X0 / 2, h / 2, 0]} material={m.nut}>
+    <mesh position={[NUT_X0 / 2, h / 2, 0]} material={m.nut} userData={{ role: 'fret', fret: 0 }}>
       <boxGeometry args={[Math.abs(NUT_X0), h, NUT_WIDTH]} />
     </mesh>
   );
@@ -326,11 +354,22 @@ function Frets({ m }: { m: Materials }) {
     <group>
       {Array.from({ length: RENDERED_FRETS }, (_, i) => {
         const x = fretX(i + 1);
-        return <mesh key={i} geometry={geo} material={m.brass} position={[x, 0, 0]} scale={[1, 1, neckWidth(x) - 0.02]} />;
+        return (
+          <mesh
+            key={i}
+            geometry={geo}
+            material={m.brass}
+            position={[x, 0, 0]}
+            scale={[1, 1, neckWidth(x) - 0.02]}
+            userData={{ role: 'fret', fret: i + 1 }}
+          />
+        );
       })}
     </group>
   );
 }
+
+const INLAY_R = 0.13;
 
 function Inlays({ m }: { m: Materials }) {
   const dots = useMemo(() => {
@@ -344,12 +383,19 @@ function Inlays({ m }: { m: Materials }) {
     }
     return out;
   }, []);
+  // Set into the board: the pearl's face sits a hair above the wood, ringed by
+  // a thin dark seat. Each dot is cut from a different part of the shell.
   return (
     <group>
       {dots.map(([x, z], i) => (
-        <mesh key={i} position={[x, 0.001, z]} material={m.pearl}>
-          <cylinderGeometry args={[0.13, 0.13, 0.004, 32]} />
-        </mesh>
+        <group key={i} position={[x, 0, z]} rotation={[0, i * 2.39, 0]}>
+          <mesh position={[0, -0.0015, 0]} material={m.pearl}>
+            <cylinderGeometry args={[INLAY_R, INLAY_R, 0.004, 48]} />
+          </mesh>
+          <mesh position={[0, 0.0003, 0]} rotation={[-Math.PI / 2, 0, 0]} material={m.inlaySeat}>
+            <ringGeometry args={[INLAY_R - 0.004, INLAY_R + 0.009, 48]} />
+          </mesh>
+        </group>
       ))}
     </group>
   );
@@ -418,8 +464,8 @@ uniform float uAmp; uniform float uTime; uniform float uStart; uniform float uFr
 
 function GuitarString({ string, m, thick }: { string: number; m: Materials; thick: number }) {
   const ref = useRef<THREE.Mesh>(null);
-  const a = useMemo(() => new THREE.Vector3(0, stringHeight(0), stringZ(string, 0)), [string]);
-  const b = useMemo(() => new THREE.Vector3(STRING_END, stringHeight(STRING_END), stringZ(string, STRING_END)), [string]);
+  const a = useMemo(() => new THREE.Vector3(...stringPoint(string, 0)), [string]);
+  const b = useMemo(() => new THREE.Vector3(...stringPoint(string, STRING_END)), [string]);
   const len = a.distanceTo(b);
   const { mat, uniforms } = useMemo(() => makeStringMaterial(string, m, len), [string, m, len]);
   const r = visualRadius(string, thick);
@@ -457,7 +503,7 @@ function GuitarString({ string, m, thick }: { string: number; m: Materials; thic
   });
 
   return (
-    <mesh ref={ref} material={mat}>
+    <mesh ref={ref} material={mat} userData={{ role: 'string', string }}>
       <cylinderGeometry args={[r, r, len, 10, 160, true]} />
     </mesh>
   );
@@ -476,6 +522,21 @@ const TONE_COLOR: Record<GlowTone, THREE.Color> = {
   spark: new THREE.Color('#fff4dc').multiplyScalar(2.4),
 };
 
+/** Open strings: a warm brass halo around the string where it leaves the nut. */
+const HALO_COLOR = new THREE.Color(COLORS.brass);
+const HALO_CORE = new THREE.Color(COLORS.brass).multiplyScalar(2.4);
+
+function glowMaterial(map: THREE.Texture, color: THREE.Color, additive: boolean) {
+  return new THREE.MeshBasicMaterial({
+    map,
+    color,
+    transparent: true,
+    depthWrite: false,
+    blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+    toneMapped: false,
+  });
+}
+
 function Glow({
   position,
   tone,
@@ -483,6 +544,7 @@ function Glow({
   breathe = false,
   fadeFrom,
   size = 0.62,
+  question = false,
 }: {
   position: Position;
   tone: GlowTone;
@@ -491,26 +553,27 @@ function Glow({
   /** performance.now() timestamp: fade out over ~0.8s from here. */
   fadeFrom?: number;
   size?: number;
+  /** The current question's highlight (reported to the e2e inspector). */
+  question?: boolean;
 }) {
-  const ref = useRef<THREE.Mesh>(null);
-  const mat = useMemo(
-    () =>
-      new THREE.MeshBasicMaterial({
-        map: m.glow,
-        color: TONE_COLOR[tone],
-        transparent: true,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-        toneMapped: false,
-      }),
-    [m, tone],
-  );
-  useEffect(() => () => mat.dispose(), [mat]);
-  const [x, y, z] = markerPoint(position);
-  // Fretted: on the board under the string. Open: on top of the nut, smaller, so it stays on the neck.
+  const ref = useRef<THREE.Group>(null);
   const open = position.fret === 0;
+  const halo = open && tone === 'ask';
+  const mats = useMemo(
+    () =>
+      halo
+        ? [glowMaterial(m.halo, HALO_COLOR, false), glowMaterial(m.glow, HALO_CORE, true)]
+        : [glowMaterial(m.glow, TONE_COLOR[tone], true)],
+    [m, tone, halo],
+  );
+  useEffect(() => () => mats.forEach((mat) => mat.dispose()), [mats]);
+  // Exactly on the string (shared path in layout.ts). Fretted: on the board
+  // under the string. Open: just above the nut, stretched along the string and
+  // narrower than the string spacing, so it can only ever read as this string.
+  const [x, y, z] = markerPoint(position);
   const gy = open ? stringHeight(0) + 0.025 : y * 0.5;
-  const gsize = open ? size * 0.8 : size;
+  const sx = open ? OPEN_HALO.length : size;
+  const sz = open ? OPEN_HALO.width : size;
   useFrame(() => {
     if (!ref.current) return;
     const t = performance.now() / 1000;
@@ -526,14 +589,27 @@ function Glow({
       o *= Math.max(0, 1 - k);
       s *= 1 + 0.35 * Math.min(1, k);
     }
-    mat.opacity = o;
-    ref.current.scale.setScalar(gsize * s);
+    mats[0]!.opacity = halo ? 0.65 + 0.35 * o : o;
+    if (mats[1]) mats[1].opacity = 0.6 * o;
+    // Open-string halos breathe along the string only, never across into a neighbour.
+    ref.current.scale.set(sx * s, 1, open ? sz : sz * s);
     ref.current.visible = o > 0.01;
   });
   return (
-    <mesh ref={ref} position={[x, gy, z]} rotation={[-Math.PI / 2, 0, 0]} material={mat} renderOrder={5}>
-      <planeGeometry args={[1, 1]} />
-    </mesh>
+    <group
+      ref={ref}
+      position={[x, gy, z]}
+      userData={{ role: 'highlight', question, string: position.string, fret: position.fret, tone }}
+    >
+      <mesh rotation={[-Math.PI / 2, 0, 0]} material={mats[0]} renderOrder={5}>
+        <planeGeometry args={[1, 1]} />
+      </mesh>
+      {mats[1] && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} scale={[0.45, 0.6, 1]} material={mats[1]} renderOrder={6}>
+          <planeGeometry args={[1, 1]} />
+        </mesh>
+      )}
+    </group>
   );
 }
 
@@ -547,7 +623,17 @@ function Highlights({ m }: { m: Materials }) {
   const out: React.ReactNode[] = [];
   if (question.kind === 'name') {
     const tone: GlowTone = feedback?.kind === 'correct' ? 'correct' : feedback?.kind === 'miss' ? 'miss' : 'ask';
-    out.push(<Glow key={`q-${question.itemId}-${tone}`} position={question.position} tone={tone} m={m} breathe={tone === 'ask'} size={0.7} />);
+    out.push(
+      <Glow
+        key={`q-${question.itemId}-${tone}`}
+        position={question.position}
+        tone={tone}
+        m={m}
+        breathe={tone === 'ask'}
+        size={0.7}
+        question
+      />,
+    );
   } else {
     for (const p of found) out.push(<Glow key={`f-s${p.string}f${p.fret}`} position={p} tone="correct" m={m} />);
   }

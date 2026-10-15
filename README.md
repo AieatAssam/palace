@@ -18,7 +18,8 @@ else gets built.
   more than slow ones; misses reset hard. Each position (Name-it) and each note (Find-all)
   is its own card. Progress lives in `localStorage` (`palace.fretboard.v1`).
 - **3D neck** (react-three-fiber): procedural rosewood board (canvas-generated albedo,
-  roughness and normal maps), pearl inlays at 3/5/7/9/12, brass frets, a bone nut,
+  roughness and normal maps), mother-of-pearl inlays at 3/5/7/9/12 (iridescent, with a
+  procedural shell pattern, set into the board), brass frets, a bone nut,
   wound strings with a normal-mapped winding, and a headstock where each string runs straight
   back to its own inline tuner post. Locked strings and frets are dimmed and desaturated in
   the shader (no overlay). On phones strings render thicker than true gauge. The lighting
@@ -70,8 +71,9 @@ lite path, and CI runs one worker. The suite takes about a minute, including the
 `window.__palace` exposes read-only hooks for e2e tests and devtools: `state()` (`{ mode, question }`),
 `question()`,
 `answer()`, `drill()`, `stage()`, `positions()`, `found()`, `session()`, `leftHanded()`,
-`render()`, and `project({ string, fret })`, which gives the page coordinates of a
-position on the 3D neck.
+`render()`, `project({ string, fret })`, which gives the page coordinates of a
+position on the 3D neck, and `highlight()`, which reports the question's highlight as
+rendered: the string mesh and fret space it actually sits on, measured on screen.
 
 ## Layout
 

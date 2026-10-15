@@ -128,3 +128,65 @@ test('toggles left-handed mode (mirrors the neck, persists)', async ({ page }) =
   expect(await page.evaluate(() => window.__palace!.leftHanded())).toBe(true);
   await expect(page.getByTestId('onboarding')).toBeHidden();
 });
+
+/**
+ * A saved deck that makes the next Name-it questions exactly `ask`, in order:
+ * those items are overdue (the first most of all), everything else in the
+ * stage was seen and isn't due until tomorrow. Answered items go back into
+ * learning (due in seconds), so they don't come round again within a test.
+ */
+function seededSave(stage: number, positions: Pos[], ask: Pos[], leftHanded: boolean) {
+  const now = Date.now();
+  const deck: Record<string, unknown> = {};
+  for (const p of positions) {
+    const id = `name:s${p.string}f${p.fret}`;
+    const order = ask.findIndex((q) => q.string === p.string && q.fret === p.fret);
+    const due = order < 0 ? now + 86_400_000 : now - (ask.length - order) * 3_600_000;
+    deck[id] = { id, ease: 2.5, interval: 60_000, reps: 0, lapses: 0, seen: 1, correct: 0, due, last: now - 86_400_000, avgMs: 0 };
+  }
+  return JSON.stringify({ deck, stage, settings: { leftHanded, sound: false }, onboarded: true });
+}
+
+const STAGE_ALL_STRINGS = 2; // all six strings, frets 0–5
+const ALL_0_5: Pos[] = Array.from({ length: 36 }, (_, i) => ({ string: Math.floor(i / 6), fret: i % 6 }));
+// Open A (the reported case), its neighbour open low E, open high E, and two fretted positions.
+const PROBES: Pos[] = [
+  { string: 1, fret: 0 },
+  { string: 0, fret: 0 },
+  { string: 5, fret: 0 },
+  { string: 2, fret: 3 },
+  { string: 4, fret: 5 },
+];
+
+for (const leftHanded of [false, true]) {
+  test(`the glowing position matches the prompt (${leftHanded ? 'left' : 'right'}-handed)`, async ({ page }) => {
+    await page.addInitScript((save) => localStorage.setItem('palace.fretboard.v1', save), seededSave(STAGE_ALL_STRINGS, ALL_0_5, PROBES, leftHanded));
+    await page.goto('./');
+    await waitForFrames(page);
+    expect(await page.evaluate(() => window.__palace!.leftHanded())).toBe(leftHanded);
+    const names = ['low E', 'A', 'D', 'G', 'B', 'high E'];
+    const ordinal = (n: number) => `${n}${n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th'}`;
+
+    for (const probe of PROBES) {
+      const q = await page.evaluate(() => window.__palace!.question());
+      expect(q.kind).toBe('name');
+      if (q.kind !== 'name') return;
+      expect(q.position).toEqual(probe);
+      const { string, fret } = q.position;
+      // The words…
+      const label = fret === 0 ? `open ${names[string]} string` : `${names[string]} string, ${ordinal(fret)} fret`;
+      await expect(page.getByTestId('prompt-where')).toHaveText(label);
+      // …and the light: the highlight was made for this position, and on screen it
+      // sits on that string's mesh and in that fret space.
+      await expect
+        .poll(() => page.evaluate(() => window.__palace!.highlight()))
+        .toMatchObject({ string, fret, tone: 'ask', renderedString: string, renderedFret: fret });
+      const h = (await page.evaluate(() => window.__palace!.highlight()))!;
+      const projected = (await page.evaluate((p) => window.__palace!.project(p), q.position))!;
+      expect(Math.hypot(h.screen.x - projected.x, h.screen.y - projected.y)).toBeLessThan(8);
+
+      await page.locator(`button[data-note="${q.answer}"]`).click();
+      await expect.poll(() => page.evaluate(() => window.__palace!.question().itemId)).not.toBe(q.itemId);
+    }
+  });
+}
