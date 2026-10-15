@@ -8,7 +8,7 @@ else gets built.
 ## What's here
 
 - **Fretboard room**, standard tuning E A D G B E.
-  - **Name it** — a position glows; pick its name from 12 note buttons (sharps).
+  - **Name it** — a position is framed in brass; pick its name from 12 note buttons (sharps).
   - **Find all** — tap every unlocked position of a given note on the neck.
 - **Unlock path** (`src/game/unlocks.ts`, data-driven): low E & A frets 0–5 → add D & G →
   all six strings → frets 0–7 → 0–9 → 0–12. A stage opens once every position in the
@@ -37,7 +37,8 @@ else gets built.
 - **Performance**: DPR is clamped (1.75 on touch devices), there are no shadow maps, and
   drei's `PerformanceMonitor` steps down post-processing and DPR when frames drop.
 - **Lite render path** (`src/three/quality.ts`): DPR 1, no post-processing, standard
-  instead of physical materials, smaller procedural textures and environment map. It is
+  instead of physical materials, smaller procedural textures, a Lightformer room instead
+  of the reading-room HDRI (never fetched), and a flat-coloured desk without fittings. It is
   used automatically under automation (`navigator.webdriver`) or with `?lite`. Add
   `?quality=full` to force the full path (for example, for screenshots).
 

@@ -33,7 +33,7 @@ import {
 } from './layout';
 import { COLORS } from './palette';
 import { LITE } from './quality';
-import { makeGlow, makeHalo, makePearl, makeRosewood, makeWindingNormal } from './textures';
+import { makePearl, makeRosewood, makeWindingNormal } from './textures';
 
 const STRING_END = 30; // strings run off-frame towards the bridge
 
@@ -143,6 +143,42 @@ function withNacre(mat: THREE.MeshStandardMaterial, bands: THREE.Texture, lock: 
   return mat;
 }
 
+/**
+ * The question cue on one string: a warm emissive lift over a stretch of the
+ * string in neck-local x. Driven by the question's highlight, read by the
+ * string's shader (both over the board and behind the nut).
+ */
+export interface StringCue {
+  /** (x0, x1, amount) in neck-local units. */
+  uCue: { value: THREE.Vector3 };
+  uCueColor: { value: THREE.Color };
+}
+
+function makeCue(): StringCue {
+  return { uCue: { value: new THREE.Vector3(0, 0, 0) }, uCueColor: { value: new THREE.Color() } };
+}
+
+/** Adds the lock dimming and the cue lift to a string material's shader. */
+function injectCue(shader: THREE.WebGLProgramParametersWithUniforms, cue: StringCue, lock: LockUniforms) {
+  injectLock(shader, lock);
+  Object.assign(shader.uniforms, cue);
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nuniform vec3 uCue; uniform vec3 uCueColor;')
+    .replace(
+      '#include <emissivemap_fragment>',
+      `#include <emissivemap_fragment>
+{
+  float cueIn = smoothstep(uCue.x - 0.03, uCue.x + 0.08, vNeck.x) * (1.0 - smoothstep(uCue.y - 0.08, uCue.y + 0.03, vNeck.x));
+  totalEmissiveRadiance += uCueColor * (uCue.z * cueIn);
+}`,
+    );
+}
+
+const WIRE = {
+  wound: { color: COLORS.bronze, roughness: 0.34 },
+  plain: { color: COLORS.steel, roughness: 0.18 },
+} as const;
+
 function useMaterials() {
   return useMemo(() => {
     const lock = makeLockUniforms();
@@ -151,38 +187,46 @@ function useMaterials() {
     wood.roughnessMap.repeat.set(2.5, 1);
     wood.normalMap.repeat.set(2.5, 1);
 
+    // Lacquered board: a real clearcoat over quiet, dark wood, so the room shows
+    // once as a soft sheen rather than as texture.
     const board = physical({
       map: wood.map,
       roughnessMap: wood.roughnessMap,
       normalMap: wood.normalMap,
-      normalScale: new THREE.Vector2(0.7, 0.7),
+      normalScale: new THREE.Vector2(0.45, 0.45),
       roughness: 1,
-      // Oiled, not lacquered: a faint coat, and little environment, so the far
-      // end (seen at a grazing angle) stays rosewood instead of mirroring the room.
-      clearcoat: 0.06,
-      clearcoatRoughness: 0.6,
-      envMapIntensity: 0.55,
+      clearcoat: 0.62,
+      clearcoatRoughness: 0.32,
+      envMapIntensity: 0.85,
     });
     const neck = physical({
-      color: COLORS.oak,
+      color: COLORS.mahogany,
       normalMap: wood.normalMap,
-      normalScale: new THREE.Vector2(0.25, 0.25),
-      roughness: 0.42,
-      clearcoat: 0.45,
-      clearcoatRoughness: 0.3,
+      normalScale: new THREE.Vector2(0.2, 0.2),
+      roughness: 0.5,
+      clearcoat: 0.7,
+      clearcoatRoughness: 0.28,
+      envMapIntensity: 0.85,
     });
     const headstock = board.clone();
-    headstock.color = new THREE.Color('#8a6a5c');
-    // Posts and tuners keep their own (undimmed) brass; frets share the lock.
-    const post = new THREE.MeshStandardMaterial({ color: '#c4a067', metalness: 1, roughness: 0.24 });
-    const brass = withLock(new THREE.MeshStandardMaterial({ color: '#c4a067', metalness: 1, roughness: 0.24 }), lock);
-    const woundWire = withLock(new THREE.MeshStandardMaterial({ color: '#c9a676', metalness: 1, roughness: 0.34 }), lock);
-    const plainWire = withLock(new THREE.MeshStandardMaterial({ color: '#dcd7ce', metalness: 1, roughness: 0.2 }), lock);
+    headstock.color = new THREE.Color('#8a7a70');
+    // Tilted back towards the window, a glossy face catches the key as a grey sheet:
+    // a satin veneer with little environment keeps it reading as wood.
+    headstock.roughnessMap = null;
+    headstock.roughness = 0.78;
+    headstock.envMapIntensity = 0.35;
+    if (headstock instanceof THREE.MeshPhysicalMaterial) headstock.clearcoat = 0.12;
+    // Tuner posts: brushed brass, undimmed. Frets: polished nickel-silver, sharing the lock.
+    const post = new THREE.MeshStandardMaterial({ color: COLORS.brass, metalness: 1, roughness: 0.34 });
+    const nickel = withLock(new THREE.MeshStandardMaterial({ color: COLORS.nickel, metalness: 1, roughness: 0.22 }), lock);
     const nut = physical({
-      color: '#EEE7D7',
-      roughness: 0.38,
-      clearcoat: 0.5,
-      clearcoatRoughness: 0.2,
+      color: COLORS.bone,
+      roughness: 0.36,
+      clearcoat: 0.25,
+      clearcoatRoughness: 0.4,
+      sheen: 0.3,
+      sheenRoughness: 0.5,
+      sheenColor: new THREE.Color('#fff4de'),
     });
     const shell = LITE ? makePearl(128) : makePearl();
     const pearl = physical({
@@ -199,17 +243,23 @@ function useMaterials() {
       sheen: 0.35,
       sheenRoughness: 0.35,
       sheenColor: new THREE.Color('#dbe7ff'),
-      envMapIntensity: 1.3,
+      envMapIntensity: 1.2,
     });
     // The seat the pearl is set into: a hairline of dark glue and shadow.
-    const inlaySeat = withLock(new THREE.MeshStandardMaterial({ color: '#1c110c', roughness: 0.8 }), lock);
+    const inlaySeat = withLock(new THREE.MeshStandardMaterial({ color: '#140b08', roughness: 0.8 }), lock);
     for (const mat of [board, neck, nut]) withLock(mat, lock);
     withNacre(pearl, shell.thickness, lock);
     const winding = makeWindingNormal();
     winding.repeat.set(1, 220);
-    const glow = makeGlow();
-    const halo = makeHalo();
-    return { board, neck, headstock, post, brass, woundWire, plainWire, nut, pearl, inlaySeat, winding, glow, halo, lock };
+    const cues = Array.from({ length: STRING_COUNT }, makeCue);
+    // Behind the nut each string gets its own material, so the open-string cue can light it.
+    const behindNut = cues.map((cue, s) => {
+      const w = WOUND[s] ? WIRE.wound : WIRE.plain;
+      const mat = new THREE.MeshStandardMaterial({ color: w.color, metalness: 1, roughness: w.roughness });
+      mat.onBeforeCompile = (shader) => injectCue(shader, cue, lock);
+      return mat;
+    });
+    return { board, neck, headstock, post, nickel, nut, pearl, inlaySeat, winding, cues, behindNut, lock };
   }, []);
 }
 
@@ -329,7 +379,7 @@ function BehindNutString({ string, m, thick }: { string: number; m: Materials; t
   }, [a, b]);
   const r = visualRadius(string, thick);
   return (
-    <mesh ref={ref} material={WOUND[string] ? m.woundWire : m.plainWire} userData={{ role: 'string', string }}>
+    <mesh ref={ref} material={m.behindNut[string]} userData={{ role: 'string', string }}>
       <cylinderGeometry args={[r, r, len, 8, 1, true]} />
     </mesh>
   );
@@ -358,7 +408,7 @@ function Frets({ m }: { m: Materials }) {
           <mesh
             key={i}
             geometry={geo}
-            material={m.brass}
+            material={m.nickel}
             position={[x, 0, 0]}
             scale={[1, 1, neckWidth(x) - 0.02]}
             userData={{ role: 'fret', fret: i + 1 }}
@@ -421,10 +471,11 @@ function visualRadius(string: number, thick: number) {
 
 function makeStringMaterial(string: number, m: Materials, len: number) {
   const wound = WOUND[string];
+  const w = wound ? WIRE.wound : WIRE.plain;
   const mat = new THREE.MeshStandardMaterial({
-    color: wound ? '#c9a676' : '#dcd7ce',
+    color: w.color,
     metalness: 1,
-    roughness: wound ? 0.34 : 0.2,
+    roughness: w.roughness,
     normalMap: wound ? m.winding : null,
     normalScale: new THREE.Vector2(1, 1),
     emissive: new THREE.Color('#fff1d2'),
@@ -438,7 +489,7 @@ function makeStringMaterial(string: number, m: Materials, len: number) {
     uLen: { value: len },
   };
   mat.onBeforeCompile = (shader) => {
-    injectLock(shader, m.lock);
+    injectCue(shader, m.cues[string]!, m.lock);
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
       .replace(
@@ -513,107 +564,136 @@ function GuitarString({ string, m, thick }: { string: number; m: Materials; thic
 /* Highlights                                                         */
 /* ------------------------------------------------------------------ */
 
-type GlowTone = 'ask' | 'correct' | 'miss' | 'spark';
+type CueTone = 'ask' | 'correct' | 'miss' | 'spark';
 
-const TONE_COLOR: Record<GlowTone, THREE.Color> = {
-  ask: new THREE.Color('#ffe2a8').multiplyScalar(2.2),
-  correct: new THREE.Color('#5fd2b0').multiplyScalar(1.6),
-  miss: new THREE.Color(COLORS.miss).multiplyScalar(1.3),
-  spark: new THREE.Color('#fff4dc').multiplyScalar(2.4),
+/**
+ * Per tone: the frame's albedo and metalness, its emissive lift, and the
+ * warm lift on the string segment (question only). No sprites, no additive
+ * fog: a thin metal frame that catches the room, and a string that warms.
+ */
+const TONE: Record<CueTone, { color: string; metalness: number; emissive: THREE.Color; string: THREE.Color }> = {
+  ask: {
+    color: COLORS.brass,
+    metalness: 0.9,
+    emissive: new THREE.Color('#d6a85e').multiplyScalar(0.7),
+    string: new THREE.Color('#ffcf8a').multiplyScalar(0.9),
+  },
+  correct: {
+    color: COLORS.correct,
+    metalness: 0.4,
+    emissive: new THREE.Color('#3f9c80').multiplyScalar(0.9),
+    string: new THREE.Color('#6fdcbc').multiplyScalar(0.7),
+  },
+  miss: {
+    color: COLORS.miss,
+    metalness: 0.4,
+    emissive: new THREE.Color(COLORS.miss).multiplyScalar(0.8),
+    string: new THREE.Color(COLORS.miss).multiplyScalar(0.8),
+  },
+  spark: {
+    color: COLORS.brass,
+    metalness: 0.9,
+    emissive: new THREE.Color('#ffe7bd').multiplyScalar(1.2),
+    string: new THREE.Color('#ffe7bd'),
+  },
 };
 
-/** Open strings: a warm brass halo around the string where it leaves the nut. */
-const HALO_COLOR = new THREE.Color(COLORS.brass);
-const HALO_CORE = new THREE.Color(COLORS.brass).multiplyScalar(2.4);
+const FRET_INSET = 0.07; // keeps the frame clear of the fret wires
+const unitBox = new THREE.BoxGeometry(1, 1, 1);
 
-function glowMaterial(map: THREE.Texture, color: THREE.Color, additive: boolean) {
-  return new THREE.MeshBasicMaterial({
-    map,
-    color,
-    transparent: true,
-    depthWrite: false,
-    blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
-    toneMapped: false,
-  });
+/**
+ * The cell a cue frames, in neck-local x, its half-width across the string,
+ * and the height it lies at. Fretted: on the board between the two fret
+ * wires. Open: over the nut and the string's run back towards its post,
+ * narrower than the string spacing so it can only read as this string.
+ */
+function cueCell(p: Position) {
+  if (p.fret === 0) {
+    return { x0: -OPEN_HALO.length * 0.56, x1: 0.03, halfZ: OPEN_HALO.width / 2, y: stringHeight(0) + 0.026 };
+  }
+  const x0 = fretX(p.fret - 1) + FRET_INSET;
+  const x1 = fretX(p.fret) - FRET_INSET;
+  return { x0, x1, halfZ: stringSpacing((x0 + x1) / 2) * 0.42, y: 0.004 };
 }
 
-function Glow({
+function Cue({
   position,
   tone,
   m,
+  thick,
   breathe = false,
   fadeFrom,
-  size = 0.62,
   question = false,
 }: {
   position: Position;
-  tone: GlowTone;
+  tone: CueTone;
   m: Materials;
+  thick: number;
   breathe?: boolean;
   /** performance.now() timestamp: fade out over ~0.8s from here. */
   fadeFrom?: number;
-  size?: number;
-  /** The current question's highlight (reported to the e2e inspector). */
+  /** The current question's cue: also warms its string, and is reported to the e2e inspector. */
   question?: boolean;
 }) {
-  const ref = useRef<THREE.Group>(null);
-  const open = position.fret === 0;
-  const halo = open && tone === 'ask';
-  const mats = useMemo(
+  const t = TONE[tone];
+  const mat = useMemo(
     () =>
-      halo
-        ? [glowMaterial(m.halo, HALO_COLOR, false), glowMaterial(m.glow, HALO_CORE, true)]
-        : [glowMaterial(m.glow, TONE_COLOR[tone], true)],
-    [m, tone, halo],
+      new THREE.MeshStandardMaterial({
+        color: t.color,
+        metalness: t.metalness,
+        roughness: 0.3,
+        emissive: t.emissive,
+        emissiveIntensity: 1,
+        transparent: true,
+      }),
+    [t],
   );
-  useEffect(() => () => mats.forEach((mat) => mat.dispose()), [mats]);
-  // Exactly on the string (shared path in layout.ts). Fretted: on the board
-  // under the string. Open: just above the nut, stretched along the string and
-  // narrower than the string spacing, so it can only ever read as this string.
-  const [x, y, z] = markerPoint(position);
-  const gy = open ? stringHeight(0) + 0.025 : y * 0.5;
-  const sx = open ? OPEN_HALO.length : size;
-  const sz = open ? OPEN_HALO.width : size;
+  useEffect(() => () => mat.dispose(), [mat]);
+  const cue = m.cues[position.string]!;
+  const cell = cueCell(position);
+  useEffect(() => {
+    if (!question) return;
+    cue.uCue.value.set(cell.x0, cell.x1, 0);
+    cue.uCueColor.value.copy(t.string);
+    return () => {
+      cue.uCue.value.z = 0;
+    };
+  }, [question, cue, cell.x0, cell.x1, t]);
+
   useFrame(() => {
-    if (!ref.current) return;
-    const t = performance.now() / 1000;
+    const now = performance.now();
+    let k = 1;
+    if (breathe) k = 0.6 + 0.4 * (0.5 + 0.5 * Math.sin((now / 1000) * 3.0));
     let o = 1;
-    let s = 1;
-    if (breathe) {
-      const b = 0.5 + 0.5 * Math.sin(t * 3.4);
-      o = 0.7 + 0.3 * b;
-      s = 0.92 + 0.12 * b;
-    }
-    if (fadeFrom !== undefined) {
-      const k = (performance.now() - fadeFrom) / 800;
-      o *= Math.max(0, 1 - k);
-      s *= 1 + 0.35 * Math.min(1, k);
-    }
-    mats[0]!.opacity = halo ? 0.65 + 0.35 * o : o;
-    if (mats[1]) mats[1].opacity = 0.6 * o;
-    // Open-string halos breathe along the string only, never across into a neighbour.
-    ref.current.scale.set(sx * s, 1, open ? sz : sz * s);
-    ref.current.visible = o > 0.01;
+    if (fadeFrom !== undefined) o = Math.max(0, 1 - (now - fadeFrom) / 800);
+    mat.emissiveIntensity = k * o;
+    mat.opacity = o;
+    if (question) cue.uCue.value.z = k * o;
   });
+
+  // The group sits exactly on the string (markerPoint, shared with tap targets
+  // and the inspector); the frame lies below it on the board, or over the nut.
+  const [mx, my, mz] = markerPoint(position);
+  const lw = thick > 1 ? 0.032 : 0.02;
+  const len = cell.x1 - cell.x0;
+  const cx = (cell.x0 + cell.x1) / 2 - mx;
+  const y = cell.y - my;
+  const edges: [number, number, number, number][] = [
+    [cx, cell.halfZ, len + lw, lw],
+    [cx, -cell.halfZ, len + lw, lw],
+    [cell.x0 - mx, 0, lw, cell.halfZ * 2],
+    [cell.x1 - mx, 0, lw, cell.halfZ * 2],
+  ];
   return (
-    <group
-      ref={ref}
-      position={[x, gy, z]}
-      userData={{ role: 'highlight', question, string: position.string, fret: position.fret, tone }}
-    >
-      <mesh rotation={[-Math.PI / 2, 0, 0]} material={mats[0]} renderOrder={5}>
-        <planeGeometry args={[1, 1]} />
-      </mesh>
-      {mats[1] && (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} scale={[0.45, 0.6, 1]} material={mats[1]} renderOrder={6}>
-          <planeGeometry args={[1, 1]} />
-        </mesh>
-      )}
+    <group position={[mx, my, mz]} userData={{ role: 'highlight', question, string: position.string, fret: position.fret, tone }}>
+      {edges.map(([ex, ez, sx, sz], i) => (
+        <mesh key={i} geometry={unitBox} material={mat} position={[ex, y, ez]} scale={[sx, 0.008, sz]} renderOrder={5} />
+      ))}
     </group>
   );
 }
 
-function Highlights({ m }: { m: Materials }) {
+function Highlights({ m, thick }: { m: Materials; thick: number }) {
   const question = usePalace((s) => s.question);
   const feedback = usePalace((s) => s.feedback);
   const found = usePalace((s) => s.found);
@@ -622,26 +702,28 @@ function Highlights({ m }: { m: Materials }) {
 
   const out: React.ReactNode[] = [];
   if (question.kind === 'name') {
-    const tone: GlowTone = feedback?.kind === 'correct' ? 'correct' : feedback?.kind === 'miss' ? 'miss' : 'ask';
+    const tone: CueTone = feedback?.kind === 'correct' ? 'correct' : feedback?.kind === 'miss' ? 'miss' : 'ask';
     out.push(
-      <Glow
+      <Cue
         key={`q-${question.itemId}-${tone}`}
         position={question.position}
         tone={tone}
         m={m}
+        thick={thick}
         breathe={tone === 'ask'}
-        size={0.7}
         question
       />,
     );
   } else {
-    for (const p of found) out.push(<Glow key={`f-s${p.string}f${p.fret}`} position={p} tone="correct" m={m} />);
+    for (const p of found) out.push(<Cue key={`f-s${p.string}f${p.fret}`} position={p} tone="correct" m={m} thick={thick} />);
   }
   if (lastMiss && !(question.kind === 'name' && samePosition(lastMiss.position, question.position))) {
-    out.push(<Glow key={`m-${lastMiss.id}`} position={lastMiss.position} tone="miss" m={m} fadeFrom={lastMiss.at} />);
+    out.push(<Cue key={`m-${lastMiss.id}`} position={lastMiss.position} tone="miss" m={m} thick={thick} fadeFrom={lastMiss.at} />);
   }
-  if (lastPluck) {
-    out.push(<Glow key={`p-${lastPluck.id}`} position={lastPluck.position} tone="spark" m={m} fadeFrom={lastPluck.at} size={0.9} />);
+  // A pluck on a cell that's already framed (the answer, a found target) only shimmers its string.
+  const framed = question.kind === 'name' ? [question.position] : found;
+  if (lastPluck && !framed.some((p) => samePosition(p, lastPluck.position))) {
+    out.push(<Cue key={`p-${lastPluck.id}`} position={lastPluck.position} tone="spark" m={m} thick={thick} fadeFrom={lastPluck.at} />);
   }
   return <group>{out}</group>;
 }
@@ -737,7 +819,7 @@ export function Fretboard() {
       {Array.from({ length: STRING_COUNT }, (_, s) => (
         <GuitarString key={s} string={s} m={m} thick={thick} />
       ))}
-      <Highlights m={m} />
+      <Highlights m={m} thick={thick} />
       <HitCells />
     </group>
   );

@@ -1,9 +1,10 @@
 import { ContactShadows, Environment, Lightformer, PerformanceMonitor } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Bloom, DepthOfField, EffectComposer, Vignette } from '@react-three/postprocessing';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Bloom, EffectComposer, N8AO, Vignette } from '@react-three/postprocessing';
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { usePalace } from '../store';
+import { Desk, SHADOW_Y } from './Desk';
 import { Fretboard } from './Fretboard';
 import { COLORS } from './palette';
 import { markerPoint, neckMatrix, neckToWorld, regionBounds } from './layout';
@@ -12,12 +13,24 @@ import { renderInfo, setInspector, setProjector, useView } from './view';
 
 const FOV = 30;
 
+/**
+ * Reading-room HDRI (Poly Haven, CC0) for honest reflections on the lacquer,
+ * nickel and pearl. Relative to the app's base, so it resolves under any
+ * GitHub Pages sub-path. Full quality only: lite never fetches it.
+ *
+ * Path-traced stills (three-gpu-pathtracer) for an attract mode are deferred:
+ * far too heavy for the realtime play path on phones.
+ */
+const HDRI = `${import.meta.env.BASE_URL}hdri/reading_room_1k.hdr`;
+/** Swings the room's window (≈ az 210° in the file) round to the upper left of the screen. */
+const HDRI_ROTATION: [number, number, number] = [0, 2.9, 0];
+
 function isCoarsePointer() {
   return typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
 }
 
 export interface Quality {
-  /** 0 = no post, 1 = light bloom + vignette, 2 = full (bloom, vignette, depth of field). */
+  /** 0 = no post, 1 = specular-only bloom + vignette, 2 = adds ambient occlusion. */
   tier: 0 | 1 | 2;
   dpr: number;
 }
@@ -27,7 +40,7 @@ function initialQuality(): Quality {
   const mobile = isCoarsePointer() || (typeof innerWidth !== 'undefined' && innerWidth < 700);
   const deviceDpr = typeof devicePixelRatio === 'undefined' ? 1 : devicePixelRatio;
   const dpr = Math.min(deviceDpr, mobile ? 1.75 : 2);
-  // Low-DPR or touch devices: skip depth of field, keep a light bloom.
+  // Low-DPR or touch devices: skip ambient occlusion, keep the light bloom.
   const tier: Quality['tier'] = mobile || deviceDpr < 1 ? 1 : 2;
   return { tier, dpr };
 }
@@ -49,7 +62,6 @@ function NeckRig({ children }: { children: React.ReactNode }) {
   const leftHanded = usePalace((s) => s.saved.settings.leftHanded);
   const stageIdx = usePalace((s) => s.saved.stage);
   const insets = useView((s) => s.insets);
-  const setFocus = useView((s) => s.setFocusDistance);
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const gl = useThree((s) => s.gl);
   const group = useRef<THREE.Group>(null);
@@ -87,14 +99,12 @@ function NeckRig({ children }: { children: React.ReactNode }) {
     const yc = (insets.bottom - insets.top) / 2 / Math.max(1, size.height / 2);
     const look = new THREE.Vector3(cx, 0, cz + (yc * D * t) / Math.cos(tilt));
     const pos = look.clone().add(new THREE.Vector3(0, D * Math.cos(tilt), D * Math.sin(tilt)));
-    return { look, pos, D };
+    return { look, pos };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, portrait, size.width, size.height, insets.top, insets.bottom, stageIdx]);
 
   const lookNow = useRef(target.look.clone());
   const first = useRef(true);
-
-  useEffect(() => setFocus(target.D), [target, setFocus]);
 
   useFrame((_, dt) => {
     renderInfo.frames++;
@@ -199,46 +209,56 @@ function NeckRig({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Study light. Full: the reading-room HDRI for reflections, a soft window key
+ * from the upper left and a weak cool fill opposite. Lite: the same key and
+ * fill over a cheap Lightformer room (no file load).
+ */
 function Studio() {
   return (
     <>
-      <hemisphereLight args={['#fff8ee', '#c9b9a4', 0.5]} />
-      <directionalLight position={[-4, 9, 5]} intensity={1.4} color="#fff3e0" />
-      <directionalLight position={[6, 4, -6]} intensity={0.45} color="#e8eef2" />
-      <Environment resolution={LITE ? 64 : 256} frames={1}>
-        {/* High window key, soft fill and a warm rim — gives metal and pearl something to reflect. */}
-        <Lightformer form="rect" intensity={2.2} color="#fff4e2" position={[0, 6, 2]} rotation={[Math.PI / 2, 0, 0]} scale={[10, 4, 1]} />
-        <Lightformer form="rect" intensity={1.2} color="#e8eef2" position={[-6, 2, 0]} rotation={[0, Math.PI / 2, 0]} scale={[6, 3, 1]} />
-        <Lightformer form="rect" intensity={1.6} color="#f3d9b0" position={[6, 2, -2]} rotation={[0, -Math.PI / 2, 0]} scale={[6, 2, 1]} />
-        <Lightformer form="ring" intensity={1.2} color="#ffffff" position={[2, 4, 6]} scale={2} />
-        {/* A warm, dim room. A pale one mirrors into the wood at grazing angles and
-            washes the far end of the neck out to a haze. */}
-        <mesh scale={30}>
-          <sphereGeometry args={[1, 16, 16]} />
-          <meshBasicMaterial color="#5a4436" side={THREE.BackSide} />
-        </mesh>
-      </Environment>
+      <hemisphereLight args={['#f6ead8', '#2a2018', LITE ? 0.45 : 0.18]} />
+      {/* World −X is screen left, −Z screen top. */}
+      <directionalLight position={[-5, 9, -4]} intensity={LITE ? 1.5 : 1.7} color="#fff0dc" />
+      <directionalLight position={[6, 3, 5]} intensity={0.22} color="#dfe6ee" />
+      {LITE ? (
+        <Environment resolution={64} frames={1}>
+          <Lightformer form="rect" intensity={2} color="#fff0dc" position={[-4, 6, -3]} rotation={[Math.PI / 2, 0, 0]} scale={[8, 4, 1]} />
+          <Lightformer form="rect" intensity={0.8} color="#e8eef2" position={[6, 2, 2]} rotation={[0, -Math.PI / 2, 0]} scale={[6, 2, 1]} />
+          <mesh scale={30}>
+            <sphereGeometry args={[1, 16, 16]} />
+            <meshBasicMaterial color="#3a2e24" side={THREE.BackSide} />
+          </mesh>
+        </Environment>
+      ) : (
+        <Suspense fallback={null}>
+          <Environment files={HDRI} environmentIntensity={0.75} environmentRotation={HDRI_ROTATION} />
+        </Suspense>
+      )}
     </>
   );
 }
 
 function Effects({ tier }: { tier: Quality['tier'] }) {
-  const focus = useView((s) => s.focusDistance);
   if (tier === 0) return null;
+  // Bloom threshold sits above everything but the brightest specular ticks on
+  // nickel and brass: it never blooms the cue, the pearl or the wood.
+  const bloom = <Bloom mipmapBlur intensity={0.35} luminanceThreshold={0.96} luminanceSmoothing={0.08} resolutionScale={0.5} />;
+  const vignette = <Vignette offset={0.32} darkness={0.42} />;
   if (tier === 1) {
     return (
       <EffectComposer multisampling={0}>
-        <Bloom mipmapBlur intensity={0.45} luminanceThreshold={0.92} luminanceSmoothing={0.2} resolutionScale={0.5} />
-        <Vignette offset={0.4} darkness={0.22} />
+        {bloom}
+        {vignette}
       </EffectComposer>
     );
   }
+  // Desktop: soft contact occlusion under strings, frets and the neck. No depth of field — the neck stays sharp.
   return (
     <EffectComposer multisampling={4}>
-      {/* Just a hint of depth: the whole unlocked region stays sharp. */}
-      <DepthOfField worldFocusDistance={focus} worldFocusRange={focus * 2.5} bokehScale={0.6} />
-      <Bloom mipmapBlur intensity={0.5} luminanceThreshold={0.92} luminanceSmoothing={0.2} />
-      <Vignette offset={0.4} darkness={0.22} />
+      <N8AO halfRes quality="performance" aoRadius={0.5} distanceFalloff={0.6} intensity={1.6} color="#120c08" />
+      {bloom}
+      {vignette}
     </EffectComposer>
   );
 }
@@ -257,10 +277,11 @@ export function Scene() {
       gl={{ antialias: !LITE && quality.tier < 2, powerPreference: 'high-performance', preserveDrawingBuffer: false }}
       onCreated={({ gl }) => {
         gl.toneMapping = THREE.ACESFilmicToneMapping;
-        gl.toneMappingExposure = 0.95;
+        // Low enough that the rosewood stays dark and rich; metals still find their highlights.
+        gl.toneMappingExposure = LITE ? 0.95 : 0.88;
       }}
     >
-      <color attach="background" args={[COLORS.plaster]} />
+      <color attach="background" args={[COLORS.study]} />
       {!LITE && (
         <PerformanceMonitor
           onDecline={() =>
@@ -273,9 +294,10 @@ export function Scene() {
       )}
       <Studio />
       <NeckRig>
+        <Desk />
         <Fretboard />
       </NeckRig>
-      {/* A single soft contact shadow on the plaster (no realtime shadow maps). */}
+      {/* A single soft contact shadow on the desk (no realtime shadow maps). */}
       <ContactShadowsForNeck key={String(leftHanded)} />
       <Effects tier={quality.tier} />
     </Canvas>
@@ -287,13 +309,13 @@ function ContactShadowsForNeck() {
   return (
     <ContactShadows
       key={String(portrait)}
-      position={[0, -0.94, 0]}
+      position={[0, SHADOW_Y, 0]}
       scale={60}
       resolution={LITE ? 128 : 512}
-      blur={2.8}
-      far={2}
-      opacity={0.26}
-      color="#3a2a20"
+      blur={2.4}
+      far={1.4}
+      opacity={0.55}
+      color="#0d0806"
       frames={1}
     />
   );

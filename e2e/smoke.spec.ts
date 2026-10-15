@@ -159,7 +159,7 @@ const PROBES: Pos[] = [
 ];
 
 for (const leftHanded of [false, true]) {
-  test(`the glowing position matches the prompt (${leftHanded ? 'left' : 'right'}-handed)`, async ({ page }) => {
+  test(`the highlighted position matches the prompt (${leftHanded ? 'left' : 'right'}-handed)`, async ({ page }) => {
     await page.addInitScript((save) => localStorage.setItem('palace.fretboard.v1', save), seededSave(STAGE_ALL_STRINGS, ALL_0_5, PROBES, leftHanded));
     await page.goto('./');
     await waitForFrames(page);
