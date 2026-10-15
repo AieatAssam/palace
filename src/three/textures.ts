@@ -154,20 +154,21 @@ export function makeRosewood(w = 1024, h = 256, seed = 7): WoodMaps {
   return { map, roughnessMap, normalMap };
 }
 
-/** Helical winding as a tileable normal map (U along the string). */
+/** Helical winding as a tileable normal map (V along the string). */
 export function makeWindingNormal(size = 64): THREE.CanvasTexture {
   const c = canvas(size, size);
   const ctx = c.getContext('2d')!;
   const img = ctx.createImageData(size, size);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      // Slight helix angle: phase depends on both u and v.
-      const phase = ((x + y * 0.12) / size) * Math.PI * 2 * 8;
-      const nx = Math.cos(phase) * 0.75;
-      const nz = Math.sqrt(1 - nx * nx);
+      // Ridges run around the string (U), repeating along its length (V),
+      // with a slight helix: phase depends mostly on v, a little on u.
+      const phase = ((y + x * 0.125) / size) * Math.PI * 2 * 8;
+      const ny = Math.cos(phase) * 0.75;
+      const nz = Math.sqrt(1 - ny * ny);
       const o = (y * size + x) * 4;
-      img.data[o] = (nx * 0.5 + 0.5) * 255;
-      img.data[o + 1] = 128;
+      img.data[o] = 128;
+      img.data[o + 1] = (ny * 0.5 + 0.5) * 255;
       img.data[o + 2] = (nz * 0.5 + 0.5) * 255;
       img.data[o + 3] = 255;
     }
