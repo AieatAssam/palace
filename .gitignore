@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+*.log
+*.tsbuildinfo
+.vite/
+.DS_Store
+.env
+.env.*
+.idea/
+.vscode/*
+!.vscode/extensions.json
