@@ -5,6 +5,9 @@ import { defineConfig, devices } from '@playwright/test';
 const executablePath = process.env.CHROME_PATH || undefined;
 const PORT = 4173;
 
+// Headless WebGL runs on SwiftShader (CPU). The app detects navigator.webdriver
+// and switches to its lite render path (DPR 1, no post-processing, standard
+// materials, small textures); a modest viewport keeps fill cost down too.
 const launchOptions = {
   executablePath,
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
@@ -12,10 +15,12 @@ const launchOptions = {
 
 export default defineConfig({
   testDir: './e2e',
-  timeout: 60_000,
-  expect: { timeout: 15_000 },
+  timeout: 30_000,
+  expect: { timeout: 10_000 },
   fullyParallel: false,
-  retries: process.env.CI ? 1 : 0,
+  // One worker: two CPU-rendered WebGL pages fighting over a small CI runner is what made runs flaky.
+  workers: process.env.CI ? 1 : 2,
+  retries: 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: `http://localhost:${PORT}`,
@@ -24,7 +29,7 @@ export default defineConfig({
   projects: [
     {
       name: 'desktop',
-      use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 720 }, launchOptions },
+      use: { ...devices['Desktop Chrome'], viewport: { width: 960, height: 600 }, launchOptions },
     },
     {
       name: 'phone',

@@ -9,6 +9,8 @@ import { projectPosition, renderInfo } from './three/view';
  * actions the UI uses.
  */
 export interface PalaceTestHooks {
+  /** Snapshot for tooling: current drill mode and question. */
+  state(): { mode: 'name' | 'find'; question: ReturnType<typeof usePalace.getState>['question'] };
   question(): ReturnType<typeof usePalace.getState>['question'];
   /** Correct note (Name-it) or the remaining target positions (Find-all). */
   answer(): string | Position[];
@@ -34,6 +36,7 @@ declare global {
 export function installTestHooks() {
   const s = () => usePalace.getState();
   window.__palace = {
+    state: () => ({ mode: s().drill, question: s().question }),
     question: () => s().question,
     answer: () => {
       const q = s().question;

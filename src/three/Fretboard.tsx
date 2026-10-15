@@ -1,4 +1,4 @@
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import { type ThreeEvent } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
@@ -7,9 +7,11 @@ import { isUnlocked } from '../game/unlocks';
 import { usePalace } from '../store';
 import {
   BOARD_END,
+  BOARD_TAPER,
   BOARD_THICKNESS,
-  HEADSTOCK_GAP,
+  EDGE_MARGIN,
   INLAY_FRETS,
+  NUT_DEPTH,
   NUT_WIDTH,
   RENDERED_FRETS,
   STRING_RADII,
@@ -24,11 +26,11 @@ import {
   tapRect,
 } from './layout';
 import { COLORS } from './palette';
-import { makeGlow, makeRosewood, makeVeil, makeWindingNormal } from './textures';
-
+import { LITE } from './quality';
+import { makeGlow, makeRosewood, makeWindingNormal } from './textures';
 
 const STRING_END = 30; // strings run off-frame towards the bridge
-const NUT_X0 = -0.14;
+const NUT_X0 = -NUT_DEPTH;
 const HEADSTOCK_LEN = 4.2;
 const HEADSTOCK_TILT = 0.16;
 
@@ -36,14 +38,86 @@ const HEADSTOCK_TILT = 0.16;
 /* Materials                                                          */
 /* ------------------------------------------------------------------ */
 
+/** Physical material, or a cheaper standard one (physical-only extras dropped) in lite mode. */
+function physical(params: THREE.MeshPhysicalMaterialParameters): THREE.MeshStandardMaterial {
+  if (!LITE) return new THREE.MeshPhysicalMaterial(params);
+  const {
+    clearcoat: _c,
+    clearcoatRoughness: _cr,
+    iridescence: _i,
+    iridescenceIOR: _ii,
+    iridescenceThicknessRange: _it,
+    sheen: _s,
+    sheenColor: _sc,
+    ...rest
+  } = params;
+  return new THREE.MeshStandardMaterial(rest);
+}
+
+/**
+ * Locked region, shared by every neck material: past the last unlocked fret,
+ * and (while some strings are locked) across the higher strings. Locked parts
+ * are dimmed and desaturated in the shader rather than veiled.
+ */
+export interface LockUniforms {
+  /** Inverse of the neck group's world matrix (world → neck-local). */
+  uNeckInv: { value: THREE.Matrix4 };
+  uLockX: { value: number };
+  /** Locked-strings edge as z = a + b·x (higher strings sit at -Z). */
+  uLockEdge: { value: THREE.Vector2 };
+  uLockStrings: { value: number };
+}
+
+function makeLockUniforms(): LockUniforms {
+  return {
+    uNeckInv: { value: new THREE.Matrix4() },
+    uLockX: { value: 1e3 },
+    uLockEdge: { value: new THREE.Vector2() },
+    uLockStrings: { value: 0 },
+  };
+}
+
+function injectLock(shader: THREE.WebGLProgramParametersWithUniforms, lock: LockUniforms) {
+  Object.assign(shader.uniforms, lock);
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', '#include <common>\nuniform mat4 uNeckInv;\nvarying vec3 vNeck;')
+    .replace(
+      '#include <project_vertex>',
+      '#include <project_vertex>\nvNeck = (uNeckInv * modelMatrix * vec4(transformed, 1.0)).xyz;',
+    );
+  shader.fragmentShader = shader.fragmentShader
+    .replace(
+      '#include <common>',
+      '#include <common>\nuniform float uLockX; uniform vec2 uLockEdge; uniform float uLockStrings; varying vec3 vNeck;',
+    )
+    .replace(
+      '#include <opaque_fragment>',
+      `{
+  float beyond = smoothstep(uLockX - 0.06, uLockX + 0.3, vNeck.x);
+  float edge = uLockEdge.x + uLockEdge.y * max(vNeck.x, 0.0);
+  float across = uLockStrings * (1.0 - smoothstep(edge - 0.12, edge + 0.04, vNeck.z));
+  float locked = max(beyond, across);
+  float luma = dot(outgoingLight, vec3(0.2126, 0.7152, 0.0722));
+  outgoingLight = mix(outgoingLight, vec3(luma) * vec3(1.0, 0.96, 0.92), 0.72 * locked) * (1.0 - 0.4 * locked);
+}
+#include <opaque_fragment>`,
+    );
+}
+
+function withLock<M extends THREE.Material>(mat: M, lock: LockUniforms): M {
+  mat.onBeforeCompile = (shader) => injectLock(shader, lock);
+  return mat;
+}
+
 function useMaterials() {
   return useMemo(() => {
-    const wood = makeRosewood();
+    const lock = makeLockUniforms();
+    const wood = LITE ? makeRosewood(512, 128) : makeRosewood();
     wood.map.repeat.set(2.5, 1);
     wood.roughnessMap.repeat.set(2.5, 1);
     wood.normalMap.repeat.set(2.5, 1);
 
-    const board = new THREE.MeshPhysicalMaterial({
+    const board = physical({
       map: wood.map,
       roughnessMap: wood.roughnessMap,
       normalMap: wood.normalMap,
@@ -52,7 +126,7 @@ function useMaterials() {
       clearcoat: 0.12,
       clearcoatRoughness: 0.55,
     });
-    const neck = new THREE.MeshPhysicalMaterial({
+    const neck = physical({
       color: COLORS.oak,
       normalMap: wood.normalMap,
       normalScale: new THREE.Vector2(0.25, 0.25),
@@ -62,15 +136,18 @@ function useMaterials() {
     });
     const headstock = board.clone();
     headstock.color = new THREE.Color('#8a6a5c');
-    const brass = new THREE.MeshStandardMaterial({ color: '#c4a067', metalness: 1, roughness: 0.24 });
-    const nickel = new THREE.MeshStandardMaterial({ color: '#dcd7ce', metalness: 1, roughness: 0.22 });
-    const nut = new THREE.MeshPhysicalMaterial({
+    // Posts and tuners keep their own (undimmed) brass; frets share the lock.
+    const post = new THREE.MeshStandardMaterial({ color: '#c4a067', metalness: 1, roughness: 0.24 });
+    const brass = withLock(new THREE.MeshStandardMaterial({ color: '#c4a067', metalness: 1, roughness: 0.24 }), lock);
+    const woundWire = withLock(new THREE.MeshStandardMaterial({ color: '#c9a676', metalness: 1, roughness: 0.34 }), lock);
+    const plainWire = withLock(new THREE.MeshStandardMaterial({ color: '#dcd7ce', metalness: 1, roughness: 0.2 }), lock);
+    const nut = physical({
       color: '#EEE7D7',
       roughness: 0.38,
       clearcoat: 0.5,
       clearcoatRoughness: 0.2,
     });
-    const pearl = new THREE.MeshPhysicalMaterial({
+    const pearl = physical({
       color: '#d9d1c2',
       roughness: 0.3,
       clearcoat: 1,
@@ -81,11 +158,11 @@ function useMaterials() {
       sheen: 0.6,
       sheenColor: new THREE.Color('#e4eeff'),
     });
+    for (const mat of [board, neck, nut, pearl]) withLock(mat, lock);
     const winding = makeWindingNormal();
     winding.repeat.set(1, 220);
     const glow = makeGlow();
-    const veil = makeVeil();
-    return { board, neck, headstock, brass, nickel, nut, pearl, winding, glow, veil };
+    return { board, neck, headstock, post, brass, woundWire, plainWire, nut, pearl, winding, glow, lock };
   }, []);
 }
 
@@ -172,54 +249,59 @@ function Board({ m }: { m: Materials }) {
   );
 }
 
-function Headstock({ m }: { m: Materials }) {
+/** Inline tuner posts, one per string, each directly behind its slot in the nut. */
+function postX(string: number) {
+  return -1.15 - string * 0.46;
+}
+
+function Headstock({ m, thick }: { m: Materials; thick: number }) {
   const { rotation, position } = useMemo(() => {
     const centre = headstockPoint(NUT_X0 - HEADSTOCK_LEN / 2, -0.11, 0);
     return { rotation: HEADSTOCK_TILT, position: centre };
   }, []);
-  const posts = useMemo(() => {
-    const out: { pos: THREE.Vector3; string: number }[] = [];
-    const xs = [-3.35, -2.35, -1.35];
-    for (let k = 0; k < 3; k++) {
-      out.push({ pos: headstockPoint(xs[k]!, 0, 0.82), string: k });
-      out.push({ pos: headstockPoint(xs[k]!, 0, -0.82), string: 5 - k });
-    }
-    return out;
-  }, []);
+  const posts = useMemo(
+    () => Array.from({ length: STRING_COUNT }, (_, s) => ({ string: s, pos: headstockPoint(postX(s), 0, stringZ(s, 0)) })),
+    [],
+  );
   return (
     <group>
       <mesh position={position} rotation={[0, 0, rotation]} material={m.headstock}>
-        <boxGeometry args={[HEADSTOCK_LEN, 0.22, NUT_WIDTH + 0.35]} />
+        <boxGeometry args={[HEADSTOCK_LEN, 0.22, NUT_WIDTH + 0.2]} />
       </mesh>
       {posts.map(({ pos, string }) => (
         <group key={string} position={pos} rotation={[0, 0, HEADSTOCK_TILT]}>
-          <mesh material={m.brass} position={[0, 0.1, 0]}>
-            <cylinderGeometry args={[0.07, 0.085, 0.2, 16]} />
+          <mesh material={m.post} position={[0, 0.09, 0]}>
+            <cylinderGeometry args={[0.055, 0.065, 0.18, 16]} />
           </mesh>
-          <mesh material={m.brass} position={[0, 0.03, 0]}>
-            <cylinderGeometry args={[0.15, 0.15, 0.05, 20]} />
+          <mesh material={m.post} position={[0, 0.015, 0]}>
+            <cylinderGeometry args={[0.11, 0.11, 0.03, 20]} />
           </mesh>
         </group>
       ))}
-      {/* Strings behind the nut to their posts. */}
+      {/* Strings run straight back from the nut to their posts. */}
       {posts.map(({ pos, string }) => (
-        <BehindNutString key={`b${string}`} string={string} post={pos} m={m} />
+        <BehindNutString key={`b${string}`} string={string} post={pos} m={m} thick={thick} />
       ))}
     </group>
   );
 }
 
-function BehindNutString({ string, post, m }: { string: number; post: THREE.Vector3; m: Materials }) {
+function BehindNutString({ string, post, m, thick }: { string: number; post: THREE.Vector3; m: Materials; thick: number }) {
   const ref = useRef<THREE.Mesh>(null);
-  const a = useMemo(() => new THREE.Vector3(0, stringHeight(0) - 0.01, stringZ(string, 0)), [string]);
-  const b = useMemo(() => post.clone().add(new THREE.Vector3(0, 0.15, 0)), [post]);
+  const a = useMemo(() => new THREE.Vector3(NUT_X0, stringHeight(0) - 0.005, stringZ(string, 0)), [string]);
+  const b = useMemo(() => {
+    const c = Math.cos(HEADSTOCK_TILT);
+    const s = Math.sin(HEADSTOCK_TILT);
+    // Wrap point near the top of the post (post-local y ≈ 0.12).
+    return post.clone().add(new THREE.Vector3(-0.12 * s, 0.12 * c, 0));
+  }, [post]);
   const len = a.distanceTo(b);
   useEffect(() => {
     if (ref.current) placeBetween(ref.current, a, b);
   }, [a, b]);
-  const r = STRING_RADII[string]!;
+  const r = visualRadius(string, thick);
   return (
-    <mesh ref={ref} material={WOUND[string] ? m.brass : m.nickel}>
+    <mesh ref={ref} material={WOUND[string] ? m.woundWire : m.plainWire}>
       <cylinderGeometry args={[r, r, len, 8, 1, true]} />
     </mesh>
   );
@@ -285,9 +367,15 @@ interface StringUniforms {
   uLen: { value: number };
 }
 
+/** Rendered string radius: true gauge on desktop, thickened on phones so thin strings stay legible. */
+function visualRadius(string: number, thick: number) {
+  const r = STRING_RADII[string]!;
+  return thick > 1 ? Math.max(r * thick, 0.024) : r;
+}
+
 function makeStringMaterial(string: number, m: Materials, len: number) {
   const wound = WOUND[string];
-  const mat = new THREE.MeshPhysicalMaterial({
+  const mat = new THREE.MeshStandardMaterial({
     color: wound ? '#c9a676' : '#dcd7ce',
     metalness: 1,
     roughness: wound ? 0.34 : 0.2,
@@ -304,6 +392,7 @@ function makeStringMaterial(string: number, m: Materials, len: number) {
     uLen: { value: len },
   };
   mat.onBeforeCompile = (shader) => {
+    injectLock(shader, m.lock);
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
       .replace(
@@ -327,13 +416,13 @@ uniform float uAmp; uniform float uTime; uniform float uStart; uniform float uFr
   return { mat, uniforms };
 }
 
-function GuitarString({ string, m }: { string: number; m: Materials }) {
+function GuitarString({ string, m, thick }: { string: number; m: Materials; thick: number }) {
   const ref = useRef<THREE.Mesh>(null);
   const a = useMemo(() => new THREE.Vector3(0, stringHeight(0), stringZ(string, 0)), [string]);
   const b = useMemo(() => new THREE.Vector3(STRING_END, stringHeight(STRING_END), stringZ(string, STRING_END)), [string]);
   const len = a.distanceTo(b);
   const { mat, uniforms } = useMemo(() => makeStringMaterial(string, m, len), [string, m, len]);
-  const r = STRING_RADII[string]!;
+  const r = visualRadius(string, thick);
 
   useEffect(() => {
     if (ref.current) placeBetween(ref.current, a, b);
@@ -418,6 +507,10 @@ function Glow({
   );
   useEffect(() => () => mat.dispose(), [mat]);
   const [x, y, z] = markerPoint(position);
+  // Fretted: on the board under the string. Open: on top of the nut, smaller, so it stays on the neck.
+  const open = position.fret === 0;
+  const gy = open ? stringHeight(0) + 0.025 : y * 0.5;
+  const gsize = open ? size * 0.8 : size;
   useFrame(() => {
     if (!ref.current) return;
     const t = performance.now() / 1000;
@@ -434,11 +527,11 @@ function Glow({
       s *= 1 + 0.35 * Math.min(1, k);
     }
     mat.opacity = o;
-    ref.current.scale.setScalar(size * s);
+    ref.current.scale.setScalar(gsize * s);
     ref.current.visible = o > 0.01;
   });
   return (
-    <mesh ref={ref} position={[x, y * 0.5, z]} rotation={[-Math.PI / 2, 0, 0]} material={mat} renderOrder={5}>
+    <mesh ref={ref} position={[x, gy, z]} rotation={[-Math.PI / 2, 0, 0]} material={mat} renderOrder={5}>
       <planeGeometry args={[1, 1]} />
     </mesh>
   );
@@ -471,48 +564,23 @@ function Highlights({ m }: { m: Materials }) {
 /* Locked veil + tap targets                                          */
 /* ------------------------------------------------------------------ */
 
-function Veil({ m }: { m: Materials }) {
+/** Feeds the current stage's locked region (and the neck's world transform) to the lock shader. */
+function LockRegion({ m, root }: { m: Materials; root: React.RefObject<THREE.Group | null> }) {
   const stageIdx = usePalace((s) => s.saved.stage);
-  const stage = usePalace.getState().stage();
-  const rects = useMemo(() => {
-    const out: { x0: number; x1: number; z0: number; z1: number }[] = [];
-    const xm = fretX(stage.maxFret);
+  useEffect(() => {
+    const stage = usePalace.getState().stage();
     const maxString = Math.max(...stage.strings);
-    if (maxString < STRING_COUNT - 1) {
-      // Higher strings sit at -Z; veil from between strings to the board edge.
-      const zEdge = (x: number) => stringZ(maxString, x) - stringSpacing(x) * 0.5;
-      out.push({ x0: -HEADSTOCK_GAP - 0.1, x1: xm, z0: -neckWidth(xm) / 2 - 0.15, z1: zEdge(xm / 2) });
-    }
-    out.push({ x0: xm, x1: BOARD_END + 1, z0: -neckWidth(BOARD_END) / 2 - 0.2, z1: neckWidth(BOARD_END) / 2 + 0.2 });
-    return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stageIdx]);
-  const mat = useMemo(
-    () =>
-      new THREE.MeshBasicMaterial({
-        map: m.veil,
-        color: COLORS.plaster,
-        transparent: true,
-        opacity: 0.4,
-        depthWrite: false,
-      }),
-    [m],
-  );
-  return (
-    <group>
-      {rects.map((r, i) => (
-        <mesh
-          key={i}
-          position={[(r.x0 + r.x1) / 2, 0.3, (r.z0 + r.z1) / 2]}
-          rotation={[-Math.PI / 2, 0, 0]}
-          material={mat}
-          renderOrder={4}
-        >
-          <planeGeometry args={[r.x1 - r.x0, r.z1 - r.z0]} />
-        </mesh>
-      ))}
-    </group>
-  );
+    const { lock } = m;
+    lock.uLockX.value = stage.maxFret >= RENDERED_FRETS ? 1e3 : fretX(stage.maxFret);
+    lock.uLockStrings.value = maxString < STRING_COUNT - 1 ? 1 : 0;
+    // Midway between the last unlocked string and the next: (2 - maxString) · stringSpacing(x), linear in x.
+    const k = (2 - maxString) / (STRING_COUNT - 1);
+    lock.uLockEdge.value.set(k * (NUT_WIDTH - 2 * EDGE_MARGIN), (k * BOARD_TAPER) / fretX(12));
+  }, [m, stageIdx]);
+  useFrame(() => {
+    if (root.current) m.lock.uNeckInv.value.copy(root.current.matrixWorld).invert();
+  });
+  return null;
 }
 
 const hitMaterial = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false });
@@ -569,18 +637,21 @@ function HitCells() {
 
 export function Fretboard() {
   const m = useMaterials();
+  const root = useRef<THREE.Group>(null);
+  const portrait = useThree((s) => s.size.height > s.size.width * 1.05);
+  const thick = portrait ? 1.7 : 1;
   return (
-    <group>
+    <group ref={root}>
+      <LockRegion m={m} root={root} />
       <Board m={m} />
-      <Headstock m={m} />
+      <Headstock m={m} thick={thick} />
       <Nut m={m} />
       <Frets m={m} />
       <Inlays m={m} />
       {Array.from({ length: STRING_COUNT }, (_, s) => (
-        <GuitarString key={s} string={s} m={m} />
+        <GuitarString key={s} string={s} m={m} thick={thick} />
       ))}
       <Highlights m={m} />
-      <Veil m={m} />
       <HitCells />
     </group>
   );

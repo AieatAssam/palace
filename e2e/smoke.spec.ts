@@ -9,7 +9,7 @@ async function skipIntro(page: Page) {
 }
 
 async function waitForFrames(page: Page, n = 10) {
-  await expect.poll(() => page.evaluate(() => window.__palace!.render().frames), { timeout: 30_000 }).toBeGreaterThan(n);
+  await expect.poll(() => page.evaluate(() => window.__palace!.render().frames), { timeout: 15_000 }).toBeGreaterThan(n);
 }
 
 /** Wait until the camera dolly has settled (projected point stops moving). */
@@ -24,7 +24,7 @@ async function settledProjection(page: Page, p: Pos) {
         last = cur;
         return moved;
       },
-      { timeout: 20_000 },
+      { timeout: 10_000 },
     )
     .toBeLessThan(0.5);
   return last;
@@ -64,6 +64,7 @@ test('answers a Name-it question through the UI', async ({ page }) => {
   await waitForFrames(page);
   expect(await page.evaluate(() => window.__palace!.drill())).toBe('name');
   const first = await page.evaluate(() => window.__palace!.question());
+  expect(await page.evaluate(() => window.__palace!.state())).toEqual({ mode: 'name', question: first });
   const answer = (await page.evaluate(() => window.__palace!.answer())) as string;
   await page.locator(`button[data-note="${answer}"]`).click();
   await expect(page.getByTestId('prompt')).toHaveClass(/correct/);
@@ -86,6 +87,7 @@ test('Find-all: tapping the neck finds a target', async ({ page }) => {
   await waitForFrames(page);
   await page.getByTestId('drill-find').click();
   expect(await page.evaluate(() => window.__palace!.drill())).toBe('find');
+  expect(await page.evaluate(() => window.__palace!.state().mode)).toBe('find');
   const targets = (await page.evaluate(() => window.__palace!.answer())) as Pos[];
   expect(targets.length).toBeGreaterThan(0);
   const pt = await settledProjection(page, targets[0]!);

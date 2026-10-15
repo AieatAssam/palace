@@ -194,25 +194,3 @@ export function makeGlow(size = 128): THREE.CanvasTexture {
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
-
-/** Soft-edged rectangle mask for the frosted "locked" veil. */
-export function makeVeil(size = 128, feather = 0.18): THREE.CanvasTexture {
-  const c = canvas(size, size);
-  const ctx = c.getContext('2d')!;
-  const img = ctx.createImageData(size, size);
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const u = x / (size - 1);
-      const v = y / (size - 1);
-      const e = Math.min(u, 1 - u, v, 1 - v);
-      const a = Math.min(1, e / feather);
-      const o = (y * size + x) * 4;
-      img.data[o] = img.data[o + 1] = img.data[o + 2] = 255;
-      img.data[o + 3] = a * a * (3 - 2 * a) * 255;
-    }
-  }
-  ctx.putImageData(img, 0, 0);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
