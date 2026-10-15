@@ -19,7 +19,9 @@ else gets built.
   is its own card. Progress lives in `localStorage` (`palace.fretboard.v1`).
 - **3D neck** (react-three-fiber): procedural rosewood board (canvas-generated albedo,
   roughness and normal maps), pearl inlays at 3/5/7/9/12, brass frets, a bone nut,
-  wound strings with a normal-mapped winding, headstock and tuner posts. The lighting
+  wound strings with a normal-mapped winding, and a headstock where each string runs straight
+  back to its own inline tuner post. Locked strings and frets are dimmed and desaturated in
+  the shader (no overlay). On phones strings render thicker than true gauge. The lighting
   is drei `Environment` lightformers plus a soft contact shadow. Post-processing is
   bloom and vignette, plus depth of field on desktop only.
 - **Feedback**: on a correct answer the string vibrates (vertex shader, from the fretted
@@ -33,6 +35,10 @@ else gets built.
 - **Left-handed** toggle mirrors the neck. Onboarding is three short, skippable cards.
 - **Performance**: DPR is clamped (1.75 on touch devices), there are no shadow maps, and
   drei's `PerformanceMonitor` steps down post-processing and DPR when frames drop.
+- **Lite render path** (`src/three/quality.ts`): DPR 1, no post-processing, standard
+  instead of physical materials, smaller procedural textures and environment map. It is
+  used automatically under automation (`navigator.webdriver`) or with `?lite`. Add
+  `?quality=full` to force the full path (for example, for screenshots).
 
 ## Scripts
 
@@ -43,7 +49,7 @@ else gets built.
 | `npm run lint`      | ESLint (flat config)                                  |
 | `npm test`          | Vitest unit tests (SRS, unlocks, notes, audio, layout) |
 | `npm run build`     | Type-check + production build to `dist/` (base `./`)  |
-| `npm run e2e`       | Playwright smoke tests (desktop 1280×720, phone 412×915) |
+| `npm run e2e`       | Playwright smoke tests (desktop 960×600, phone 412×915) |
 
 ### End-to-end tests
 
@@ -55,11 +61,14 @@ instead:
 CHROME_PATH=/usr/bin/google-chrome npm run e2e
 ```
 
-WebGL runs on SwiftShader in headless mode, so the tests are slow-ish but deterministic.
+Headless WebGL runs on SwiftShader (CPU). The full render path manages only ~2 fps there,
+which starved the page and made CI time out. Under automation the app therefore uses its
+lite path, and CI runs one worker. The suite takes about a minute, including the build.
 
 ### Test hooks
 
-`window.__palace` exposes read-only hooks for e2e tests and devtools: `question()`,
+`window.__palace` exposes read-only hooks for e2e tests and devtools: `state()` (`{ mode, question }`),
+`question()`,
 `answer()`, `drill()`, `stage()`, `positions()`, `found()`, `session()`, `leftHanded()`,
 `render()`, and `project({ string, fret })`, which gives the page coordinates of a
 position on the 3D neck.
