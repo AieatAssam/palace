@@ -67,8 +67,8 @@ input:focus-visible + .track {
 /* ---------------------------------------------------------------- HUD */
 
 /*
- * Two solid plaster bands, like the mount round a photograph: the scene shows
- * only in the window between them, and nothing fades over the neck.
+ * HUD floats over the full-bleed scene. No cream letterbox bands.
+ * Soft text shadow keeps ink readable on dark wood/leather.
  */
 .hud-top,
 .hud-bottom {
@@ -79,7 +79,7 @@ input:focus-visible + .track {
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: var(--plaster);
+  background: transparent;
 }
 
 .hud-top > *,
@@ -93,9 +93,8 @@ input:focus-visible + .track {
 
 .hud-top {
   top: 0;
-  padding: max(14px, env(safe-area-inset-top)) 18px 12px;
-  gap: 6px;
-  border-bottom: 1px solid var(--rule);
+  padding: max(14px, env(safe-area-inset-top)) 18px 10px;
+  gap: 4px;
 }
 
 .bar {
@@ -223,9 +222,8 @@ input:focus-visible + .track {
 
 .hud-bottom {
   bottom: 0;
-  padding: 12px 14px max(14px, env(safe-area-inset-bottom));
-  gap: 12px;
-  border-top: 1px solid var(--rule);
+  padding: 10px 14px max(14px, env(safe-area-inset-bottom));
+  gap: 10px;
 }
 
 /* Note pad: piano rhythm — naturals cream and tall, accidentals rosewood and short. */
@@ -580,6 +578,26 @@ input:focus-visible + .track {
 
 .dots span.on {
   background: var(--brass);
+}
+
+
+.hud-top .wordmark,
+.hud-top .prompt-title,
+.hud-top .modes button.active {
+  text-shadow: 0 1px 2px rgba(18, 12, 8, 0.55), 0 0 18px rgba(237, 230, 217, 0.35);
+}
+
+.hud-top .room,
+.hud-top .prompt-sub,
+.hud-top .modes button,
+.hud-bottom .progress,
+.hud-bottom .progress-title,
+.hud-bottom .streak {
+  text-shadow: 0 1px 2px rgba(18, 12, 8, 0.65);
+}
+
+.hud-bottom .pad .note {
+  box-shadow: 0 6px 18px rgba(12, 8, 5, 0.35);
 }
 
 /* -------------------------------------------------------- Phone layout */

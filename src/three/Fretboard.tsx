@@ -135,8 +135,8 @@ function withNacre(mat: THREE.MeshStandardMaterial, bands: THREE.Texture, lock: 
   float band = texture2D(uNacre, vMapUv).g;
   float ph = band * 0.9 + (1.0 - ndv) * 1.2;
   vec3 hue = 0.5 + 0.5 * cos(6.2831853 * (ph + vec3(0.0, 0.33, 0.67)));
-  diffuseColor.rgb *= mix(vec3(1.0), 0.66 + 0.5 * hue, 0.48);
-  totalEmissiveRadiance += diffuseColor.rgb * hue * 0.06 * (0.4 + band);
+  diffuseColor.rgb *= mix(vec3(1.0), 0.55 + 0.65 * hue, 0.62);
+  totalEmissiveRadiance += diffuseColor.rgb * hue * 0.12 * (0.35 + band);
 }`,
       );
   };
@@ -169,7 +169,8 @@ function injectCue(shader: THREE.WebGLProgramParametersWithUniforms, cue: String
       `#include <emissivemap_fragment>
 {
   float cueIn = smoothstep(uCue.x - 0.03, uCue.x + 0.08, vNeck.x) * (1.0 - smoothstep(uCue.y - 0.08, uCue.y + 0.03, vNeck.x));
-  totalEmissiveRadiance += uCueColor * (uCue.z * cueIn);
+  totalEmissiveRadiance += uCueColor * (uCue.z * cueIn * 1.35);
+  // slight metal catch: darken roughness in the cue band via emissive only
 }`,
     );
 }
@@ -230,20 +231,21 @@ function useMaterials() {
     });
     const shell = LITE ? makePearl(128) : makePearl();
     const pearl = physical({
-      color: '#ddd6cb',
+      color: '#e8e2d6',
       map: shell.map,
       roughness: 1,
       roughnessMap: shell.roughnessMap,
       clearcoat: 1,
-      clearcoatRoughness: 0.05,
+      clearcoatRoughness: 0.04,
       iridescence: 1,
-      iridescenceIOR: 1.35,
-      iridescenceThicknessRange: [260, 820],
+      iridescenceIOR: 1.4,
+      iridescenceThicknessRange: [180, 980],
       iridescenceThicknessMap: shell.thickness,
-      sheen: 0.35,
-      sheenRoughness: 0.35,
-      sheenColor: new THREE.Color('#dbe7ff'),
-      envMapIntensity: 1.2,
+      sheen: 0.55,
+      sheenRoughness: 0.22,
+      sheenColor: new THREE.Color('#c8e0ff'),
+      envMapIntensity: LITE ? 1.1 : 2.1,
+      metalness: 0.08,
     });
     // The seat the pearl is set into: a hairline of dark glue and shadow.
     const inlaySeat = withLock(new THREE.MeshStandardMaterial({ color: '#140b08', roughness: 0.8 }), lock);
@@ -440,7 +442,7 @@ function Inlays({ m }: { m: Materials }) {
       {dots.map(([x, z], i) => (
         <group key={i} position={[x, 0, z]} rotation={[0, i * 2.39, 0]}>
           <mesh position={[0, -0.0015, 0]} material={m.pearl}>
-            <cylinderGeometry args={[INLAY_R, INLAY_R, 0.004, 48]} />
+            <cylinderGeometry args={[INLAY_R, INLAY_R, 0.007, 64]} />
           </mesh>
           <mesh position={[0, 0.0003, 0]} rotation={[-Math.PI / 2, 0, 0]} material={m.inlaySeat}>
             <ringGeometry args={[INLAY_R - 0.004, INLAY_R + 0.009, 48]} />
@@ -567,60 +569,48 @@ function GuitarString({ string, m, thick }: { string: number; m: Materials; thic
 type CueTone = 'ask' | 'correct' | 'miss' | 'spark';
 
 /**
- * Per tone: the frame's albedo and metalness, its emissive lift, and the
- * warm lift on the string segment (question only). No sprites, no additive
- * fog: a thin metal frame that catches the room, and a string that warms.
+ * In-world cue: warm brass (or feedback) sheen along the string segment via
+ * the string shader, plus a short polished bead on the string itself that
+ * catches the room. No outline box, no billboard sprite.
  */
-const TONE: Record<CueTone, { color: string; metalness: number; emissive: THREE.Color; string: THREE.Color }> = {
+const TONE: Record<CueTone, { color: string; emissive: THREE.Color; string: THREE.Color }> = {
   ask: {
     color: COLORS.brass,
-    metalness: 0.9,
-    emissive: new THREE.Color('#d6a85e').multiplyScalar(0.7),
-    string: new THREE.Color('#ffcf8a').multiplyScalar(0.9),
+    emissive: new THREE.Color('#e0b56a').multiplyScalar(0.9),
+    string: new THREE.Color('#ffd4a0').multiplyScalar(1.25),
   },
   correct: {
     color: COLORS.correct,
-    metalness: 0.4,
-    emissive: new THREE.Color('#3f9c80').multiplyScalar(0.9),
-    string: new THREE.Color('#6fdcbc').multiplyScalar(0.7),
+    emissive: new THREE.Color('#4eb894').multiplyScalar(0.85),
+    string: new THREE.Color('#6fdcbc').multiplyScalar(0.95),
   },
   miss: {
     color: COLORS.miss,
-    metalness: 0.4,
     emissive: new THREE.Color(COLORS.miss).multiplyScalar(0.8),
-    string: new THREE.Color(COLORS.miss).multiplyScalar(0.8),
+    string: new THREE.Color(COLORS.miss).multiplyScalar(1.0),
   },
   spark: {
     color: COLORS.brass,
-    metalness: 0.9,
-    emissive: new THREE.Color('#ffe7bd').multiplyScalar(1.2),
-    string: new THREE.Color('#ffe7bd'),
+    emissive: new THREE.Color('#ffe7bd').multiplyScalar(1.1),
+    string: new THREE.Color('#ffe7bd').multiplyScalar(1.3),
   },
 };
 
-const FRET_INSET = 0.07; // keeps the frame clear of the fret wires
-const unitBox = new THREE.BoxGeometry(1, 1, 1);
+const FRET_INSET = 0.1;
 
-/**
- * The cell a cue frames, in neck-local x, its half-width across the string,
- * and the height it lies at. Fretted: on the board between the two fret
- * wires. Open: over the nut and the string's run back towards its post,
- * narrower than the string spacing so it can only read as this string.
- */
+/** Neck-local x range of the string sheen. */
 function cueCell(p: Position) {
   if (p.fret === 0) {
-    return { x0: -OPEN_HALO.length * 0.56, x1: 0.03, halfZ: OPEN_HALO.width / 2, y: stringHeight(0) + 0.026 };
+    return { x0: -OPEN_HALO.length * 0.5, x1: 0.04 };
   }
-  const x0 = fretX(p.fret - 1) + FRET_INSET;
-  const x1 = fretX(p.fret) - FRET_INSET;
-  return { x0, x1, halfZ: stringSpacing((x0 + x1) / 2) * 0.42, y: 0.004 };
+  return { x0: fretX(p.fret - 1) + FRET_INSET, x1: fretX(p.fret) - FRET_INSET };
 }
 
 function Cue({
   position,
   tone,
   m,
-  thick,
+  thick = 1,
   breathe = false,
   fadeFrom,
   question = false,
@@ -628,27 +618,30 @@ function Cue({
   position: Position;
   tone: CueTone;
   m: Materials;
-  thick: number;
+  thick?: number;
   breathe?: boolean;
-  /** performance.now() timestamp: fade out over ~0.8s from here. */
   fadeFrom?: number;
-  /** The current question's cue: also warms its string, and is reported to the e2e inspector. */
   question?: boolean;
 }) {
   const t = TONE[tone];
-  const mat = useMemo(
+  // Short polished bead on the string: metal that catches the HDRI, slight emissive breathe.
+  const beadMat = useMemo(
     () =>
-      new THREE.MeshStandardMaterial({
+      new THREE.MeshPhysicalMaterial({
         color: t.color,
-        metalness: t.metalness,
-        roughness: 0.3,
+        metalness: 1,
+        roughness: 0.18,
+        clearcoat: 0.6,
+        clearcoatRoughness: 0.2,
         emissive: t.emissive,
-        emissiveIntensity: 1,
+        emissiveIntensity: 0.7,
         transparent: true,
+        opacity: 0.95,
       }),
     [t],
   );
-  useEffect(() => () => mat.dispose(), [mat]);
+  useEffect(() => () => beadMat.dispose(), [beadMat]);
+
   const cue = m.cues[position.string]!;
   const cell = cueCell(position);
   useEffect(() => {
@@ -663,32 +656,23 @@ function Cue({
   useFrame(() => {
     const now = performance.now();
     let k = 1;
-    if (breathe) k = 0.6 + 0.4 * (0.5 + 0.5 * Math.sin((now / 1000) * 3.0));
+    if (breathe) k = 0.7 + 0.3 * (0.5 + 0.5 * Math.sin((now / 1000) * 2.6));
     let o = 1;
     if (fadeFrom !== undefined) o = Math.max(0, 1 - (now - fadeFrom) / 800);
-    mat.emissiveIntensity = k * o;
-    mat.opacity = o;
+    beadMat.emissiveIntensity = 0.35 + 0.75 * k * o;
+    beadMat.opacity = 0.4 + 0.55 * o;
     if (question) cue.uCue.value.z = k * o;
   });
 
-  // The group sits exactly on the string (markerPoint, shared with tap targets
-  // and the inspector); the frame lies below it on the board, or over the nut.
   const [mx, my, mz] = markerPoint(position);
-  const lw = thick > 1 ? 0.032 : 0.02;
-  const len = cell.x1 - cell.x0;
-  const cx = (cell.x0 + cell.x1) / 2 - mx;
-  const y = cell.y - my;
-  const edges: [number, number, number, number][] = [
-    [cx, cell.halfZ, len + lw, lw],
-    [cx, -cell.halfZ, len + lw, lw],
-    [cell.x0 - mx, 0, lw, cell.halfZ * 2],
-    [cell.x1 - mx, 0, lw, cell.halfZ * 2],
-  ];
+  const r = Math.max(STRING_RADII[position.string]! * (thick > 1 ? thick : 1) * 2.4, 0.028);
+
   return (
     <group position={[mx, my, mz]} userData={{ role: 'highlight', question, string: position.string, fret: position.fret, tone }}>
-      {edges.map(([ex, ez, sx, sz], i) => (
-        <mesh key={i} geometry={unitBox} material={mat} position={[ex, y, ez]} scale={[sx, 0.008, sz]} renderOrder={5} />
-      ))}
+      {/* Bead runs along the string (local X after the neck group orientation). */}
+      <mesh material={beadMat} rotation={[0, 0, Math.PI / 2]} renderOrder={5}>
+        <capsuleGeometry args={[r, Math.max(0.12, (cell.x1 - cell.x0) * 0.55), 6, 12]} />
+      </mesh>
     </group>
   );
 }

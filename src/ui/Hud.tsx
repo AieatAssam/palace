@@ -12,9 +12,13 @@ function useInsetReporter() {
   useLayoutEffect(() => {
     const measure = () => {
       const h = window.innerHeight;
-      const t = top.current?.getBoundingClientRect();
-      const b = bottom.current?.getBoundingClientRect();
-      setInsets(t ? t.bottom : 0, b ? Math.max(0, h - b.top) : 0);
+      const topRect = top.current?.getBoundingClientRect();
+      const bottomRect = bottom.current?.getBoundingClientRect();
+      // Soft insets: UI overlays the scene; leave a little margin so the neck
+      // is not buried under the pad, but do not letterbox the 3D.
+      const insetTop = topRect ? topRect.bottom * 0.55 : 0;
+      const insetBottom = bottomRect ? Math.max(0, h - bottomRect.top) * 0.7 : 0;
+      setInsets(insetTop, insetBottom);
     };
     measure();
     const ro = new ResizeObserver(measure);
