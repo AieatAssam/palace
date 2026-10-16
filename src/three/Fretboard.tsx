@@ -135,7 +135,7 @@ function withNacre(mat: THREE.MeshStandardMaterial, clouds: THREE.Texture, lock:
   float cloud = texture2D(uNacre, vMapUv).g;
   float ph = cloud * 0.75 + (1.0 - ndv) * 1.1;
   vec3 hue = 0.5 + 0.5 * cos(6.2831853 * (ph + vec3(0.0, 0.33, 0.67)));
-  diffuseColor.rgb *= mix(vec3(1.0), 0.62 + 0.55 * hue, 0.5);
+  diffuseColor.rgb *= mix(vec3(1.0), 0.7 + 0.45 * hue, 0.32);
   totalEmissiveRadiance += diffuseColor.rgb * hue * 0.1 * (0.4 + cloud);
 }`,
       );
