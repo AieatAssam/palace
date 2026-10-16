@@ -2,7 +2,7 @@
 """Builds the self-hosted type files in src/assets/fonts from the full OFL sources.
 
   python3 -m venv /tmp/ftv && /tmp/ftv/bin/pip install fonttools brotli
-  /tmp/ftv/bin/python scripts/build-fonts.py <dir with EBGaramond[wght].ttf, EBGaramond-Italic[wght].ttf, GentiumBookPlus-Regular.ttf>
+  /tmp/ftv/bin/python scripts/build-fonts.py <dir with EBGaramond[wght].ttf, EBGaramond-Italic[wght].ttf, GentiumBookPlus-Regular.ttf, PinyonScript-Regular.ttf>
 
 Sources: EB Garamond (github.com/octaviopardo/EBGaramond12, OFL) via google/fonts;
 Gentium Book Plus (SIL, OFL) for the sharp sign, which EB Garamond does not draw.
@@ -103,3 +103,8 @@ do_subset(i, UNICODES, ['kern', 'liga'], None, f'{out}/ledger-italic.ttf')
 # The sharp sign: not in EB Garamond. Gentium Book Plus draws ♭ ♮ ♯ in a book-serif hand.
 g = TTFont(os.path.join(src, 'GentiumBookPlus-Regular.ttf'))
 do_subset(g, [0x266D, 0x266E, 0x266F], [], 'woff2', f'{out}/sharp.woff2')
+
+# Handwritten accent (3D cards only): Pinyon Script (OFL, Rodrigo Fuenzalida; github.com/SorkinType/Pinyon,
+# via google/fonts ofl/pinyonscript). Basic Latin only; kern/liga/calt kept.
+P = TTFont(os.path.join(src, 'PinyonScript-Regular.ttf'))
+do_subset(P, list(range(0x20, 0x7F)) + [0x2019, 0x2013, 0x2014], ['kern', 'liga', 'calt', 'ccmp', 'locl', 'mark', 'mkmk'], None, f'{out}/pinyon-script.ttf')

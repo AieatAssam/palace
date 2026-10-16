@@ -61,7 +61,7 @@ export function Settings({ onClose, onReplayPrimer }: { onClose: () => void; onR
   const linkY = TOP_RULE - BAND * rows.length - 0.42;
   const geom = useMemo(() => {
     const items: SheetItem[] = [
-      { kind: 'text', text: 'Settings', x: 0, y: 2.0, size: 0.5, font: 'italic', align: 'center' },
+      { kind: 'text', text: 'Settings', x: 0, y: 2.0, size: 0.5, font: 'italic', ink: 'gilt', align: 'center' },
       { kind: 'rule', y: TOP_RULE + 0.22, x0: -X, x1: X, weight: 'double' },
     ];
     const rects: SheetRect[] = [];
@@ -85,7 +85,7 @@ export function Settings({ onClose, onReplayPrimer }: { onClose: () => void; onR
     if (confirming) {
       items.push(
         { kind: 'text', text: 'Keep', x: -0.7, y: linkY - 0.5, size: 0.23, font: 'smcp', ink: 'soft', align: 'center' },
-        { kind: 'text', text: 'Clear everything', x: 0.5, y: linkY - 0.5, size: 0.23, font: 'smcp', ink: 'danger', align: 'center' },
+        { kind: 'text', text: 'Clear all', x: 0.5, y: linkY - 0.5, size: 0.23, font: 'smcp', ink: 'danger', align: 'center' },
       );
       rects.push({ id: 'keep', x: -0.7, y: linkY - 0.43, w: 0.9, h: 0.5 }, { id: 'clear-confirm', x: 0.5, y: linkY - 0.43, w: 1.7, h: 0.5 });
     } else {
@@ -116,7 +116,7 @@ export function Settings({ onClose, onReplayPrimer }: { onClose: () => void; onR
           {
             id: 'clear-confirm',
             testId: 'clear-confirm',
-            label: 'Clear everything',
+            label: 'Clear all',
             onActivate: () => {
               reset();
               setConfirming(false);

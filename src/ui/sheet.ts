@@ -6,8 +6,8 @@ import { create } from 'zustand';
  * one unit is a little under a third of the card's width). The same description feeds the
  * accessible twin in `SheetLayer`, so the drawn labels and the real buttons cannot drift apart.
  */
-export type SheetFont = 'roman' | 'smcp' | 'italic' | 'figures';
-export type SheetInk = 'ink' | 'soft' | 'quiet' | 'danger';
+export type SheetFont = 'roman' | 'smcp' | 'italic' | 'figures' | 'script';
+export type SheetInk = 'ink' | 'soft' | 'quiet' | 'danger' | 'gilt' | 'iron';
 
 export interface SheetText {
   kind: 'text';
@@ -22,6 +22,8 @@ export interface SheetText {
   /** Wrap width; the text block is anchored by `align` around `x`. */
   maxWidth?: number;
   lineHeight?: number;
+  /** Degrees anticlockwise: a signature rides a little uphill. */
+  tilt?: number;
 }
 
 export interface SheetRule {
@@ -65,6 +67,10 @@ export interface SheetGeom {
   width: number;
   height: number;
   items: SheetItem[];
+  /** A cypher engraved at the head of the page. */
+  monogram?: boolean;
+  /** A wax seal pressed on the page, centred here in card units. */
+  seal?: { x: number; y: number };
   rects: SheetRect[];
 }
 

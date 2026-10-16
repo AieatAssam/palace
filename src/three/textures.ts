@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import { LITE } from './quality';
+
+/** Requested anisotropy: three clamps it to the renderer's maximum. Lite stays cheap on a CPU rasteriser. */
+const ANISOTROPY = LITE ? 4 : 16;
 
 /**
  * Procedural textures, generated once on a 2D canvas: rosewood and walnut
@@ -167,7 +171,7 @@ function makeWood(w: number, h: number, seed: number, spec: WoodSpec): WoodMaps 
   const normalMap = new THREE.CanvasTexture(normal);
   for (const t of [map, roughnessMap, normalMap]) {
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.anisotropy = 8;
+    t.anisotropy = ANISOTROPY;
   }
   return { map, roughnessMap, normalMap };
 }
@@ -264,7 +268,7 @@ export function makeWalnut(size = 1024, seed = 23): WoodMaps {
     tx.generateMipmaps = true;
     tx.minFilter = THREE.LinearMipmapLinearFilter;
     tx.magFilter = THREE.LinearFilter;
-    tx.anisotropy = 16; // clamped to the GPU maximum by three
+    tx.anisotropy = ANISOTROPY; // clamped to the GPU maximum by three
     if (n === 0) tx.colorSpace = THREE.SRGBColorSpace;
     return tx;
   });
@@ -357,7 +361,7 @@ export function makeLeather(size = 1024, seed = 31): WoodMaps {
     const t = new THREE.CanvasTexture(m.c);
     if (srgb) t.colorSpace = THREE.SRGBColorSpace;
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.anisotropy = 8;
+    t.anisotropy = ANISOTROPY;
     return t;
   };
   return { map: tex(albedo, true), roughnessMap: tex(rough, false), normalMap: tex(normal, false) };
@@ -385,6 +389,7 @@ export function makeWindingNormal(size = 64): THREE.CanvasTexture {
   ctx.putImageData(img, 0, 0);
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = ANISOTROPY;
   return t;
 }
 
@@ -454,7 +459,7 @@ export function makePearl(size = 256, seed = 11): PearlMaps {
     m.ctx.putImageData(m.img, 0, 0);
     const t = new THREE.CanvasTexture(m.c);
     if (srgb) t.colorSpace = THREE.SRGBColorSpace;
-    t.anisotropy = 4;
+    t.anisotropy = ANISOTROPY;
     return t;
   };
   return { map: tex(albedo, true), thickness: tex(thick, false), roughnessMap: tex(rough, false) };
@@ -466,7 +471,7 @@ export interface PaperMaps {
 }
 
 /** Clean cream paper: a barely-there mottle and a faint fibre tooth for the bump. */
-export function makePaper(size = 256, seed = 47): PaperMaps {
+export function makePaper(size = 512, seed = 47): PaperMaps {
   const rng = mulberry32(seed);
   const cloud = noise2D(rng, 4, 4);
   const fibre = noise2D(rng, 96, 96);
@@ -484,13 +489,17 @@ export function makePaper(size = 256, seed = 47): PaperMaps {
       const m = cloud(u * 4, v * 4) - 0.5;
       
       const f = fibre(u * 96, v * 96) * 0.6 + grain(u * 160, v * 160) * 0.4;
-      const t = 1 + m * 0.02 + (f - 0.5) * 0.012;
+      // Laid lines (close, faint ribs across the sheet) and the odd darker cotton fibre.
+      const laid = Math.sin(v * Math.PI * 2 * 48) * 0.5 + 0.5;
+      const chain = Math.pow(Math.max(0, Math.cos(u * Math.PI * 2 * 4)), 24);
+      const fleck = fibre(u * 96 + 31, v * 24) > 0.86 ? -0.012 : 0;
+      const t = 1 + m * 0.02 + (f - 0.5) * 0.012 + (laid - 0.5) * 0.006 + fleck;
       const i = (y * size + x) * 4;
       cimg.data[i] = Math.min(255, 238 * t);
       cimg.data[i + 1] = Math.min(255, 230 * t);
       cimg.data[i + 2] = Math.min(255, 213 * t);
       cimg.data[i + 3] = 255;
-      const h = Math.round(255 * (0.5 + (f - 0.5) * 0.25));
+      const h = Math.round(255 * (0.5 + (f - 0.5) * 0.25 + (laid - 0.5) * 0.08 + chain * 0.05));
       bimg.data[i] = bimg.data[i + 1] = bimg.data[i + 2] = h;
       bimg.data[i + 3] = 255;
     }
@@ -500,7 +509,7 @@ export function makePaper(size = 256, seed = 47): PaperMaps {
   const tex = (c: HTMLCanvasElement, srgb: boolean) => {
     const t = new THREE.CanvasTexture(c);
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.anisotropy = 4;
+    t.anisotropy = ANISOTROPY;
     if (srgb) t.colorSpace = THREE.SRGBColorSpace;
     return t;
   };
@@ -520,5 +529,31 @@ export function makeCardShadow(size = 256): THREE.CanvasTexture {
   const m = size * 0.24;
   ctx.fillRect(m - off, m, size - 2 * m, size - 2 * m);
   const t = new THREE.CanvasTexture(c);
+  return t;
+}
+
+/** A soft-edged rounded impression (alpha only): a label pressed into the page. */
+export function makeImpression(size = 128): THREE.CanvasTexture {
+  const c = canvas(size, size);
+  const ctx = c.getContext('2d')!;
+  const m = size * 0.2;
+  ctx.filter = `blur(${size * 0.07}px)`;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.roundRect(m, m, size - 2 * m, size - 2 * m, size * 0.18);
+  ctx.fill();
+  return new THREE.CanvasTexture(c);
+}
+
+/** A capsule, white on transparent: the end-rounded rule under a focused label. */
+export function makeCapsule(w = 256, h = 16): THREE.CanvasTexture {
+  const c = canvas(w, h);
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.roundRect(1, 1, w - 2, h - 2, (h - 2) / 2);
+  ctx.fill();
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = ANISOTROPY;
   return t;
 }

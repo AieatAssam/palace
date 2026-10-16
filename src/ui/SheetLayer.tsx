@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { sheetDom } from '../three/view';
+import { sheetDom, sheetUi } from '../three/view';
 import { type SheetGeom, useSheet } from './sheet';
 
 export interface SheetControl {
@@ -46,7 +46,13 @@ export function SheetLayer({
   // The scene redraws only when the sheet's drawing changes.
   const stable = useMemo(() => JSON.parse(signature) as SheetGeom, [signature]);
   useEffect(() => show(stable), [show, stable]);
-  useEffect(() => () => show(null), [show]);
+  useEffect(
+    () => () => {
+      show(null);
+      sheetUi.press = sheetUi.focus = sheetUi.hover = null;
+    },
+    [show],
+  );
 
   // Put focus on the sheet and give it back to whatever had it. The opener is read while
   // rendering, before the page behind goes inert, and refocused once it is live again.
@@ -79,6 +85,21 @@ export function SheetLayer({
       aria-checked={c.checked}
       data-testid={c.testId}
       data-autofocus={c.autoFocus ? '' : undefined}
+      onPointerDown={() => (sheetUi.press = c.id)}
+      onPointerUp={() => sheetUi.press === c.id && (sheetUi.press = null)}
+      onPointerCancel={() => (sheetUi.press = null)}
+      onPointerEnter={(e) => e.pointerType === 'mouse' && (sheetUi.hover = c.id)}
+      onPointerLeave={() => {
+        if (sheetUi.hover === c.id) sheetUi.hover = null;
+        if (sheetUi.press === c.id) sheetUi.press = null;
+      }}
+      onKeyDown={(e) => (e.key === ' ' || e.key === 'Enter') && (sheetUi.press = c.id)}
+      onKeyUp={() => sheetUi.press === c.id && (sheetUi.press = null)}
+      onFocus={(e) => e.currentTarget.matches(':focus-visible') && (sheetUi.focus = c.id)}
+      onBlur={() => {
+        if (sheetUi.focus === c.id) sheetUi.focus = null;
+        if (sheetUi.press === c.id) sheetUi.press = null;
+      }}
       onClick={(e) => {
         e.stopPropagation();
         c.onActivate();

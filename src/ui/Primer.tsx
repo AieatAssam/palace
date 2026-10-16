@@ -5,21 +5,23 @@ import { type SheetItem, type SheetRect, SHEET_WIDTH } from './sheet';
 
 const BEATS = [
   {
-    title: 'A light rests on the neck.',
-    body: 'Each question is one place on the fretboard, marked in brass. Name the note it sounds.',
+    title: 'A brass light marks a place.',
+    body: 'Name its note.',
   },
   {
-    title: 'Answer on the keys, or the neck.',
-    body: 'In Name, choose from the twelve keys. In Find, touch every place a note lives.',
+    title: 'Name it, or find it.',
+    body: 'Name: pick one of twelve keys. Find: touch every place the note lives.',
   },
   {
-    title: 'The room remembers.',
-    body: 'Sure answers settle; slow ones return sooner. New strings and frets open as you learn.',
+    title: 'Slow answers come back.',
+    body: 'Sure answers rest. Slow ones return sooner. Strings and frets open as you advance.',
   },
 ];
 
+/** The one personal line, in a hand. */
+const LINE = 'Take your time.';
 const NUMERALS = ['I', 'II', 'III'];
-const HEIGHT = 4.9;
+const HEIGHT = 6;
 const X = 1.2;
 
 /** First visit only: three beats on a page laid on the desk. Tap anywhere to turn it. */
@@ -44,7 +46,7 @@ export function Primer() {
 
   const geom = useMemo(() => {
     const items: SheetItem[] = [
-      { kind: 'text', text: 'The Fretboard Room', x: 0, y: 1.98, size: 0.17, font: 'smcp', ink: 'soft', align: 'center' },
+      { kind: 'text', text: 'The Fretboard Room', x: 0, y: 1.98, size: 0.17, font: 'smcp', ink: 'gilt', align: 'center' },
     ];
     NUMERALS.forEach((n, i) => {
       items.push({ kind: 'text', text: n, x: (i - 1) * 0.7, y: 1.42, size: i === beat ? 0.4 : 0.28, ink: i === beat ? 'ink' : 'quiet', align: 'center' });
@@ -53,14 +55,15 @@ export function Primer() {
       { kind: 'rule', y: 1.12, x0: -X, x1: X, weight: 'double' },
       { kind: 'text', text: b.title, x: 0, y: 0.9, size: 0.34, font: 'italic', align: 'center', maxWidth: 2.4, lineHeight: 1.12 },
       { kind: 'text', text: b.body, x: 0, y: -0.28, size: 0.2, align: 'center', maxWidth: 2.4, lineHeight: 1.4 },
-      { kind: 'text', text: 'Skip primer', x: -0.78, y: -1.92, size: 0.2, font: 'smcp', ink: 'quiet', align: 'center' },
-      { kind: 'text', text: last ? 'Begin' : 'Continue', x: 0.62, y: -1.92, size: 0.23, font: 'smcp', align: 'center' },
+      ...(last ? [{ kind: 'text', text: LINE, x: 0, y: -1.55, size: 0.34, font: 'script', ink: 'iron', align: 'center', tilt: 2 } as SheetItem] : []),
+      { kind: 'text', text: 'Skip', x: -0.78, y: -1.92, size: 0.2, font: 'smcp', ink: 'quiet', align: 'center' },
+      { kind: 'text', text: last ? 'Begin' : 'Next', x: 0.62, y: -1.92, size: 0.23, font: 'smcp', align: 'center' },
     );
     const rects: SheetRect[] = [
       { id: 'skip', x: -0.78, y: -1.86, w: 1.2, h: 0.5 },
       { id: 'next', x: 0.62, y: -1.85, w: 1.2, h: 0.5 },
     ];
-    return { key: 'primer', width: SHEET_WIDTH, height: HEIGHT, items, rects };
+    return { key: 'primer', width: SHEET_WIDTH, height: HEIGHT, items, rects, monogram: true };
   }, [beat, b, last]);
 
   return (
@@ -71,8 +74,8 @@ export function Primer() {
       onEscape={done}
       onBackdrop={advance}
       controls={[
-        { id: 'skip', testId: 'primer-skip', label: 'Skip primer', onActivate: done },
-        { id: 'next', testId: 'primer-next', label: last ? 'Begin' : 'Continue', onActivate: advance, autoFocus: true },
+        { id: 'skip', testId: 'primer-skip', label: 'Skip', onActivate: done },
+        { id: 'next', testId: 'primer-next', label: last ? 'Begin' : 'Next', onActivate: advance, autoFocus: true },
       ]}
     >
       <p className="numeral" aria-label={`${beat + 1} of ${BEATS.length}`}>
@@ -80,6 +83,7 @@ export function Primer() {
       </p>
       <h2>{b.title}</h2>
       <p>{b.body}</p>
+      {last && <p>{LINE}</p>}
     </SheetLayer>
   );
 }

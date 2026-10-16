@@ -4,7 +4,7 @@ import { usePalace } from '../store';
 import { SheetLayer } from './SheetLayer';
 import { type SheetItem, type SheetRect, SHEET_WIDTH } from './sheet';
 
-const HEIGHT = 6.1;
+const HEIGHT = 7;
 const X = 1.2;
 
 /** End of a sitting: a ledger page laid on the desk. */
@@ -32,8 +32,8 @@ export function SessionSheet() {
   const geom = useMemo(() => {
     const items: SheetItem[] = [
       { kind: 'text', text: 'Palace · Fretboard', x: 0, y: 2.55, size: 0.17, font: 'smcp', ink: 'soft', align: 'center' },
-      { kind: 'text', text: 'Today', x: 0, y: 1.95, size: 0.54, font: 'italic', align: 'center' },
-      { kind: 'text', text: today, x: 0, y: 1.62, size: 0.18, ink: 'soft', align: 'center' },
+      { kind: 'text', text: 'Today', x: 0, y: 2.0, size: 0.54, font: 'italic', ink: 'gilt', align: 'center' },
+      { kind: 'text', text: today, x: 0, y: 1.58, size: 0.31, font: 'script', ink: 'iron', align: 'center' },
       { kind: 'rule', y: 1.4, x0: -X, x1: X, weight: 'double' },
       { kind: 'text', text: figure, x: 0, y: 0.72, size: 0.74, font: 'figures', align: 'center' },
       { kind: 'text', text: caption, x: 0, y: 0.26, size: 0.18, font: 'italic', ink: 'soft', align: 'center' },
@@ -53,12 +53,13 @@ export function SessionSheet() {
       { kind: 'bar', y: -2.2, x0: -X, x1: X, fill: toward },
       { kind: 'text', text: 'Again', x: -0.72, y: -2.62, size: 0.27, font: 'smcp', align: 'center' },
       { kind: 'text', text: 'Leave', x: 0.72, y: -2.62, size: 0.27, font: 'smcp', ink: 'quiet', align: 'center' },
+      { kind: 'text', text: 'Palace', x: 1.2, y: -3.18, size: 0.34, font: 'script', ink: 'iron', align: 'right', tilt: 3 },
     );
     const rects: SheetRect[] = [
       { id: 'again', x: -0.72, y: -2.54, w: 1.0, h: 0.5 },
       { id: 'leave', x: 0.72, y: -2.54, w: 1.0, h: 0.5 },
     ];
-    return { key: 'session', width: SHEET_WIDTH, height: HEIGHT, items, rects };
+    return { key: 'session', width: SHEET_WIDTH, height: HEIGHT, items, rects, monogram: true, seal: { x: -0.9, y: -3.0 } };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [today, figure, caption, roomLabel, roomName, toward, session.best, session.strengthened.length, session.slipped.length]);
 

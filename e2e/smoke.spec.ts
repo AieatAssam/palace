@@ -103,15 +103,23 @@ test('Find-all: tapping the neck finds a target', async ({ page }) => {
 });
 
 test('every unlocked cell is tappable where it is drawn, with phone-sized string spacing', async ({ page }) => {
+  test.setTimeout(120_000); // many taps on a CPU rasteriser
   await enterPlay(page);
   await waitForFrames(page);
   const positions = (await page.evaluate(() => window.__palace!.positions())).map(({ string, fret }) => ({ string, fret }));
   await settledProjection(page, positions[0]!);
   const phone = test.info().project.name === 'phone';
   for (const p of positions) {
+    // Nothing in the HUD sits over a playable cell (re-project until the camera has settled on screen).
+    await expect
+      .poll(() =>
+        page.evaluate((q) => {
+          const r = window.__palace!.project(q);
+          return r ? document.elementFromPoint(r.x, r.y)?.tagName : undefined;
+        }, p),
+      )
+      .toBe('CANVAS');
     const pt = (await page.evaluate((q) => window.__palace!.project(q), p))!;
-    // Nothing in the HUD sits over a playable cell.
-    expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.tagName, pt)).toBe('CANVAS');
     await tapAt(page, pt.x, pt.y);
     await expect.poll(() => page.evaluate(() => window.__palace!.lastTap())).toEqual(p);
     // Wait out the pluck so the next tap is a fresh event.
@@ -127,6 +135,7 @@ test('every unlocked cell is tappable where it is drawn, with phone-sized string
 });
 
 test('toggles left-handed mode (mirrors the neck, persists)', async ({ page }) => {
+  test.setTimeout(90_000); // includes a full reload on the CPU rasteriser
   await enterPlay(page);
   await waitForFrames(page);
   const probe = { string: 0, fret: 3 };
@@ -176,6 +185,29 @@ test('the settings sheet is a real dialog: focus, Escape, and no slide under red
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('settings')).toBeHidden();
   await expect(page.getByTestId('settings-open')).toBeFocused();
+});
+
+test('primer buttons paint no browser border, outline or box when pressed or focused; targets stay 44px', async ({ page }) => {
+  await page.getByTestId('attract-begin').click();
+  await expect(page.getByTestId('primer')).toBeVisible();
+  const next = page.getByTestId('primer-next');
+  await expect(next).toHaveClass(/placed/);
+  const box = (await next.boundingBox())!;
+  expect(box.width).toBeGreaterThanOrEqual(44);
+  expect(box.height).toBeGreaterThanOrEqual(44);
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.keyboard.press('Tab');
+  for (const id of ['primer-next', 'primer-skip']) {
+    const paint = await page
+      .getByTestId(id)
+      .evaluate((el) => {
+        const c = getComputedStyle(el);
+        return { outline: c.outlineStyle, shadow: c.boxShadow, border: c.borderTopStyle, bg: c.backgroundColor };
+      });
+    expect(paint).toEqual({ outline: 'none', shadow: 'none', border: 'none', bg: 'rgba(0, 0, 0, 0)' });
+  }
+  await page.mouse.up();
 });
 
 test('first visit: title, three-beat primer, then play without the wordmark', async ({ page }) => {

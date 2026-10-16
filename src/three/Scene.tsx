@@ -56,7 +56,7 @@ function initialQuality(): Quality {
   if (LITE) return { tier: 0, dpr: 1 };
   const mobile = isCoarsePointer() || (typeof innerWidth !== 'undefined' && innerWidth < 700);
   const deviceDpr = typeof devicePixelRatio === 'undefined' ? 1 : devicePixelRatio;
-  const dpr = Math.min(deviceDpr, mobile ? 1.75 : 2);
+  const dpr = Math.min(deviceDpr, 2);
   // Low-DPR or touch devices: skip ambient occlusion, keep the light bloom.
   const tier: Quality['tier'] = mobile || deviceDpr < 1 ? 1 : 2;
   return { tier, dpr };
@@ -435,7 +435,7 @@ function Effects({ tier }: { tier: Quality['tier'] }) {
   const vignette = <Vignette offset={0.32} darkness={0.42} />;
   if (tier === 1) {
     return (
-      <EffectComposer multisampling={0}>
+      <EffectComposer multisampling={4}>
         {bloom}
         {vignette}
       </EffectComposer>
@@ -468,7 +468,7 @@ export function Scene() {
       data-testid="scene"
       dpr={LITE ? 1 : [1, maxDpr]}
       camera={{ fov: FOV, near: 0.5, far: 120, position: [0, 20, 6] }}
-      gl={{ antialias: !LITE && quality.tier < 2, powerPreference: 'high-performance', preserveDrawingBuffer: false }}
+      gl={{ antialias: !LITE && quality.tier === 0, powerPreference: 'high-performance', preserveDrawingBuffer: false }}
       onCreated={({ gl }) => {
         gl.toneMapping = THREE.ACESFilmicToneMapping;
         // Low enough that the rosewood stays dark and rich; metals still find their highlights.

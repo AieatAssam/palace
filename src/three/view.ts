@@ -74,3 +74,10 @@ export interface SheetPose {
   z: number;
 }
 export const sheetPose: { current: SheetPose | null } = { current: null };
+
+/**
+ * Which sheet control the player is touching, hovering or has keyboard focus on, written by
+ * `SheetLayer` from the real buttons and read by the scene, which draws the impression and
+ * the focus rule on the card itself.
+ */
+export const sheetUi: { press: string | null; focus: string | null; hover: string | null } = { press: null, focus: null, hover: null };

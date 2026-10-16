@@ -727,26 +727,19 @@ button:focus-visible {
   pointer-events: auto;
 }
 
-.sheet-control::after {
-  content: '';
-  position: absolute;
-  left: 4px;
-  right: 4px;
-  bottom: 9px;
-  height: 1px;
-  background: #8a6a37;
-  opacity: 0;
-  transition: opacity var(--fade) var(--ease);
-}
-
-.sheet-control:hover::after {
-  opacity: 1;
-}
-
-.sheet-control:focus-visible {
-  overflow: visible;
-  outline: 2px solid #8a6a37;
-  outline-offset: -3px;
+/* The card draws every state (impression, focus rule) in 3D; the button itself paints nothing. */
+.sheet-control,
+.sheet-control:focus,
+.sheet-control:focus-visible,
+.sheet-control:active {
+  outline: none;
+  box-shadow: none;
+  background: none;
+  border: 0;
+  transform: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* Reduced motion: the OS preference or the player's setting. */
