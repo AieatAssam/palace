@@ -171,7 +171,9 @@ export function Sheet() {
   );
 
   // Warm the glyph atlas a moment after start, off the first frames.
+  // Not on the LITE path: SDF generation on a CPU rasteriser stalls the game for seconds.
   useEffect(() => {
+    if (LITE) return;
     const id = setTimeout(() => {
       const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789%.,;:\u2019\u00b7\u2014 ';
       for (const font of Object.values(FONTS)) preloadFont({ font, characters }, () => {});
