@@ -105,10 +105,12 @@ function useCardMaterials() {
       paper: new THREE.MeshStandardMaterial({
         map: sheet.map,
         normalMap: sheet.normalMap,
-        normalScale: new THREE.Vector2(0.32, 0.32),
+        normalScale: new THREE.Vector2(0.26, 0.26),
         roughnessMap: sheet.roughnessMap,
         roughness: 1,
-        emissive: '#2a2419',
+        // The warm desk lamps push the map orange: a faintly cool tint and a neutral fill lift land it near #e9dcc0.
+        color: '#e9eaee',
+        emissive: '#2a2722',
         envMapIntensity: 0.35,
       }),
       // Gilt page edges: burnished gold leaf along the deckle.
@@ -253,20 +255,24 @@ function Item({ item, foil, onBounds }: { item: SheetItem; foil: THREE.Material 
   }
 }
 
-/** Deterministic per-glyph ink tone, so a redraw never shimmers. */
+/**
+ * Deterministic per-glyph ink tone, so a redraw never shimmers. Troika writes these bytes straight
+ * into a vertex colour (linear), so they are given in linear space or the ink comes out pale.
+ */
 function inkTones(text: string) {
   const ranges: Record<number, number> = {};
   let h = 2166136261;
   for (let i = 0; i < text.length; i++) {
     h = Math.imul(h ^ text.charCodeAt(i), 16777619) ^ (i * 40503);
-    ranges[i] = new THREE.Color(IRON_TONES[(h >>> 0) % IRON_TONES.length]!).getHex();
+    ranges[i] = new THREE.Color(IRON_TONES[(h >>> 0) % IRON_TONES.length]!).getHex(THREE.LinearSRGBColorSpace);
   }
   return ranges;
 }
 
 /**
  * Copperplate accent: a fine pen hand in warm iron-gall. Each glyph takes a slightly different
- * tone (the nib's flow varies); the ink sits a touch translucent with only a whisper of bleed, so the hairlines stay thin.
+ * tone (the nib's flow varies); the ink sits a touch translucent over a hairline of spread
+ * (enough to hold 4.5:1 at DPR 1 without thickening the hand).
  */
 function Script({ item, onBounds }: { item: SheetText; onBounds(item: SheetItem, b: Bounds): void }) {
   const align = item.align ?? 'left';
@@ -284,7 +290,7 @@ function Script({ item, onBounds }: { item: SheetText; onBounds(item: SheetItem,
       sdfGlyphSize={LITE ? 32 : 128}
       {...(colorRanges ? { colorRanges } : {})}
       fillOpacity={LITE ? 1 : 0.88}
-      {...(LITE ? {} : { outlineColor: '#3a2818', outlineOpacity: 0.18, outlineBlur: '3%', outlineWidth: 0 })}
+      {...(LITE ? {} : { outlineColor: '#2a1d14', outlineOpacity: 0.75, outlineWidth: '1.2%' })}
       onSync={(t: { textRenderInfo?: { blockBounds: Bounds } }) => t.textRenderInfo && onBounds(item, t.textRenderInfo.blockBounds)}
     >
       {item.text}

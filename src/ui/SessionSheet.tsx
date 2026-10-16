@@ -36,7 +36,7 @@ export function SessionSheet() {
       { kind: 'text', text: 'Palace · Fretboard', x: 0, y: 2.75, size: 0.17, font: 'smcp', ink: 'soft', align: 'center' },
       { kind: 'text', text: 'Today', x: 0, y: 2.2, size: 0.54, font: 'italic', ink: 'gilt', align: 'center' },
       // The date in a fine hand, with air above (clear of the descenders) and below (clear of the rule).
-      { kind: 'text', text: today, x: 0, y: 1.72, size: 0.25, font: 'script', ink: 'iron', align: 'center' },
+      { kind: 'text', text: today, x: 0, y: 1.72, size: 0.27, font: 'script', ink: 'iron', align: 'center' },
       { kind: 'rule', y: 1.42, x0: -X, x1: X, weight: 'double' },
       { kind: 'text', text: figure, x: 0, y: 0.72, size: 0.74, font: 'figures', align: 'center' },
       { kind: 'text', text: caption, x: 0, y: 0.26, size: 0.18, font: 'italic', ink: 'soft', align: 'center' },
