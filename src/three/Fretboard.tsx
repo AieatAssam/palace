@@ -32,7 +32,7 @@ import {
   wrapPoint,
 } from './layout';
 import { COLORS } from './palette';
-import { LITE } from './quality';
+import { COARSE, LITE } from './quality';
 import { makePearl, makeRosewood, makeWindingNormal } from './textures';
 
 const STRING_END = 30; // strings run off-frame towards the bridge
@@ -116,15 +116,15 @@ function withLock<M extends THREE.Material>(mat: M, lock: LockUniforms): M {
 }
 
 /**
- * Nacre's play of colour: pastel hues that drift across the shell's growth
- * bands and shift with viewing angle. Physical iridescence only tints the
+ * Nacre's play of colour: pastel hues that drift across the shell's soft
+ * clouds and shift with viewing angle. Physical iridescence only tints the
  * specular reflection, which a dim room barely shows; this carries the
  * colour in the body of the pearl too (and survives the lite path).
  */
-function withNacre(mat: THREE.MeshStandardMaterial, bands: THREE.Texture, lock: LockUniforms) {
+function withNacre(mat: THREE.MeshStandardMaterial, clouds: THREE.Texture, lock: LockUniforms) {
   mat.onBeforeCompile = (shader) => {
     injectLock(shader, lock);
-    shader.uniforms.uNacre = { value: bands };
+    shader.uniforms.uNacre = { value: clouds };
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform sampler2D uNacre;')
       .replace(
@@ -132,11 +132,11 @@ function withNacre(mat: THREE.MeshStandardMaterial, bands: THREE.Texture, lock: 
         `#include <normal_fragment_maps>
 {
   float ndv = clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0);
-  float band = texture2D(uNacre, vMapUv).g;
-  float ph = band * 0.9 + (1.0 - ndv) * 1.2;
+  float cloud = texture2D(uNacre, vMapUv).g;
+  float ph = cloud * 0.75 + (1.0 - ndv) * 1.1;
   vec3 hue = 0.5 + 0.5 * cos(6.2831853 * (ph + vec3(0.0, 0.33, 0.67)));
-  diffuseColor.rgb *= mix(vec3(1.0), 0.55 + 0.65 * hue, 0.62);
-  totalEmissiveRadiance += diffuseColor.rgb * hue * 0.12 * (0.35 + band);
+  diffuseColor.rgb *= mix(vec3(1.0), 0.7 + 0.45 * hue, 0.32);
+  totalEmissiveRadiance += diffuseColor.rgb * hue * 0.1 * (0.4 + cloud);
 }`,
       );
   };
@@ -152,10 +152,11 @@ export interface StringCue {
   /** (x0, x1, amount) in neck-local units. */
   uCue: { value: THREE.Vector3 };
   uCueColor: { value: THREE.Color };
+  uCueT: { value: number };
 }
 
 function makeCue(): StringCue {
-  return { uCue: { value: new THREE.Vector3(0, 0, 0) }, uCueColor: { value: new THREE.Color() } };
+  return { uCue: { value: new THREE.Vector3(0, 0, 0) }, uCueColor: { value: new THREE.Color() }, uCueT: { value: 0 } };
 }
 
 /** Adds the lock dimming and the cue lift to a string material's shader. */
@@ -163,14 +164,16 @@ function injectCue(shader: THREE.WebGLProgramParametersWithUniforms, cue: String
   injectLock(shader, lock);
   Object.assign(shader.uniforms, cue);
   shader.fragmentShader = shader.fragmentShader
-    .replace('#include <common>', '#include <common>\nuniform vec3 uCue; uniform vec3 uCueColor;')
+    .replace('#include <common>', '#include <common>\nuniform vec3 uCue; uniform vec3 uCueColor; uniform float uCueT;')
     .replace(
       '#include <emissivemap_fragment>',
       `#include <emissivemap_fragment>
 {
-  float cueIn = smoothstep(uCue.x - 0.03, uCue.x + 0.08, vNeck.x) * (1.0 - smoothstep(uCue.y - 0.08, uCue.y + 0.03, vNeck.x));
-  totalEmissiveRadiance += uCueColor * (uCue.z * cueIn * 1.35);
-  // slight metal catch: darken roughness in the cue band via emissive only
+  float cueIn = smoothstep(uCue.x - 0.04, uCue.x + 0.06, vNeck.x) * (1.0 - smoothstep(uCue.y - 0.06, uCue.y + 0.04, vNeck.x));
+  // A slow band of warm light travels along the segment, over a steady base sheen.
+  float travel = 0.5 + 0.5 * sin(vNeck.x * 9.0 - uCueT * 2.2);
+  float sheen = 0.55 + 0.45 * travel * travel;
+  totalEmissiveRadiance += uCueColor * (uCue.z * cueIn * sheen);
 }`,
     );
 }
@@ -200,14 +203,16 @@ function useMaterials() {
       clearcoatRoughness: 0.32,
       envMapIntensity: 0.85,
     });
+    // The neck back: satin lacquer, so its curve shades from lit to dark
+    // rather than mirroring the room as a pale band at grazing angles.
     const neck = physical({
       color: COLORS.mahogany,
       normalMap: wood.normalMap,
       normalScale: new THREE.Vector2(0.2, 0.2),
-      roughness: 0.5,
-      clearcoat: 0.7,
-      clearcoatRoughness: 0.28,
-      envMapIntensity: 0.85,
+      roughness: 0.55,
+      clearcoat: 0.35,
+      clearcoatRoughness: 0.4,
+      envMapIntensity: 0.4,
     });
     const headstock = board.clone();
     headstock.color = new THREE.Color('#8a7a70');
@@ -219,7 +224,12 @@ function useMaterials() {
     if (headstock instanceof THREE.MeshPhysicalMaterial) headstock.clearcoat = 0.12;
     // Tuner posts: brushed brass, undimmed. Frets: polished nickel-silver, sharing the lock.
     const post = new THREE.MeshStandardMaterial({ color: COLORS.brass, metalness: 1, roughness: 0.34 });
-    const nickel = withLock(new THREE.MeshStandardMaterial({ color: COLORS.nickel, metalness: 1, roughness: 0.22 }), lock);
+    // Nickel, a shade down and slightly satin: from the low hero angle a bright
+    // mirror crown flares every fret into a white bar.
+    const nickel = withLock(
+      new THREE.MeshStandardMaterial({ color: '#9a958b', metalness: 1, roughness: 0.2, envMapIntensity: LITE ? 0.22 : 0.4 }),
+      lock,
+    );
     const nut = physical({
       color: COLORS.bone,
       roughness: 0.36,
@@ -236,7 +246,7 @@ function useMaterials() {
       roughness: 1,
       roughnessMap: shell.roughnessMap,
       clearcoat: 1,
-      clearcoatRoughness: 0.04,
+      clearcoatRoughness: 0.2,
       iridescence: 1,
       iridescenceIOR: 1.4,
       iridescenceThicknessRange: [180, 980],
@@ -248,7 +258,10 @@ function useMaterials() {
       metalness: 0.08,
     });
     // The seat the pearl is set into: a hairline of dark glue and shadow.
-    const inlaySeat = withLock(new THREE.MeshStandardMaterial({ color: '#140b08', roughness: 0.8 }), lock);
+    const inlaySeat = withLock(new THREE.MeshStandardMaterial({ color: '#140b08', roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), lock);
+    pearl.polygonOffset = true;
+    pearl.polygonOffsetFactor = -4;
+    pearl.polygonOffsetUnits = -4;
     for (const mat of [board, neck, nut]) withLock(mat, lock);
     withNacre(pearl, shell.thickness, lock);
     const winding = makeWindingNormal();
@@ -284,7 +297,11 @@ function taperedBoardGeometry(): THREE.BufferGeometry {
   return g;
 }
 
-/** Rounded neck back (a half-ellipse sweep that tapers with the board). */
+/**
+ * Rounded neck back: a half-ellipse sweep that tapers with the board and
+ * thickens towards the body, deep enough (about half the board's width) that
+ * the low hero camera reads its curve under the board's edge.
+ */
 function neckBackGeometry(): THREE.BufferGeometry {
   const nx = 40;
   const na = 24;
@@ -294,7 +311,7 @@ function neckBackGeometry(): THREE.BufferGeometry {
   for (let i = 0; i <= nx; i++) {
     const x = NUT_X0 + ((BOARD_END - NUT_X0) * i) / nx;
     const half = neckWidth(x) / 2;
-    const depth = 0.5 + 0.12 * (x / BOARD_END);
+    const depth = 0.66 + 0.1 * (x / BOARD_END);
     for (let j = 0; j <= na; j++) {
       const a = (Math.PI * j) / na;
       positions.push(x, -BOARD_THICKNESS - Math.sin(a) * depth, Math.cos(a) * half);
@@ -305,7 +322,8 @@ function neckBackGeometry(): THREE.BufferGeometry {
     for (let j = 0; j < na; j++) {
       const a = i * (na + 1) + j;
       const b = a + na + 1;
-      index.push(a, b, a + 1, b, b + 1, a + 1);
+      // Wound so the faces (and computed normals) point outward, away from the neck's core.
+      index.push(a, a + 1, b, b, a + 1, b + 1);
     }
   }
   const g = new THREE.BufferGeometry();
@@ -398,8 +416,11 @@ function Nut({ m }: { m: Materials }) {
 
 function Frets({ m }: { m: Materials }) {
   const geo = useMemo(() => {
-    const g = new THREE.CylinderGeometry(0.042, 0.042, 1, 14, 1);
+    // Half-round crown (fret wire seated in its slot): a tight radius so the
+    // polished top concentrates the room into one thin line.
+    const g = new THREE.CylinderGeometry(0.04, 0.04, 1, 32, 1, false, Math.PI / 2, Math.PI);
     g.rotateX(Math.PI / 2);
+    g.scale(1, 0.85, 1);
     return g;
   }, []);
   return (
@@ -423,6 +444,21 @@ function Frets({ m }: { m: Materials }) {
 
 const INLAY_R = 0.13;
 
+const inlayGeo = (() => {
+  // Flat in position, faintly domed in its normals: a flat clearcoat disc
+  // mirrors one hard edge of the room (a window/wall boundary) and splits
+  // light/dark across its face; a gentle dome averages the room into an even lustre.
+  const g = new THREE.CircleGeometry(INLAY_R, 64, 0, Math.PI * 2).rotateX(-Math.PI / 2);
+  const p = g.attributes.position!, n = g.attributes.normal!;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.set(p.getX(i) * 2.2, 1, p.getZ(i) * 2.2).normalize();
+    n.setXYZ(i, v.x, v.y, v.z);
+  }
+  return g;
+})();
+const seatGeo = new THREE.RingGeometry(INLAY_R - 0.002, INLAY_R + 0.01, 64).rotateX(-Math.PI / 2);
+
 function Inlays({ m }: { m: Materials }) {
   const dots = useMemo(() => {
     const out: [number, number][] = [];
@@ -435,18 +471,14 @@ function Inlays({ m }: { m: Materials }) {
     }
     return out;
   }, []);
-  // Set into the board: the pearl's face sits a hair above the wood, ringed by
-  // a thin dark seat. Each dot is cut from a different part of the shell.
+  // Flush full discs on the board face (y = 0), pulled forward in depth with
+  // polygon offset so nothing z-fights; strings sit well above, frets are clear.
   return (
     <group>
       {dots.map(([x, z], i) => (
-        <group key={i} position={[x, 0, z]} rotation={[0, i * 2.39, 0]}>
-          <mesh position={[0, -0.0015, 0]} material={m.pearl}>
-            <cylinderGeometry args={[INLAY_R, INLAY_R, 0.007, 64]} />
-          </mesh>
-          <mesh position={[0, 0.0003, 0]} rotation={[-Math.PI / 2, 0, 0]} material={m.inlaySeat}>
-            <ringGeometry args={[INLAY_R - 0.004, INLAY_R + 0.009, 48]} />
-          </mesh>
+        <group key={i} position={[x, 0.0006, z]} rotation={[0, i * 2.39, 0]}>
+          <mesh geometry={seatGeo} material={m.inlaySeat} renderOrder={1} />
+          <mesh geometry={inlayGeo} material={m.pearl} position={[0, 0.0002, 0]} renderOrder={2} />
         </group>
       ))}
     </group>
@@ -534,7 +566,10 @@ function GuitarString({ string, m, thick }: { string: number; m: Materials; thic
       usePalace.subscribe((s, prev) => {
         if (s.lastPluck && s.lastPluck !== prev.lastPluck && s.lastPluck.position.string === string) {
           const f = s.lastPluck.position.fret;
-          excite.current = { at: performance.now(), amp: 0.032, decay: 2.0, shimmer: 1 };
+          // An idle shimmer (attract) is a softer, slower sigh than a pluck.
+          excite.current = s.lastPluck.quiet
+            ? { at: performance.now(), amp: 0.01, decay: 1.4, shimmer: 0.55 }
+            : { at: performance.now(), amp: 0.032, decay: 2.0, shimmer: 1 };
           uniforms.uStart.value = f === 0 ? 0 : fretX(f) / STRING_END;
         }
         if (s.lastMiss && s.lastMiss !== prev.lastMiss && s.lastMiss.position.string === string) {
@@ -577,7 +612,7 @@ const TONE: Record<CueTone, { color: string; emissive: THREE.Color; string: THRE
   ask: {
     color: COLORS.brass,
     emissive: new THREE.Color('#e0b56a').multiplyScalar(0.9),
-    string: new THREE.Color('#ffd4a0').multiplyScalar(1.25),
+    string: new THREE.Color('#ffc98a').multiplyScalar(1.9),
   },
   correct: {
     color: COLORS.correct,
@@ -624,23 +659,21 @@ function Cue({
   question?: boolean;
 }) {
   const t = TONE[tone];
-  // Short polished bead on the string: metal that catches the HDRI, slight emissive breathe.
-  const beadMat = useMemo(
+  // Faint warm pool of light in the fret slot under the string: soft-edged, additive, low.
+  const poolMat = useMemo(
     () =>
-      new THREE.MeshPhysicalMaterial({
-        color: t.color,
-        metalness: 1,
-        roughness: 0.18,
-        clearcoat: 0.6,
-        clearcoatRoughness: 0.2,
-        emissive: t.emissive,
-        emissiveIntensity: 0.7,
+      new THREE.MeshBasicMaterial({
+        map: slotPool(),
+        color: new THREE.Color(t.color).multiplyScalar(0.9),
         transparent: true,
-        opacity: 0.95,
+        opacity: 0.5,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
       }),
     [t],
   );
-  useEffect(() => () => beadMat.dispose(), [beadMat]);
+  useEffect(() => () => poolMat.dispose(), [poolMat]);
 
   const cue = m.cues[position.string]!;
   const cell = cueCell(position);
@@ -656,25 +689,56 @@ function Cue({
   useFrame(() => {
     const now = performance.now();
     let k = 1;
-    if (breathe) k = 0.7 + 0.3 * (0.5 + 0.5 * Math.sin((now / 1000) * 2.6));
+    if (breathe) k = 0.78 + 0.22 * (0.5 + 0.5 * Math.sin((now / 1000) * 1.8));
     let o = 1;
     if (fadeFrom !== undefined) o = Math.max(0, 1 - (now - fadeFrom) / 800);
-    beadMat.emissiveIntensity = 0.35 + 0.75 * k * o;
-    beadMat.opacity = 0.4 + 0.55 * o;
-    if (question) cue.uCue.value.z = k * o;
+    poolMat.opacity = (COARSE ? 0.6 : 0.42) * k * o;
+    if (question) {
+      cue.uCue.value.z = (COARSE ? 1.35 : 1) * k * o;
+      cue.uCueT.value = now / 1000;
+    }
   });
 
   const [mx, my, mz] = markerPoint(position);
-  const r = Math.max(STRING_RADII[position.string]! * (thick > 1 ? thick : 1) * 2.4, 0.028);
+  const open = position.fret === 0;
+  const len = Math.max(0.12, cell.x1 - cell.x0);
+  const width = stringSpacing((cell.x0 + cell.x1) / 2) * (thick > 1 ? 0.95 : 0.8);
+  const cx = (cell.x0 + cell.x1) / 2 - mx;
 
   return (
     <group position={[mx, my, mz]} userData={{ role: 'highlight', question, string: position.string, fret: position.fret, tone }}>
-      {/* Bead runs along the string (local X after the neck group orientation). */}
-      <mesh material={beadMat} rotation={[0, 0, Math.PI / 2]} renderOrder={5}>
-        <capsuleGeometry args={[r, Math.max(0.12, (cell.x1 - cell.x0) * 0.55), 6, 12]} />
-      </mesh>
+      {!open && (
+        <mesh raycast={noRaycast} material={poolMat} position={[cx, 0.002 - my, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={3}>
+          <planeGeometry args={[len, width]} />
+        </mesh>
+      )}
     </group>
   );
+}
+
+const noRaycast = () => {};
+let poolTex: THREE.CanvasTexture | null = null;
+/** Soft rounded-rect falloff, built once: brightest along the string, fading to the fret wires. */
+function slotPool() {
+  if (poolTex) return poolTex;
+  const w = 128, h = 64;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d')!;
+  const img = ctx.createImageData(w, h);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const u = Math.abs(x / (w - 1) - 0.5) * 2;
+      const v = Math.abs(y / (h - 1) - 0.5) * 2;
+      const a = Math.pow(Math.max(0, 1 - u * u), 1.5) * Math.pow(Math.max(0, 1 - v * v), 2.2);
+      const o = (y * w + x) * 4;
+      img.data[o] = img.data[o + 1] = img.data[o + 2] = 255;
+      img.data[o + 3] = Math.round(a * 255);
+    }
+  ctx.putImageData(img, 0, 0);
+  poolTex = new THREE.CanvasTexture(c);
+  poolTex.colorSpace = THREE.SRGBColorSpace;
+  return poolTex;
 }
 
 function Highlights({ m, thick }: { m: Materials; thick: number }) {
@@ -683,9 +747,11 @@ function Highlights({ m, thick }: { m: Materials; thick: number }) {
   const found = usePalace((s) => s.found);
   const lastMiss = usePalace((s) => s.lastMiss);
   const lastPluck = usePalace((s) => s.lastPluck);
+  // The neck only asks during play; on the title, primer and session sheet it rests.
+  const asking = usePalace((s) => s.screen === 'play');
 
   const out: React.ReactNode[] = [];
-  if (question.kind === 'name') {
+  if (asking && question.kind === 'name') {
     const tone: CueTone = feedback?.kind === 'correct' ? 'correct' : feedback?.kind === 'miss' ? 'miss' : 'ask';
     out.push(
       <Cue
@@ -698,15 +764,15 @@ function Highlights({ m, thick }: { m: Materials; thick: number }) {
         question
       />,
     );
-  } else {
+  } else if (asking) {
     for (const p of found) out.push(<Cue key={`f-s${p.string}f${p.fret}`} position={p} tone="correct" m={m} thick={thick} />);
   }
   if (lastMiss && !(question.kind === 'name' && samePosition(lastMiss.position, question.position))) {
     out.push(<Cue key={`m-${lastMiss.id}`} position={lastMiss.position} tone="miss" m={m} thick={thick} fadeFrom={lastMiss.at} />);
   }
   // A pluck on a cell that's already framed (the answer, a found target) only shimmers its string.
-  const framed = question.kind === 'name' ? [question.position] : found;
-  if (lastPluck && !framed.some((p) => samePosition(p, lastPluck.position))) {
+  const framed = !asking ? [] : question.kind === 'name' ? [question.position] : found;
+  if (lastPluck && !lastPluck.quiet && !framed.some((p) => samePosition(p, lastPluck.position))) {
     out.push(<Cue key={`p-${lastPluck.id}`} position={lastPluck.position} tone="spark" m={m} thick={thick} fadeFrom={lastPluck.at} />);
   }
   return <group>{out}</group>;

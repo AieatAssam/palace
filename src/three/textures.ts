@@ -2,8 +2,8 @@ import * as THREE from 'three';
 
 /**
  * Procedural textures, generated once on a 2D canvas: rosewood and walnut
- * (albedo, roughness, normal), desk leather, wound-string normal map and
- * mother-of-pearl.
+ * (albedo, roughness, normal), tooled desk leather, wound-string normal map
+ * and mother-of-pearl.
  */
 
 function mulberry32(seed: number) {
@@ -14,19 +14,6 @@ function mulberry32(seed: number) {
     t = Math.imul(t ^ (t >>> 15), t | 1);
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** 1D value noise with smooth interpolation, tiled over `period`. */
-function noise1D(rng: () => number, period: number) {
-  const pts = Array.from({ length: period }, rng);
-  return (x: number) => {
-    const i = Math.floor(x);
-    const f = x - i;
-    const a = pts[((i % period) + period) % period]!;
-    const b = pts[(((i + 1) % period) + period) % period]!;
-    const s = f * f * (3 - 2 * f);
-    return a + (b - a) * s;
   };
 }
 
@@ -197,40 +184,125 @@ export function makeRosewood(w = 1024, h = 256, seed = 7): WoodMaps {
   });
 }
 
-/** Figured walnut for the desk: a little more figure, lighter and browner than the board. */
-export function makeWalnut(w = 512, h = 256, seed = 23): WoodMaps {
-  return makeWood(w, h, seed, {
-    dark: [40, 27, 19],
-    base: [62, 43, 30],
-    warm: [88, 63, 43],
-    figure: 0.32,
-    pores: 0.0015,
-    roughness: 0.42,
+/**
+ * Quarter-sawn black walnut for the desk: straight, close growth lines with a
+ * gentle wander, short elongated pores (not endless streaks), and a slow
+ * colour drift between boards. Square, seamless, mipmapped, high anisotropy:
+ * one tile is ~2.4 desk units, so a line is a millimetre or two at true scale.
+ */
+export function makeWalnut(size = 1024, seed = 23): WoodMaps {
+  const rng = mulberry32(seed);
+  const wander = noise2D(rng, 2, 3);
+  const wander2 = noise2D(rng, 5, 7);
+  const board = noise2D(rng, 1, 4);
+  const pore = noise2D(rng, 48, 384);
+  const fleck = noise2D(rng, 160, 160);
+  const height = new Float32Array(size * size);
+  const tone = new Float32Array(size * size);
+  const LINES = 38;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = x / size;
+      const v = y / size;
+      const w = (wander(u * 2, v * 3) - 0.5) * 0.06 + (wander2(u * 5, v * 7) - 0.5) * 0.015;
+      const ph = (v + w) * LINES;
+      const f = ph - Math.floor(ph);
+      // Latewood: a narrow dark band at the end of each year, soft-edged.
+      const late = Math.pow(Math.max(0, 1 - Math.abs(f - 0.85) / 0.12), 1.6);
+      // Pores: short dashes along the grain, a few per line, darker and sunk.
+      const pz = pore(u * 48, (v + w) * 384);
+      const poreMask = Math.max(0, (pz - 0.72) / 0.28) * (0.4 + 0.6 * late);
+      const b = board(u, v * 4);
+      const i = y * size + x;
+      tone[i] = 0.55 + (b - 0.5) * 0.35 - late * 0.45 - poreMask * 0.3 + (fleck(u * 160, v * 160) - 0.5) * 0.04;
+      height[i] = 0.5 - late * 0.08 - poreMask * 0.5;
+    }
+  }
+  const dark: RGB = [34, 23, 16];
+  const base: RGB = [66, 45, 31];
+  const warm: RGB = [92, 64, 43];
+  const mk = () => {
+    const c = canvas(size, size);
+    const ctx = c.getContext('2d')!;
+    return { c, ctx, img: ctx.createImageData(size, size) };
+  };
+  const albedo = mk();
+  const rough = mk();
+  const normal = mk();
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = y * size + x;
+      const o = i * 4;
+      const k = Math.max(0, Math.min(1, tone[i]!));
+      const lo = k < 0.5 ? dark : base;
+      const hi = k < 0.5 ? base : warm;
+      const s = k < 0.5 ? k * 2 : (k - 0.5) * 2;
+      for (let c = 0; c < 3; c++) albedo.img.data[o + c] = lo[c]! + (hi[c]! - lo[c]!) * s;
+      albedo.img.data[o + 3] = 255;
+      const rv = Math.round(255 * (0.4 + (0.5 - height[i]!) * 0.6));
+      rough.img.data[o] = rough.img.data[o + 1] = rough.img.data[o + 2] = rv;
+      rough.img.data[o + 3] = 255;
+      const hl = height[y * size + ((x - 1 + size) % size)]!;
+      const hr = height[y * size + ((x + 1) % size)]!;
+      const hu = height[((y - 1 + size) % size) * size + x]!;
+      const hd = height[((y + 1) % size) * size + x]!;
+      let nx = (hl - hr) * 1.6;
+      let ny = (hu - hd) * 1.6;
+      const len = Math.hypot(nx, ny, 1);
+      nx /= len;
+      ny /= len;
+      normal.img.data[o] = (nx * 0.5 + 0.5) * 255;
+      normal.img.data[o + 1] = (ny * 0.5 + 0.5) * 255;
+      normal.img.data[o + 2] = (0.5 / len + 0.5) * 255;
+      normal.img.data[o + 3] = 255;
+    }
+  }
+  const out = [albedo, rough, normal].map(({ c, ctx, img }, n) => {
+    ctx.putImageData(img, 0, 0);
+    const tx = new THREE.CanvasTexture(c);
+    tx.wrapS = tx.wrapT = THREE.RepeatWrapping;
+    tx.generateMipmaps = true;
+    tx.minFilter = THREE.LinearMipmapLinearFilter;
+    tx.magFilter = THREE.LinearFilter;
+    tx.anisotropy = 16; // clamped to the GPU maximum by three
+    if (n === 0) tx.colorSpace = THREE.SRGBColorSpace;
+    return tx;
   });
+  return { map: out[0]!, roughnessMap: out[1]!, normalMap: out[2]! };
 }
 
 /**
- * Desk leather: fine pebbled grain over a slow mottle, dyed bottle green.
- * Creases are darker and rougher; the pebble tops are a little burnished.
+ * Desk leather: a fine, tight tooled grain — small irregular cells with soft
+ * creases between them — over a slow, barely-there mottle, dyed bottle green.
+ * Everything is low amplitude: the hide should read as smooth and dense from
+ * a metre away, with grain only where the light rakes across it.
  */
-export function makeLeather(size = 512, seed = 31): WoodMaps {
+export function makeLeather(size = 1024, seed = 31): WoodMaps {
   const rng = mulberry32(seed);
-  const mottle = noise2D(rng, 4, 4);
-  const pebble = noise2D(rng, 96, 96);
-  const pebble2 = noise2D(rng, 192, 192);
+  const mottle = noise2D(rng, 3, 3);
+  const mottle2 = noise2D(rng, 9, 9);
+  const warp = noise2D(rng, 24, 24);
+  const cell = noise2D(rng, 64, 64);
+  const cell2 = noise2D(rng, 112, 112);
+  const pore = noise2D(rng, 320, 320);
   const height = new Float32Array(size * size);
   const tone = new Float32Array(size * size);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const u = x / size;
       const v = y / size;
-      // Ridged pebbles: crease lines where the noise crosses its midpoint.
-      const p = 1 - Math.abs(pebble(u * 96, v * 96) * 2 - 1);
-      const p2 = 1 - Math.abs(pebble2(u * 192, v * 192) * 2 - 1);
-      const hv = 1 - Math.pow(p * 0.65 + p2 * 0.35, 3);
+      // A gentle warp keeps the cells from lining up on the lattice.
+      const wu = u + (warp(u * 24, v * 24) - 0.5) * 0.012;
+      const wv = v + (warp(u * 24 + 11, v * 24 + 5) - 0.5) * 0.012;
+      // Soft creases where the cell noise crosses its midpoint, rounded tops between.
+      const c = 1 - Math.abs(cell(wu * 64, wv * 64) * 2 - 1);
+      const c2 = 1 - Math.abs(cell2(wu * 112, wv * 112) * 2 - 1);
+      const crease = Math.pow(1 - (c * 0.6 + c2 * 0.4), 2.2);
+      const hv = 0.5 + (0.5 - crease) * 0.5 + (pore(u * 320, v * 320) - 0.5) * 0.08;
       const i = y * size + x;
       height[i] = hv;
-      tone[i] = 0.5 + (mottle(u * 4, v * 4) - 0.5) * 0.7 + (hv - 0.5) * 0.25;
+      const m = mottle(u * 3, v * 3) * 0.7 + mottle2(u * 9, v * 9) * 0.3;
+      tone[i] = 0.5 + (m - 0.5) * 0.45 + (hv - 0.5) * 0.12;
     }
   }
   const mk = () => {
@@ -241,10 +313,10 @@ export function makeLeather(size = 512, seed = 31): WoodMaps {
   const albedo = mk();
   const rough = mk();
   const normal = mk();
-  const dark: RGB = [18, 32, 26];
+  const dark: RGB = [20, 36, 29];
   const base: RGB = [30, 50, 41];
-  const warm: RGB = [44, 64, 50];
-  const strength = 2.2;
+  const warm: RGB = [40, 60, 47];
+  const strength = 2.4;
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const i = y * size + x;
@@ -258,8 +330,9 @@ export function makeLeather(size = 512, seed = 31): WoodMaps {
       albedo.img.data[o + 1] = c[1]!;
       albedo.img.data[o + 2] = c[2]!;
       albedo.img.data[o + 3] = 255;
+      // Burnished tops are a touch smoother than the creases.
       const hv = height[i]!;
-      const rv = Math.round(255 * (0.5 + (1 - hv) * 0.28));
+      const rv = Math.round(255 * (0.56 + (0.5 - hv) * 0.3));
       rough.img.data[o] = rough.img.data[o + 1] = rough.img.data[o + 2] = rv;
       rough.img.data[o + 3] = 255;
       const hl = height[y * size + ((x - 1 + size) % size)]!;
@@ -316,7 +389,7 @@ export function makeWindingNormal(size = 64): THREE.CanvasTexture {
 }
 
 export interface PearlMaps {
-  /** Albedo: pale nacre with faint growth bands and a hint of colour. */
+  /** Albedo: pale nacre with soft, cloudy drifts of colour. */
   map: THREE.CanvasTexture;
   /** Thin-film thickness (G channel): drives where the iridescent colours shift. */
   thickness: THREE.CanvasTexture;
@@ -325,15 +398,23 @@ export interface PearlMaps {
 }
 
 /**
- * Mother-of-pearl, cut from a shell: wavy, roughly concentric growth bands
- * with a fine fibrous shimmer across them. The bands modulate thin-film
- * thickness, so the iridescence breaks into flowing colour rather than a flat tint.
+ * Mother-of-pearl as it looks in a fretboard dot: soft, cloudy nacre. Low
+ * frequency noise, domain-warped twice so the colour pools and drifts in
+ * irregular clouds — no rings, no stripes, no regular bands anywhere. The
+ * cloud field drives thin-film thickness, so the iridescence flows across the
+ * dot and shifts with the viewing angle.
  */
 export function makePearl(size = 256, seed = 11): PearlMaps {
   const rng = mulberry32(seed);
-  const warp = noise1D(rng, 64);
-  const warp2 = noise1D(rng, 64);
-  const fibre = noise1D(rng, 256);
+  const n1 = noise2D(rng, 4, 4);
+  const n2 = noise2D(rng, 7, 7);
+  const n3 = noise2D(rng, 13, 13);
+  const qa = noise2D(rng, 5, 5);
+  const qb = noise2D(rng, 5, 5);
+  const ra = noise2D(rng, 9, 9);
+  const rb = noise2D(rng, 9, 9);
+  const tint = noise2D(rng, 3, 3);
+  const fbm = (x: number, y: number) => n1(x * 4, y * 4) * 0.55 + n2(x * 7, y * 7) * 0.3 + n3(x * 13, y * 13) * 0.15;
   const mk = () => {
     const c = canvas(size, size);
     return { c, ctx: c.getContext('2d')!, img: new ImageData(size, size) };
@@ -341,31 +422,30 @@ export function makePearl(size = 256, seed = 11): PearlMaps {
   const albedo = mk();
   const thick = mk();
   const rough = mk();
-  // Band centre sits off the disc so the bands sweep across it like a slice of shell.
-  const cx = size * -0.35;
-  const cy = size * 0.2;
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const dx = x - cx;
-      const dy = y - cy;
-      const r = Math.hypot(dx, dy) / size;
-      const a = Math.atan2(dy, dx);
-      const wobble = 0.05 * warp(a * 18 + 7) + 0.025 * warp2(r * 40);
-      const band = 0.5 + 0.5 * Math.sin((r + wobble) * 24);
-      const fine = 0.5 + 0.5 * Math.sin((r + wobble * 0.5) * 110 + fibre(a * 300) * 3);
-      const fib = fibre(a * 900 + r * 40);
-      const v = 0.7 * band + 0.18 * fine + 0.12 * fib;
+      const u = x / size;
+      const v = y / size;
+      // Two rounds of domain warping: clouds folded into clouds.
+      const qx = qa(u * 5, v * 5) - 0.5;
+      const qy = qb(u * 5, v * 5) - 0.5;
+      const rx = ra((u + qx * 0.5) * 9, (v + qy * 0.5) * 9) - 0.5;
+      const ry = rb((u + qx * 0.5) * 9, (v + qy * 0.5) * 9) - 0.5;
+      const c = fbm(u + qx * 0.35 + rx * 0.22, v + qy * 0.35 + ry * 0.22);
+      // Stretch the cloud field's contrast a little so the colour has somewhere to go.
+      const cloud = Math.min(1, Math.max(0, (c - 0.5) * 1.8 + 0.5));
+      const t = tint(u * 3, v * 3);
       const o = (y * size + x) * 4;
-      // Albedo: cream with whisper-faint pink / green drift across the bands.
-      const l = 206 + 46 * v;
-      albedo.img.data[o] = Math.min(255, l + 6 * Math.sin(band * 3.1));
-      albedo.img.data[o + 1] = Math.min(255, l - 3 + 5 * Math.sin(band * 3.1 + 2.1));
-      albedo.img.data[o + 2] = Math.min(255, l - 12 + 8 * Math.sin(band * 3.1 + 4.2));
+      // Albedo: milky cream; brighter clouds drift faintly pink, the hollows faintly green-blue.
+      const l = 214 + 34 * cloud;
+      albedo.img.data[o] = Math.min(255, l + 6 * (cloud - 0.5) + 4 * (t - 0.5));
+      albedo.img.data[o + 1] = Math.min(255, l - 2 - 3 * (cloud - 0.5));
+      albedo.img.data[o + 2] = Math.min(255, l - 6 - 6 * (cloud - 0.5) + 8 * (0.5 - t));
       albedo.img.data[o + 3] = 255;
-      const t = Math.round(255 * (0.15 + 0.85 * (0.85 * band + 0.15 * fine)));
-      thick.img.data[o] = thick.img.data[o + 1] = thick.img.data[o + 2] = t;
+      const th = Math.round(255 * (0.1 + 0.85 * (cloud * 0.8 + t * 0.2)));
+      thick.img.data[o] = thick.img.data[o + 1] = thick.img.data[o + 2] = th;
       thick.img.data[o + 3] = 255;
-      const rr = Math.round(255 * (0.12 + 0.16 * (1 - fine) + 0.06 * fib));
+      const rr = Math.round(255 * (0.1 + 0.12 * (1 - cloud)));
       rough.img.data[o] = rough.img.data[o + 1] = rough.img.data[o + 2] = rr;
       rough.img.data[o + 3] = 255;
     }
@@ -378,4 +458,67 @@ export function makePearl(size = 256, seed = 11): PearlMaps {
     return t;
   };
   return { map: tex(albedo, true), thickness: tex(thick, false), roughnessMap: tex(rough, false) };
+}
+
+export interface PaperMaps {
+  map: THREE.CanvasTexture;
+  bumpMap: THREE.CanvasTexture;
+}
+
+/** Clean cream paper: a barely-there mottle and a faint fibre tooth for the bump. */
+export function makePaper(size = 256, seed = 47): PaperMaps {
+  const rng = mulberry32(seed);
+  const cloud = noise2D(rng, 4, 4);
+  const fibre = noise2D(rng, 96, 96);
+  const grain = noise2D(rng, 160, 160);
+  const color = canvas(size, size);
+  const bump = canvas(size, size);
+  const cctx = color.getContext('2d')!;
+  const bctx = bump.getContext('2d')!;
+  const cimg = cctx.createImageData(size, size);
+  const bimg = bctx.createImageData(size, size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = x / size;
+      const v = y / size;
+      const m = cloud(u * 4, v * 4) - 0.5;
+      
+      const f = fibre(u * 96, v * 96) * 0.6 + grain(u * 160, v * 160) * 0.4;
+      const t = 1 + m * 0.02 + (f - 0.5) * 0.012;
+      const i = (y * size + x) * 4;
+      cimg.data[i] = Math.min(255, 238 * t);
+      cimg.data[i + 1] = Math.min(255, 230 * t);
+      cimg.data[i + 2] = Math.min(255, 213 * t);
+      cimg.data[i + 3] = 255;
+      const h = Math.round(255 * (0.5 + (f - 0.5) * 0.25));
+      bimg.data[i] = bimg.data[i + 1] = bimg.data[i + 2] = h;
+      bimg.data[i + 3] = 255;
+    }
+  }
+  cctx.putImageData(cimg, 0, 0);
+  bctx.putImageData(bimg, 0, 0);
+  const tex = (c: HTMLCanvasElement, srgb: boolean) => {
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = 4;
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  };
+  return { map: tex(color, true), bumpMap: tex(bump, false) };
+}
+
+/** A soft rounded-rectangle shadow, for a card lying on the desk (alpha only). */
+export function makeCardShadow(size = 256): THREE.CanvasTexture {
+  const c = canvas(size, size);
+  const ctx = c.getContext('2d')!;
+  // Draw the rectangle far off-canvas and let only its blurred shadow land in view.
+  const off = size * 4;
+  ctx.shadowColor = '#000';
+  ctx.shadowBlur = size * 0.12;
+  ctx.shadowOffsetX = off;
+  ctx.fillStyle = '#000';
+  const m = size * 0.24;
+  ctx.fillRect(m - off, m, size - 2 * m, size - 2 * m);
+  const t = new THREE.CanvasTexture(c);
+  return t;
 }

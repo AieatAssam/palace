@@ -5,6 +5,9 @@ export const STORAGE_KEY = 'palace.fretboard.v1';
 export interface Settings {
   leftHanded: boolean;
   sound: boolean;
+  haptics: boolean;
+  /** Calm the room: no idle drift or shimmer, near-instant fades (also honoured from the OS setting). */
+  reduceMotion: boolean;
 }
 
 export interface SavedState {
@@ -14,7 +17,7 @@ export interface SavedState {
   onboarded: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { leftHanded: false, sound: true };
+export const DEFAULT_SETTINGS: Settings = { leftHanded: false, sound: true, haptics: true, reduceMotion: false };
 
 export function emptyState(): SavedState {
   return { deck: {}, stage: 0, settings: { ...DEFAULT_SETTINGS }, onboarded: false };
@@ -59,6 +62,8 @@ export function parseState(raw: string | null): SavedState {
     settings: {
       leftHanded: typeof settings.leftHanded === 'boolean' ? settings.leftHanded : DEFAULT_SETTINGS.leftHanded,
       sound: typeof settings.sound === 'boolean' ? settings.sound : DEFAULT_SETTINGS.sound,
+      haptics: typeof settings.haptics === 'boolean' ? settings.haptics : DEFAULT_SETTINGS.haptics,
+      reduceMotion: typeof settings.reduceMotion === 'boolean' ? settings.reduceMotion : DEFAULT_SETTINGS.reduceMotion,
     },
     onboarded: d.onboarded === true,
   };

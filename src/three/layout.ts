@@ -148,15 +148,31 @@ export function cellRect(p: Position): [number, number, number, number] {
   return [x0, x1, z - half, z + half];
 }
 
-/** Local-space rectangle to frame for a region of frets. */
-export function regionBounds(maxFret: number): { x0: number; x1: number; z0: number; z1: number } {
+/**
+ * Local-space rectangle to frame for a region of frets. With `strings`, the
+ * band across the neck shrinks to those strings plus a string's width of
+ * context on a locked side (or the board's edge on an outer string), so a
+ * phone can spend its narrow width on the strings in play.
+ */
+export function regionBounds(
+  maxFret: number,
+  strings?: readonly number[],
+): { x0: number; x1: number; z0: number; z1: number } {
   const x1 = fretX(maxFret);
   const half = neckWidth(x1) / 2;
-  return { x0: -HEADSTOCK_GAP - 0.2, x1: x1 + 0.35, z0: -half, z1: half };
+  const bounds = { x0: -HEADSTOCK_GAP - 0.2, x1: x1 + 0.35, z0: -half, z1: half };
+  if (!strings?.length) return bounds;
+  const sp = stringSpacing(x1);
+  const lo = Math.min(...strings);
+  const hi = Math.max(...strings);
+  // Higher strings sit at -Z.
+  bounds.z0 = hi === STRING_COUNT - 1 ? -half - 0.12 : stringZ(hi, x1) - sp;
+  bounds.z1 = lo === 0 ? half + 0.12 : stringZ(lo, x1) + sp;
+  return bounds;
 }
 
 /** Extra reach for tap cells whose neighbour is off the board or locked. */
-export const EDGE_REACH = 0.5;
+export const EDGE_REACH = 0.9;
 /** How far beyond a cell boundary (fraction of string spacing) a tap is forgiven toward a target. */
 export const FORGIVE = 0.3;
 

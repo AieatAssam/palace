@@ -1,20 +1,79 @@
+/*
+ * One family: EB Garamond, self-hosted (src/assets/fonts, built by scripts/build-fonts.py).
+ * The sharp sign is not in EB Garamond; the same family name carries a Gentium Book Plus
+ * subset for U+266D-266F, so the fallback is explicit and never the system's.
+ */
+@font-face {
+  font-family: 'Palace Garamond';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/garamond-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Palace Garamond';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./assets/fonts/garamond-500.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Palace Garamond';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/garamond-400-italic.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Palace Garamond';
+  font-style: normal;
+  font-weight: 400 500;
+  font-display: swap;
+  /* Gentium's sharp sits a little large beside Garamond's capitals. */
+  size-adjust: 92%;
+  src: url('./assets/fonts/sharp.woff2') format('woff2');
+  unicode-range: U+266D-266F;
+}
+
 :root {
   --plaster: #ede6d9;
   --paper: #f5f0e6;
   --ink: #1c1916;
+  --ink-soft: #4a443c;
   --stone: #8a8478;
+  /* Stone lifted for small type over the dark room. */
+  --stone-lit: #b3ab9c;
   --rule: rgba(28, 25, 22, 0.14);
+  --rule-lit: rgba(237, 230, 217, 0.22);
   --rosewood: #3f261c;
   --rosewood-deep: #2a1812;
-  --nickel: #c8c2b4;
-  --bronze: #a89868;
   --brass: #b08d57;
   --correct: #2f6f5e;
   --miss: #a65d3f;
-  --display: 'Cormorant Garamond', 'Iowan Old Style', Georgia, serif;
-  --ui: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* Feedback colours legible as type over the dark desk. */
+  --correct-lit: #9cc8b5;
+  --miss-lit: #e0a183;
+  --serif: 'Palace Garamond', serif;
+  /* Type scale (px at the 1.2 step, rounded): labels in true small caps never go below 16. */
+  --fs-label: 16px;
+  --fs-body: 18px;
+  --fs-action: 21px;
+  --fs-key: 24px;
+  --fs-title: 34px;
+  --fs-question: clamp(32px, 3.8vw, 42px);
+  --fs-display: clamp(72px, 10vw, 140px);
+  --sc-track: 0.05em;
   --ease: cubic-bezier(0.215, 0.61, 0.355, 1);
-  color-scheme: light;
+  --fade: 240ms;
+  /* Ink over the room: a tight shadow, never a glow or a panel. */
+  --lift: 0 1px 2px rgba(10, 7, 5, 0.7);
+  --lift-deep: 0 1px 2px rgba(10, 7, 5, 0.8), 0 0 14px rgba(10, 7, 5, 0.55);
+  /* A very soft local shade behind a line of type: no edge, no panel. */
+  --scrim: radial-gradient(closest-side, rgba(12, 9, 7, 0.34), rgba(12, 9, 7, 0.18) 55%, rgba(12, 9, 7, 0));
+  color-scheme: dark;
 }
 
 * {
@@ -27,10 +86,14 @@ body,
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: var(--plaster);
-  color: var(--ink);
-  font-family: var(--ui);
-  font-size: 15px;
+  background: #1e1915;
+  color: var(--plaster);
+  font-family: var(--serif);
+  font-size: var(--fs-body);
+  font-weight: 400;
+  /* Old-style figures and ligatures throughout; lining/tabular only where numbers must align. */
+  font-variant-numeric: oldstyle-nums;
+  font-feature-settings: 'kern', 'liga', 'onum';
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
@@ -42,15 +105,15 @@ button {
   color: inherit;
   cursor: pointer;
   border: 0;
+  padding: 0;
   background: none;
   -webkit-user-select: none;
   user-select: none;
 }
 
-button:focus-visible,
-input:focus-visible + .track {
-  outline: 2px solid var(--brass);
-  outline-offset: 2px;
+button:focus-visible {
+  outline: 1px solid var(--brass);
+  outline-offset: 3px;
 }
 
 .app {
@@ -64,267 +127,95 @@ input:focus-visible + .track {
   touch-action: none;
 }
 
-/* ---------------------------------------------------------------- HUD */
-
-/*
- * HUD floats over the full-bleed scene. No cream letterbox bands.
- * Soft text shadow keeps ink readable on dark wood/leather.
- */
-.hud-top,
-.hud-bottom {
+/* A flat dim over the scene on the title. Sheets lie on the desk in 3D and need no dim. */
+.dim {
   position: absolute;
-  left: 0;
-  right: 0;
+  inset: 0;
   pointer-events: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  background: transparent;
+  background: #0a0705;
+  opacity: 0;
+  transition: opacity 280ms var(--ease);
 }
 
-.hud-top > *,
-.hud-bottom > * {
-  pointer-events: auto;
+[data-screen='attract'] .dim {
+  opacity: 0.18;
 }
 
-.hud-hidden {
-  visibility: hidden;
-}
 
-.hud-top {
-  top: 0;
-  padding: max(14px, env(safe-area-inset-top)) 18px 10px;
-  gap: 4px;
-}
-
-.bar {
-  width: 100%;
-  max-width: 1100px;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 12px;
-}
-
-.brand {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.wordmark {
-  font-family: var(--display);
-  font-weight: 500;
-  font-size: 24px;
-  letter-spacing: 0.03em;
-}
-
-.room {
-  margin-top: 3px;
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: var(--stone);
-}
-
-.icon {
-  justify-self: end;
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  color: var(--ink);
-  opacity: 0.7;
-  transition: opacity 200ms var(--ease);
-}
-
-.icon:hover {
-  opacity: 1;
-}
-
-/* Mode switch: two words, the active one underlined in brass. */
-.modes {
-  display: inline-flex;
-  gap: 22px;
-}
-
-.modes button {
+/* Shared text action: a word with a hairline that lights brass on hover. */
+.text-action {
   position: relative;
   min-height: 44px;
-  padding: 0 2px;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--stone);
-  transition: color 200ms var(--ease);
+  min-width: 44px;
+  padding: 0 4px;
+  font-size: var(--fs-action);
+  font-variant-caps: small-caps;
+  letter-spacing: var(--sc-track);
+  transition: color var(--fade) var(--ease);
 }
 
-.modes button::after {
+.text-action::after {
   content: '';
   position: absolute;
-  left: 0;
-  right: 0.2em;
-  bottom: 10px;
+  left: 2px;
+  right: 2px;
+  bottom: 9px;
   height: 1px;
-  background: var(--brass);
-  transform: scaleX(0);
-  transition: transform 250ms var(--ease);
-}
-
-.modes button:hover {
-  color: var(--ink);
-}
-
-.modes button.active {
-  color: var(--ink);
-}
-
-.modes button.active::after {
-  transform: scaleX(1);
-}
-
-.prompt {
-  text-align: center;
-  min-height: 58px;
-}
-
-/* The one serif line in the session: the question. */
-.prompt-title {
-  margin: 2px 0 0;
-  font-family: var(--display);
-  font-weight: 500;
-  font-size: clamp(26px, 3.4vw, 34px);
-  line-height: 1.1;
-  transition: color 250ms var(--ease);
-}
-
-.prompt-title em {
-  font-style: italic;
-}
-
-.prompt-title.correct {
-  color: var(--correct);
-}
-
-.prompt-title.miss {
-  color: var(--miss);
-}
-
-.prompt-sub {
-  margin: 4px 0 0;
-  font-size: 13px;
-  color: var(--stone);
-}
-
-.hud-bottom {
-  bottom: 0;
-  padding: 10px 14px max(14px, env(safe-area-inset-bottom));
-  gap: 10px;
-}
-
-/* Note pad: piano rhythm — naturals cream and tall, accidentals rosewood and short. */
-.pad {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(44px, 58px));
-  gap: 4px;
-  justify-content: center;
-  align-items: start;
-}
-
-.note {
-  min-height: 50px;
-  border-radius: 3px;
-  font-family: var(--ui);
-  font-size: 15px;
-  font-weight: 500;
-  background: var(--paper);
-  border: 1px solid rgba(28, 25, 22, 0.18);
-  color: var(--ink);
+  background: currentColor;
+  opacity: 0.35;
   transition:
-    background 200ms var(--ease),
-    color 200ms var(--ease),
-    border-color 200ms var(--ease),
-    transform 120ms var(--ease),
-    opacity 300ms var(--ease);
+    opacity var(--fade) var(--ease),
+    background var(--fade) var(--ease);
 }
 
-.note.sharp {
-  min-height: 44px;
-  background: var(--rosewood);
-  border-color: var(--rosewood-deep);
-  color: #e9dfcc;
+.text-action:hover::after,
+.text-action:focus-visible::after {
+  opacity: 1;
+  background: var(--brass);
 }
 
-.note:hover {
-  border-color: var(--brass);
+.text-action:active {
+  transform: scale(0.98);
 }
 
-.note:active {
-  transform: translateY(1px);
+.text-action.quiet {
+  color: var(--stone-lit);
 }
 
-.note.correct {
-  background: var(--correct);
-  border-color: var(--correct);
-  color: var(--paper);
+.text-action.quiet::after {
+  opacity: 0;
 }
 
-.note.miss {
-  animation: dull 600ms var(--ease);
-  border-color: var(--miss);
-  color: var(--miss);
+.text-action.quiet:hover {
+  color: inherit;
 }
 
-.note.sharp.miss {
-  color: #e8b9a4;
+/* Type over the room sits on a soft, edgeless shade that only exists behind the words. */
+.scrimmed {
+  position: relative;
+  isolation: isolate;
 }
 
-.note.reveal {
-  border-color: var(--correct);
-  color: var(--correct);
-  box-shadow: inset 0 0 0 1px var(--correct);
+.scrimmed::before {
+  content: '';
+  position: absolute;
+  inset: -14px -36px;
+  z-index: -1;
+  background: var(--scrim);
+  pointer-events: none;
 }
 
-.note.sharp.reveal {
-  color: #9fd4c2;
-}
-
-.note.dim {
-  opacity: 0.4;
-}
-
-@keyframes dull {
-  0% {
-    transform: translateY(0);
-  }
-  30% {
-    transform: translateY(2px);
-  }
-  100% {
-    transform: translateY(0);
-  }
-}
-
-.progress {
-  width: min(560px, 100%);
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 14px;
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--stone);
+.meta-label {
+  font-size: var(--fs-label);
+  font-variant-caps: small-caps;
+  letter-spacing: var(--sc-track);
+  color: var(--stone-lit);
 }
 
 .hairline {
+  display: block;
   height: 1px;
-  background: var(--rule);
+  background: var(--rule-lit);
 }
 
 .hairline span {
@@ -334,312 +225,536 @@ input:focus-visible + .track {
   transition: width 600ms var(--ease);
 }
 
-.streak {
-  font-variant-numeric: tabular-nums;
-}
-
-.skip {
-  min-height: 32px;
-  font-size: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-  color: var(--ink);
-}
-
-.skip:hover {
-  color: var(--brass);
-}
-
-.notice {
-  position: absolute;
-  left: 50%;
-  top: 34%;
-  transform: translateX(-50%);
-  padding: 14px 24px;
-  border-radius: 3px;
-  background: var(--paper);
-  border: 1px solid var(--rule);
-  font-size: 16px;
-  text-align: center;
-  animation: rise 400ms var(--ease);
-  cursor: pointer;
-}
-
-.notice-kicker {
-  display: block;
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--brass);
-  margin-bottom: 6px;
-}
-
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 8px);
-  }
-}
-
-/* -------------------------------------------------------------- Panels */
-
-.scrim {
-  position: fixed;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: rgba(28, 25, 22, 0.4);
-  animation: fade 250ms var(--ease);
-  z-index: 10;
-}
-
 @keyframes fade {
   from {
     opacity: 0;
   }
 }
 
-.panel {
-  width: min(380px, 100%);
-  padding: 24px 24px 20px;
-  border-radius: 3px;
-  background: var(--paper);
-  border: 1px solid var(--rule);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+@keyframes turn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
 }
 
-.panel h2 {
-  margin: 0 0 4px;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--stone);
-}
+/* ------------------------------------------------------------ Attract */
 
-.panel-actions {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.primary {
-  min-height: 46px;
-  padding: 0 26px;
-  border-radius: 2px;
-  background: var(--ink);
-  color: var(--paper);
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  transition: background 200ms var(--ease);
-}
-
-.primary:hover {
-  background: var(--rosewood);
-}
-
-.ghost {
-  min-height: 44px;
-  padding: 0 4px;
-  color: var(--stone);
-  font-size: 13px;
-  transition: color 200ms var(--ease);
-}
-
-.ghost:hover {
-  color: var(--ink);
-}
-
-.ghost.danger {
-  color: var(--miss);
-}
-
-.toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 52px;
-  cursor: pointer;
-  position: relative;
-  border-bottom: 1px solid var(--rule);
-}
-
-.toggle small {
-  display: block;
-  color: var(--stone);
-  font-size: 12px;
-}
-
-.toggle input {
+.attract {
   position: absolute;
-  opacity: 0;
-  width: 1px;
-  height: 1px;
-}
-
-.track {
-  width: 40px;
-  height: 22px;
-  border-radius: 2px;
-  background: rgba(138, 132, 120, 0.3);
-  position: relative;
-  transition: background 220ms var(--ease);
-  flex: none;
-}
-
-.thumb {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 16px;
-  height: 16px;
-  border-radius: 1px;
-  background: var(--paper);
-  transition: transform 220ms var(--ease);
-}
-
-.toggle input:checked + .track {
-  background: var(--correct);
-}
-
-.toggle input:checked + .track .thumb {
-  transform: translateX(18px);
-}
-
-/* Intro: a full-bleed plaster interstitial; the HUD is hidden beneath it. */
-.intro {
-  position: fixed;
   inset: 0;
-  z-index: 10;
   display: grid;
-  place-items: center;
-  padding: 24px;
-  background: var(--plaster);
-  animation: fade 300ms var(--ease);
+  /* Desktop: a left column over the dark desk; the neck sits to the right and below. */
+  align-items: start;
+  justify-items: start;
+  padding: max(24px, env(safe-area-inset-top)) clamp(28px, 7vw, 120px) max(18px, env(safe-area-inset-bottom));
+  padding-top: clamp(48px, 15vh, 160px);
+  pointer-events: none;
+  animation: fade 280ms var(--ease);
 }
 
-.intro-body {
-  width: min(360px, 100%);
+.attract-mirror {
+  justify-items: end;
+}
+
+.attract-mirror .attract-block {
+  text-align: right;
+  align-items: flex-end;
+}
+
+.attract-block {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  text-align: center;
+  align-items: flex-start;
+  max-width: 34ch;
+  text-shadow: var(--lift-deep);
+  pointer-events: auto;
 }
 
-.intro-body .panel-actions {
-  width: 100%;
-  margin-top: 12px;
-  align-items: center;
+.attract-kicker {
+  margin: 0 0 22px;
+  font-size: var(--fs-label);
+  font-variant-caps: small-caps;
+  letter-spacing: var(--sc-track);
+  color: var(--stone-lit);
 }
 
-.kicker {
-  margin: 0;
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
+.attract-kicker span {
+  margin-right: 0.8em;
   color: var(--brass);
 }
 
-.display {
-  margin: 0;
-  font-family: var(--display);
+.wordmark-large {
+  margin: 0 0 0 -0.04em;
   font-weight: 500;
-  font-size: 40px;
-  line-height: 1.05;
+  font-size: var(--fs-display);
+  line-height: 0.9;
+  letter-spacing: 0.005em;
 }
 
-.body {
-  margin: 0;
-  color: #4a443c;
-  line-height: 1.55;
+.attract-line {
+  margin: 16px 0 0;
+  font-style: italic;
+  font-size: clamp(22px, 2.2vw, 28px);
+  color: #d6cdbd;
 }
 
-.dots {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  margin: 4px 0;
-}
-
-.dots span {
-  width: 18px;
+.attract-rule {
+  display: block;
+  width: 40px;
   height: 1px;
-  background: var(--rule);
-  transition: background 200ms var(--ease);
-}
-
-.dots span.on {
+  margin: 40px 0 18px;
   background: var(--brass);
+  opacity: 0.75;
 }
 
-
-.hud-top .wordmark,
-.hud-top .prompt-title,
-.hud-top .modes button.active {
-  text-shadow: 0 1px 2px rgba(18, 12, 8, 0.55), 0 0 18px rgba(237, 230, 217, 0.35);
+.attract-action {
+  font-size: 26px;
 }
 
-.hud-top .room,
-.hud-top .prompt-sub,
-.hud-top .modes button,
-.hud-bottom .progress,
-.hud-bottom .progress-title,
-.hud-bottom .streak {
-  text-shadow: 0 1px 2px rgba(18, 12, 8, 0.65);
+/* A colophon at the foot of the page, not under the action. */
+.attract-foot {
+  position: absolute;
+  left: clamp(28px, 7vw, 120px);
+  bottom: max(22px, env(safe-area-inset-bottom));
+  margin: 0;
+  font-style: italic;
+  font-size: var(--fs-label);
+  color: var(--stone-lit);
+  text-shadow: var(--lift-deep);
+  pointer-events: none;
 }
 
-.hud-bottom .pad .note {
-  box-shadow: 0 6px 18px rgba(12, 8, 5, 0.35);
+.attract-mirror .attract-foot {
+  left: auto;
+  right: clamp(28px, 7vw, 120px);
+}
+
+/* --------------------------------------------------------------- Play */
+
+.hud-top,
+.hud-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: opacity var(--fade) var(--ease);
+}
+
+.hud-top > *,
+.hud-bottom > * {
+  pointer-events: auto;
+}
+
+.hud-hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.hud-top {
+  top: 0;
+  padding: max(10px, env(safe-area-inset-top)) clamp(16px, 4vw, 40px) 8px;
+  text-shadow: var(--lift);
+}
+
+.bar {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/*
+ * The drill switch is engraved, not tabbed: two words, each led by a roman numeral.
+ * The chosen one is lit, its numeral in brass, with a small brass lozenge set in front.
+ */
+.modes {
+  display: inline-flex;
+  gap: 22px;
+}
+
+.modes button {
+  position: relative;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 4px 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--fs-label);
+  font-variant-caps: small-caps;
+  letter-spacing: var(--sc-track);
+  color: var(--stone-lit);
+  text-shadow: 0 1px 0 rgba(10, 7, 5, 0.9), 0 -1px 0 rgba(237, 230, 217, 0.1);
+  transition: color var(--fade) var(--ease);
+}
+
+.modes .rn {
+  font-variant-caps: normal;
+  font-size: 16px;
+  letter-spacing: 0.04em;
+  color: var(--stone-lit);
+}
+
+.modes button::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  background: var(--brass);
+  transform: rotate(45deg) scale(0);
+  transition: transform var(--fade) var(--ease);
+}
+
+.modes button:hover,
+.modes button.active {
+  color: var(--plaster);
+}
+
+.modes button.active::before {
+  transform: rotate(45deg) scale(1);
+}
+
+.modes button.active .rn {
+  color: var(--brass);
+}
+
+/* Settings: the word itself, in small caps. */
+.settings-mark {
+  min-height: 44px;
+  min-width: 44px;
+  margin-right: -6px;
+  padding: 0 6px;
+  font-size: var(--fs-label);
+  font-variant-caps: small-caps;
+  letter-spacing: var(--sc-track);
+  color: #c4bcad;
+  text-shadow: 0 1px 0 rgba(10, 7, 5, 0.9), 0 -1px 0 rgba(237, 230, 217, 0.1);
+  transition: color var(--fade) var(--ease);
+}
+
+.settings-mark:hover {
+  color: var(--plaster);
+}
+
+.prompt {
+  text-align: center;
+  margin-top: 2px;
+  padding: 0 12px;
+}
+
+/* The one serif line during play: the question. */
+.prompt-title {
+  margin: 0;
+  font-weight: 500;
+  font-size: var(--fs-question);
+  line-height: 1.1;
+  transition: color var(--fade) var(--ease);
+}
+
+.prompt-title em {
+  font-style: italic;
+}
+
+.prompt-title.correct {
+  color: var(--correct-lit);
+}
+
+.prompt-title.miss {
+  color: var(--miss-lit);
+}
+
+.prompt-sub {
+  margin: 8px 0 0;
+  font-size: var(--fs-body);
+  color: #d3cab9;
+}
+
+.hud-bottom {
+  bottom: 0;
+  padding: 10px clamp(16px, 6vw, 72px) max(14px, env(safe-area-inset-bottom));
+  gap: 16px;
+}
+
+/* Answer pad: piano rhythm — ivory naturals, tall; ebony accidentals, short. No container. */
+.pad {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(42px, 54px));
+  gap: 5px;
+  justify-content: center;
+  align-items: start;
+}
+
+/*
+ * A key: slightly bevelled — a lit top edge, an inner shade along the front —
+ * and set on the desk with a soft drop shadow. `--ring` carries the state
+ * outline so it composes with the bevel.
+ */
+.note {
+  --ring: 0 0 0 0 transparent;
+  --face: linear-gradient(180deg, #f7f1e3 0%, #efe6d3 72%, #e6dbc4 100%);
+  --edge-hi: rgba(255, 252, 244, 0.95);
+  --edge-lo: rgba(120, 96, 62, 0.22);
+  position: relative;
+  min-height: 56px;
+  padding-top: 2px;
+  border-radius: 2px 2px 5px 5px;
+  font-size: var(--fs-key);
+  font-weight: 500;
+  line-height: 1;
+  color: #2a241e;
+  /* Ivory: faint lengthwise grain over a warm off-white face. */
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75 0.035' numOctaves='2' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.42 0 0 0 0 0.33 0 0 0 0 0.2 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E"),
+    var(--face);
+  box-shadow:
+    var(--ring),
+    inset 0 1px 0 var(--edge-hi),
+    inset 1px 0 0 rgba(255, 252, 244, 0.35),
+    inset 0 -4px 0 var(--edge-lo),
+    inset 0 -5px 6px -4px rgba(90, 70, 44, 0.25),
+    0 1px 1px rgba(8, 5, 3, 0.55),
+    0 4px 10px -2px rgba(8, 5, 3, 0.55);
+  transition:
+    color 200ms var(--ease),
+    box-shadow 200ms var(--ease),
+    transform 120ms var(--ease),
+    opacity 280ms var(--ease);
+}
+
+/* Ebony: near-black with a dull polish; the label is ivory. */
+.note.sharp {
+  --face: linear-gradient(180deg, #2b2622 0%, #181512 60%, #100d0b 100%);
+  --edge-hi: rgba(255, 244, 226, 0.16);
+  --edge-lo: rgba(0, 0, 0, 0.55);
+  min-height: 44px;
+  font-size: 22px;
+  color: #e6dccb;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75 0.035' numOctaves='2' seed='9' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 0.95 0 0 0 0 0.88 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E"),
+    var(--face);
+}
+
+.note:hover {
+  --ring: 0 0 0 1px rgba(176, 141, 87, 0.75);
+}
+
+.note:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+.note.correct {
+  --face: linear-gradient(180deg, #3a8270 0%, #2f6f5e 70%, #285e50 100%);
+  --edge-hi: rgba(220, 255, 240, 0.35);
+  --edge-lo: rgba(0, 0, 0, 0.25);
+  color: #f5f0e6;
+}
+
+.note.miss {
+  --ring: 0 0 0 1.5px var(--miss);
+  color: var(--miss);
+}
+
+.note.sharp.miss {
+  color: var(--miss-lit);
+}
+
+.note.reveal {
+  --ring: 0 0 0 1.5px var(--correct);
+  color: var(--correct);
+}
+
+.note.sharp.reveal {
+  --ring: 0 0 0 1.5px var(--correct-lit);
+  color: var(--correct-lit);
+}
+
+.note.dim {
+  opacity: 0.35;
+}
+
+/* Meta: one hairline, the room, the run, plain-word actions. */
+.meta {
+  width: min(640px, 100%);
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-auto-flow: column;
+  align-items: center;
+  gap: 16px;
+  font-size: var(--fs-label);
+  font-variant-caps: small-caps;
+  letter-spacing: var(--sc-track);
+  color: #c4bcad;
+  text-shadow: var(--lift);
+}
+
+.meta-stage {
+  white-space: nowrap;
+}
+
+.meta-run {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.numeral-run {
+  min-width: 1.2em;
+  font-size: 22px;
+  color: var(--plaster);
+  /* A counter that ticks: lining, tabular, so the hairline beside it never shifts. */
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: 'lnum', 'tnum';
+}
+
+.meta-action {
+  min-height: 44px;
+  min-width: 44px;
+  font-size: var(--fs-label);
+  font-variant-caps: small-caps;
+  letter-spacing: var(--sc-track);
+  color: var(--plaster);
+  transition: color var(--fade) var(--ease);
+}
+
+.meta-action:hover {
+  color: var(--brass);
 }
 
 /* -------------------------------------------------------- Phone layout */
 
 @media (max-width: 760px) {
-  .bar {
-    grid-template-columns: 1fr auto;
-    grid-template-areas:
-      'brand icon'
-      'modes modes';
-    row-gap: 2px;
-  }
-  .brand {
-    grid-area: brand;
-  }
-  .icon {
-    grid-area: icon;
-  }
-  .modes {
-    grid-area: modes;
-    justify-self: center;
-  }
-  .wordmark {
-    font-size: 22px;
+  .hud-top {
+    padding-bottom: 4px;
   }
   .prompt {
-    min-height: 52px;
+    margin-top: -4px;
   }
   .prompt-title {
-    font-size: 28px;
+    font-size: 30px;
+  }
+  .prompt-sub {
+    margin-top: 4px;
+    font-size: 17px;
+  }
+  /* On a phone the headstock runs up under the question: a deeper shade there. */
+  .prompt.scrimmed {
+    --scrim: radial-gradient(closest-side, rgba(12, 9, 7, 0.62), rgba(12, 9, 7, 0.4) 50%, rgba(12, 9, 7, 0));
+  }
+  .hud-bottom {
+    gap: 10px;
+    padding-left: 14px;
+    padding-right: 14px;
   }
   .pad {
     grid-template-columns: repeat(6, 1fr);
     width: 100%;
     max-width: 420px;
+    gap: 6px;
   }
   .note {
-    min-height: 48px;
+    min-height: 50px;
   }
   .note.sharp {
     min-height: 44px;
   }
+  /* Phone: the progress rule gets its own line under the words, so nothing crowds. */
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 18px;
+    row-gap: 0;
+  }
+  .meta .hairline {
+    order: 1;
+    flex: 1 0 100%;
+  }
+  .meta-stage {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+/* ------------------------------------------- Desk sheets (3D) and their controls */
+
+/*
+ * The sheet itself (leather, brass, ink) is drawn in the scene. This layer is its
+ * accessible twin: a dialog covering the screen, holding the same words as hidden text
+ * and real buttons that follow their 3D labels on screen.
+ */
+.sheet-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+}
+
+.sheet-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.sheet-control {
+  position: absolute;
+  min-width: 44px;
+  min-height: 44px;
+  /* The label is drawn in 3D underneath; the button's own words are for assistive tech. */
+  color: transparent;
+  font-size: 1px;
+  overflow: hidden;
+  /* Held invisible and inert until the scene has projected it onto its label. */
+  left: 50%;
+  top: 50%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sheet-control.placed {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sheet-control::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 9px;
+  height: 1px;
+  background: #8a6a37;
+  opacity: 0;
+  transition: opacity var(--fade) var(--ease);
+}
+
+.sheet-control:hover::after {
+  opacity: 1;
+}
+
+.sheet-control:focus-visible {
+  overflow: visible;
+  outline: 2px solid #8a6a37;
+  outline-offset: -3px;
+}
+
+/* Reduced motion: the OS preference or the player's setting. */
+.calm *,
+.calm *::before,
+.calm *::after {
+  animation-duration: 1ms !important;
+  transition-duration: 1ms !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

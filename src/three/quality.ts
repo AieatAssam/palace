@@ -17,3 +17,9 @@ function detectLite(): boolean {
 }
 
 export const LITE = detectLite();
+
+/** `?capture`: full path held at its starting tier (no frame-rate downgrade), for screenshots on slow renderers. */
+export const CAPTURE = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('capture');
+
+/** Coarse pointer (phones/tablets): the cue is lifted a touch for small screens and daylight. */
+export const COARSE = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { Vector3 } from 'three';
 import type { Position } from '../game/notes';
 
 /** Shared view state between the DOM overlay and the 3D scene. */
@@ -52,3 +53,24 @@ export function inspectHighlight() {
 
 /** Render statistics for tests: frames drawn, meshes and triangles in the scene. */
 export const renderInfo = { frames: 0, meshes: 0, triangles: 0 };
+
+/** World-space point the camera frames (centre of the unlocked board): depth-of-field focus. */
+export const focusPoint = new Vector3();
+
+/**
+ * Real buttons that sit over a desk sheet's 3D labels, by control id. The scene
+ * writes each one's projected rectangle every frame (see `three/Sheet.tsx`).
+ */
+export const sheetDom = new Map<string, HTMLElement>();
+
+/**
+ * Where the desk sheet lies and how it is framed (world space), written by the camera
+ * rig and read by the sheet so the two agree. `null` when no sheet is open.
+ */
+export interface SheetPose {
+  /** Card centre on the desk. */
+  x: number;
+  y: number;
+  z: number;
+}
+export const sheetPose: { current: SheetPose | null } = { current: null };

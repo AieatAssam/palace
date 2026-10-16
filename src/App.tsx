@@ -1,34 +1,34 @@
 import { useState } from 'react';
+import { useCalm } from './motion';
 import { usePalace } from './store';
 import { Scene } from './three/Scene';
+import { Attract } from './ui/Attract';
 import { Hud } from './ui/Hud';
-import { Onboarding } from './ui/Onboarding';
+import { Primer } from './ui/Primer';
+import { SessionSheet } from './ui/SessionSheet';
 import { Settings } from './ui/Settings';
 
+/** One desk, always lit; screens are ink laid over it. */
 export function App() {
-  const onboarded = usePalace((s) => s.saved.onboarded);
-  const completeOnboarding = usePalace((s) => s.completeOnboarding);
-  const [intro, setIntro] = useState(!onboarded);
+  const screen = usePalace((s) => s.screen);
+  const replayPrimer = usePalace((s) => s.replayPrimer);
+  const calm = useCalm();
   const [settings, setSettings] = useState(false);
 
   return (
-    <div className="app">
+    <div className={`app ${calm ? 'calm' : ''}`} data-screen={screen}>
       <Scene />
-      <Hud onSettings={() => setSettings(true)} hidden={intro} />
+      <div className="dim" aria-hidden />
+      <Hud onSettings={() => setSettings(true)} hidden={screen !== 'play' || settings} />
+      {screen === 'attract' && <Attract />}
+      {screen === 'primer' && <Primer />}
+      {screen === 'session' && <SessionSheet />}
       {settings && (
         <Settings
           onClose={() => setSettings(false)}
-          onReplayIntro={() => {
+          onReplayPrimer={() => {
             setSettings(false);
-            setIntro(true);
-          }}
-        />
-      )}
-      {intro && (
-        <Onboarding
-          onDone={() => {
-            completeOnboarding();
-            setIntro(false);
+            replayPrimer();
           }}
         />
       )}

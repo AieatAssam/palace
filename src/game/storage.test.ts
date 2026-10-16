@@ -23,7 +23,7 @@ describe('storage', () => {
     const state = {
       deck: { 'name:s0f0': newCard('name:s0f0', 1) },
       stage: 2,
-      settings: { leftHanded: true, sound: false },
+      settings: { leftHanded: true, sound: false, haptics: false, reduceMotion: true },
       onboarded: true,
     };
     saveState(state, store);
@@ -42,6 +42,8 @@ describe('storage', () => {
     expect(Object.keys(s.deck)).toEqual(['b']);
     expect(s.stage).toBe(0);
     expect(s.settings.leftHanded).toBe(false);
+    expect(s.settings.haptics).toBe(true);
+    expect(s.settings.reduceMotion).toBe(false);
     expect(s.onboarded).toBe(false);
   });
 
