@@ -384,3 +384,67 @@ export function makePearl(size = 256, seed = 11): PearlMaps {
   };
   return { map: tex(albedo, true), thickness: tex(thick, false), roughnessMap: tex(rough, false) };
 }
+
+export interface PaperMaps {
+  map: THREE.CanvasTexture;
+  bumpMap: THREE.CanvasTexture;
+}
+
+/** Cream laid paper: a faint warm mottle and a fine fibre tooth for the bump. */
+export function makePaper(size = 256, seed = 47): PaperMaps {
+  const rng = mulberry32(seed);
+  const cloud = noise2D(rng, 4, 4);
+  const fibre = noise2D(rng, 96, 96);
+  const grain = noise2D(rng, 160, 160);
+  const color = canvas(size, size);
+  const bump = canvas(size, size);
+  const cctx = color.getContext('2d')!;
+  const bctx = bump.getContext('2d')!;
+  const cimg = cctx.createImageData(size, size);
+  const bimg = bctx.createImageData(size, size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = x / size;
+      const v = y / size;
+      const m = cloud(u * 4, v * 4) - 0.5;
+      // Laid lines run across the sheet: a very slight ribbing.
+      const laid = Math.sin(v * Math.PI * 2 * 24) * 0.012;
+      const f = fibre(u * 96, v * 96) * 0.6 + grain(u * 160, v * 160) * 0.4;
+      const t = 1 + m * 0.05 + laid + (f - 0.5) * 0.035;
+      const i = (y * size + x) * 4;
+      cimg.data[i] = Math.min(255, 238 * t);
+      cimg.data[i + 1] = Math.min(255, 230 * t);
+      cimg.data[i + 2] = Math.min(255, 213 * t);
+      cimg.data[i + 3] = 255;
+      const h = Math.round(255 * (f * 0.8 + 0.1 + laid));
+      bimg.data[i] = bimg.data[i + 1] = bimg.data[i + 2] = h;
+      bimg.data[i + 3] = 255;
+    }
+  }
+  cctx.putImageData(cimg, 0, 0);
+  bctx.putImageData(bimg, 0, 0);
+  const tex = (c: HTMLCanvasElement, srgb: boolean) => {
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = 4;
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  };
+  return { map: tex(color, true), bumpMap: tex(bump, false) };
+}
+
+/** A soft rounded-rectangle shadow, for a card lying on the desk (alpha only). */
+export function makeCardShadow(size = 256): THREE.CanvasTexture {
+  const c = canvas(size, size);
+  const ctx = c.getContext('2d')!;
+  // Draw the rectangle far off-canvas and let only its blurred shadow land in view.
+  const off = size * 4;
+  ctx.shadowColor = '#000';
+  ctx.shadowBlur = size * 0.12;
+  ctx.shadowOffsetX = off;
+  ctx.fillStyle = '#000';
+  const m = size * 0.24;
+  ctx.fillRect(m - off, m, size - 2 * m, size - 2 * m);
+  const t = new THREE.CanvasTexture(c);
+  return t;
+}

@@ -6,14 +6,22 @@ import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 
 import * as THREE from 'three';
 import { isCalm } from '../motion';
 import { usePalace } from '../store';
-import { Desk, SHADOW_Y } from './Desk';
+import { useSheet } from '../ui/sheet';
+import { DESK_Y, Desk, SHADOW_Y } from './Desk';
 import { Fretboard } from './Fretboard';
 import { COLORS } from './palette';
 import { BOARD_THICKNESS, markerPoint, neckMatrix, neckToWorld, regionBounds } from './layout';
 import { LITE, CAPTURE } from './quality';
-import { focusPoint, renderInfo, setInspector, setProjector, useView } from './view';
+import { Sheet } from './Sheet';
+import { focusPoint, renderInfo, setInspector, setProjector, sheetPose, useView } from './view';
 
 const FOV = 30;
+
+/** Desk sheets: the camera looks almost straight down so the type stays square and legible. */
+const SHEET_ELEVATION = 78;
+/** Half-width of the leather mat (Desk.tsx) and the gap left before the card. */
+const SHEET_MAT_HALF = 2.3;
+const SHEET_GAP = 0.3;
 
 /**
  * Reading-room HDRI (Poly Haven, CC0) for honest reflections on the lacquer,
@@ -199,6 +207,36 @@ function NeckRig({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, portrait, attract, size.width, size.height, insets.top, insets.bottom, stageIdx]);
 
+  // A desk sheet is open: the camera leaves the neck and looks down on the card,
+  // which lies on the walnut beside the leather mat (below the player's edge of
+  // it in landscape, to the right of it on a phone), clear of the neck either way.
+  const sheet = useSheet((s) => s.geom);
+  const sheetKey = sheet ? `${sheet.width}x${sheet.height}` : '';
+  const sheetFrame = useMemo(() => {
+    if (!sheet) return null;
+    const half = SHEET_MAT_HALF + SHEET_GAP;
+    const pose = portrait
+      ? { x: half + sheet.width / 2, y: DESK_Y + 0.03, z: 3 }
+      : { x: 0, y: DESK_Y + 0.03, z: half + sheet.height / 2 };
+    const rim = 0.08;
+    const hw = sheet.width / 2 + rim;
+    const hh = sheet.height / 2 + rim;
+    const points = [-1, 1].flatMap((sx) =>
+      [-1, 1].flatMap((sy) => [
+        new THREE.Vector3(pose.x + sx * hw, pose.y + 0.1, pose.z + sy * hh),
+        new THREE.Vector3(pose.x + sx * hw, pose.y, pose.z + sy * hh),
+      ]),
+    );
+    const el = THREE.MathUtils.degToRad(SHEET_ELEVATION);
+    const dir = new THREE.Vector3(0, Math.sin(el), Math.cos(el));
+    const box: Box = portrait ? { x0: -0.95, x1: 0.95, y0: -0.93, y1: 0.93 } : { x0: -0.94, x1: 0.94, y0: -0.94, y1: 0.94 };
+    return { pose, framing: fitCamera(points, dir, size.width / Math.max(1, size.height), box) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheetKey, portrait, size.width, size.height]);
+  useLayoutEffect(() => {
+    sheetPose.current = sheetFrame?.pose ?? null;
+  }, [sheetFrame]);
+
   const lookNow = useRef(target.look.clone());
   const first = useRef(true);
   /** Attract idle drift: 1 on the title, eases to 0 when play starts (camera settles, no whip-pan). */
@@ -212,22 +250,23 @@ function NeckRig({ children }: { children: React.ReactNode }) {
     idle.current += (wantIdle - idle.current) * (1 - Math.exp(-dt * 1.4));
     if (idle.current < 1e-3 && !wantIdle) idle.current = 0;
     // A slow figure-of-eight over the desk, a few percent of the viewing distance.
-    const reach = target.pos.distanceTo(target.look) * 0.035 * idle.current;
+    const aim = sheetFrame?.framing ?? target;
+    const reach = aim.pos.distanceTo(aim.look) * 0.035 * idle.current;
     const t = state.clock.elapsedTime;
     drift.set(Math.sin(t * 0.16) * reach, 0, Math.sin(t * 0.11) * Math.cos(t * 0.16) * reach * 0.6);
-    goal.copy(target.pos).add(drift);
+    goal.copy(aim.pos).add(drift);
     if (first.current) {
       camera.position.copy(goal);
-      lookNow.current.copy(target.look);
+      lookNow.current.copy(aim.look);
       first.current = false;
     } else {
       const k = 1 - Math.exp(-dt * 3.2); // ~1.2 s dolly
       camera.position.lerp(goal, k);
-      lookNow.current.lerp(target.look, k);
+      lookNow.current.lerp(aim.look, k);
     }
     camera.up.set(0, 1, 0);
     camera.lookAt(lookNow.current);
-    focusPoint.copy(target.focus);
+    focusPoint.copy(aim.focus);
   });
 
   // Register a projector (and scene stats) for the e2e test hooks.
@@ -441,6 +480,7 @@ export function Scene() {
         />
       )}
       <Studio mirrored={leftHanded} />
+      <Sheet />
       <NeckRig>
         <Desk />
         <Fretboard />

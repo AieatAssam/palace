@@ -91,7 +91,7 @@ Kill anything that can't deliver a satisfying 30-second round on a phone held in
 | Fog / secondary | `#8A8478` | Muted stone |
 | Glass tint | `#E8EEF2` @ 40% | Frosted panels |
 
-**Type.** One family: a refined grotesque (e.g. *Inter* or *Söhne*-like) for UI; a single display serif (*Fraunces* or *Newsreader*) for room titles only. Two sizes in-session. No all-caps stamps, no comic outlines.
+**Type.** One family: a refined grotesque (e.g. *Inter* or *Söhne*-like) for UI; a single display serif (*Fraunces* or *Newsreader*) for room titles only. Two sizes in-session. No all-caps stamps, no comic outlines. *(Superseded: one family, EB Garamond — see `docs/ux/redesign.md`.)*
 
 **Motion & juice.** 200–300 ms easing (ease-out-cubic). Correct: soft brass chime + 10 ms haptic + chip spark. Miss: dry wood knock, no screen shake. Hub transitions: camera dollies into the room door (1.2 s), never a hard cut. Daily complete: one held chord from the sampled guitar, shelf chip lights up.
 

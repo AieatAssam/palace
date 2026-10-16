@@ -19,7 +19,7 @@ export function App() {
     <div className={`app ${calm ? 'calm' : ''}`} data-screen={screen}>
       <Scene />
       <div className="dim" aria-hidden />
-      <Hud onSettings={() => setSettings(true)} hidden={screen !== 'play'} />
+      <Hud onSettings={() => setSettings(true)} hidden={screen !== 'play' || settings} />
       {screen === 'attract' && <Attract />}
       {screen === 'primer' && <Primer />}
       {screen === 'session' && <SessionSheet />}

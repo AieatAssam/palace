@@ -10,7 +10,7 @@ Gentium Book Plus (SIL, OFL) for the sharp sign, which EB Garamond does not draw
 Outputs
   garamond-{400,500}.woff2, garamond-400-italic.woff2  web faces; keep smcp/c2sc/onum/lnum/tnum/liga/kern
   sharp.woff2                                         U+266D-266F from Gentium Book Plus (same @font-face family, unicode-range)
-  ledger-roman.ttf / ledger-smcp.ttf / ledger-italic.ttf
+  ledger-roman.ttf / ledger-smcp.ttf / ledger-italic.ttf / ledger-figures.ttf (digits only, lining tabular)
       for troika (3D text): no OpenType feature switches there, so the features are baked
       into the cmap — old-style figures everywhere, and in ledger-smcp lowercase draws true small caps.
 """
@@ -92,6 +92,10 @@ s = instance(ROMAN, 500)
 bake(s, ['onum'], only=lambda c: 0x30 <= c <= 0x39)
 bake(s, ['smcp'], only=lambda c: 0x61 <= c <= 0x7A or 0xDF <= c <= 0xFF)
 do_subset(s, UNICODES, ['kern'], None, f'{out}/ledger-smcp.ttf')
+# Figures for columns that must align: lining and tabular.
+n = instance(ROMAN, 500)
+bake(n, ['tnum'], only=lambda c: 0x30 <= c <= 0x39)
+do_subset(n, list(range(0x30, 0x3A)) + [0x20, 0x25, 0x2E, 0x2C, 0x2013, 0x2014, 0x2F], ['kern'], None, f'{out}/ledger-figures.ttf')
 i = instance(ITALIC, 500)
 bake(i, ['onum'], only=lambda c: 0x30 <= c <= 0x39)
 do_subset(i, UNICODES, ['kern', 'liga'], None, f'{out}/ledger-italic.ttf')

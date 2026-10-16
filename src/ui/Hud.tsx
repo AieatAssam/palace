@@ -42,10 +42,10 @@ function DrillSwitch() {
     <div className="modes scrimmed" role="tablist" aria-label="Drill">
       {(
         [
-          ['name', 'Name'],
-          ['find', 'Find'],
+          ['name', 'Name', 'I'],
+          ['find', 'Find', 'II'],
         ] as const
-      ).map(([kind, label]) => (
+      ).map(([kind, label, numeral]) => (
         <button
           key={kind}
           role="tab"
@@ -54,6 +54,9 @@ function DrillSwitch() {
           onClick={() => setDrill(kind)}
           data-testid={`drill-${kind}`}
         >
+          <span className="rn" aria-hidden>
+            {numeral}
+          </span>
           {label}
         </button>
       ))}
@@ -166,9 +169,8 @@ export function Hud({ onSettings, hidden = false }: { onSettings: () => void; hi
       <header ref={top} className={`hud-top ${hidden ? 'hud-hidden' : ''}`} id="hud-top" inert={hidden}>
         <div className="bar">
           <DrillSwitch />
-          <button className="settings-mark" aria-label="Settings" data-testid="settings-open" onClick={onSettings}>
-            <span />
-            <span />
+          <button className="settings-mark scrimmed" data-testid="settings-open" onClick={onSettings}>
+            Settings
           </button>
         </div>
         <Prompt />
