@@ -159,6 +159,41 @@ function makeCue(): StringCue {
   return { uCue: { value: new THREE.Vector3(0, 0, 0) }, uCueColor: { value: new THREE.Color() }, uCueT: { value: 0 } };
 }
 
+
+/**
+ * World size of one device pixel per metre of view distance. Strings read it to keep a
+ * floor on their on-screen width; `GuitarString` refreshes it each frame.
+ */
+const PIXEL = { value: 0.001 };
+/** Half of the minimum drawn width in device pixels (the line is never thinner than ~1.2 px). */
+const MIN_HALF_PX = 0.6;
+
+/**
+ * Thin-line handling for a cylinder along Y: where the tube's radius is under
+ * MIN_HALF_PX of screen, it swells to that floor and its alpha falls with the
+ * shortfall, so the line keeps a steady weight and stops crawling between pixel rows.
+ */
+function injectThinLine(shader: THREE.WebGLProgramParametersWithUniforms) {
+  shader.uniforms.uPixel = PIXEL;
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', '#include <common>\nuniform float uPixel; varying float vCover;')
+    .replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+{
+  float depth = max(-(modelViewMatrix * vec4(transformed, 1.0)).z, 0.1);
+  float floorR = ${MIN_HALF_PX.toFixed(2)} * depth * uPixel;
+  vec2 radial = transformed.xz;
+  float r = length(radial);
+  if (r > 1e-5 && floorR > r) transformed.xz = radial / r * floorR;
+  vCover = clamp(r / max(floorR, 1e-6), 0.55, 1.0);
+}`,
+    );
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nvarying float vCover;')
+    .replace('#include <opaque_fragment>', 'diffuseColor.a *= vCover;\n#include <opaque_fragment>');
+}
+
 /** Adds the lock dimming and the cue lift to a string material's shader. */
 function injectCue(shader: THREE.WebGLProgramParametersWithUniforms, cue: StringCue, lock: LockUniforms) {
   injectLock(shader, lock);
@@ -270,8 +305,11 @@ function useMaterials() {
     // Behind the nut each string gets its own material, so the open-string cue can light it.
     const behindNut = cues.map((cue, s) => {
       const w = WOUND[s] ? WIRE.wound : WIRE.plain;
-      const mat = new THREE.MeshStandardMaterial({ color: w.color, metalness: 1, roughness: w.roughness });
-      mat.onBeforeCompile = (shader) => injectCue(shader, cue, lock);
+      const mat = new THREE.MeshStandardMaterial({ color: w.color, metalness: 1, roughness: w.roughness, transparent: true });
+      mat.onBeforeCompile = (shader) => {
+        injectCue(shader, cue, lock);
+        injectThinLine(shader);
+      };
       return mat;
     });
     return { board, neck, headstock, post, nickel, nut, pearl, inlaySeat, winding, cues, behindNut, lock };
@@ -514,6 +552,7 @@ function makeStringMaterial(string: number, m: Materials, len: number) {
     normalScale: new THREE.Vector2(1, 1),
     emissive: new THREE.Color('#fff1d2'),
     emissiveIntensity: 0,
+    transparent: true,
   });
   const uniforms: StringUniforms = {
     uAmp: { value: 0 },
@@ -524,6 +563,7 @@ function makeStringMaterial(string: number, m: Materials, len: number) {
   };
   mat.onBeforeCompile = (shader) => {
     injectCue(shader, m.cues[string]!, m.lock);
+    injectThinLine(shader);
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
       .replace(
@@ -582,7 +622,9 @@ function GuitarString({ string, m, thick }: { string: number; m: Materials; thic
     [string, uniforms],
   );
 
-  useFrame(() => {
+  useFrame(({ gl, camera }) => {
+    const fov = (camera as THREE.PerspectiveCamera).fov;
+    PIXEL.value = (2 * Math.tan(THREE.MathUtils.degToRad(fov) / 2)) / Math.max(1, gl.domElement.height);
     const t = (performance.now() - excite.current.at) / 1000;
     const env = Math.exp(-t * excite.current.decay);
     uniforms.uAmp.value = env > 0.01 ? excite.current.amp * env : 0;

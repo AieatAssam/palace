@@ -167,7 +167,7 @@ function makeWood(w: number, h: number, seed: number, spec: WoodSpec): WoodMaps 
   const normalMap = new THREE.CanvasTexture(normal);
   for (const t of [map, roughnessMap, normalMap]) {
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.anisotropy = 8;
+    t.anisotropy = 16;
   }
   return { map, roughnessMap, normalMap };
 }
@@ -357,7 +357,7 @@ export function makeLeather(size = 1024, seed = 31): WoodMaps {
     const t = new THREE.CanvasTexture(m.c);
     if (srgb) t.colorSpace = THREE.SRGBColorSpace;
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.anisotropy = 8;
+    t.anisotropy = 16;
     return t;
   };
   return { map: tex(albedo, true), roughnessMap: tex(rough, false), normalMap: tex(normal, false) };
@@ -385,6 +385,7 @@ export function makeWindingNormal(size = 64): THREE.CanvasTexture {
   ctx.putImageData(img, 0, 0);
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 16;
   return t;
 }
 
@@ -454,7 +455,7 @@ export function makePearl(size = 256, seed = 11): PearlMaps {
     m.ctx.putImageData(m.img, 0, 0);
     const t = new THREE.CanvasTexture(m.c);
     if (srgb) t.colorSpace = THREE.SRGBColorSpace;
-    t.anisotropy = 4;
+    t.anisotropy = 16;
     return t;
   };
   return { map: tex(albedo, true), thickness: tex(thick, false), roughnessMap: tex(rough, false) };
@@ -500,7 +501,7 @@ export function makePaper(size = 256, seed = 47): PaperMaps {
   const tex = (c: HTMLCanvasElement, srgb: boolean) => {
     const t = new THREE.CanvasTexture(c);
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.anisotropy = 4;
+    t.anisotropy = 16;
     if (srgb) t.colorSpace = THREE.SRGBColorSpace;
     return t;
   };
