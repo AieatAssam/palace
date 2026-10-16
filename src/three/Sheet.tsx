@@ -24,9 +24,9 @@ import { sheetDom, sheetPose, sheetUi } from './view';
  */
 const FONTS: Record<SheetFont, string> = { roman: romanFont, smcp: smcpFont, italic: italicFont, figures: figuresFont, script: scriptFont };
 /** On cream paper: all four clear 4.5:1. */
-const INK: Record<SheetInk, string> = { ink: '#1c1916', soft: '#4a443c', quiet: '#5f594f', danger: '#8a4527', gilt: '#7a5c2b', iron: '#121828' };
-/** Iron-gall ink never dries to one tone: each glyph of a script word takes one of these (all above 10:1 on the page). */
-const IRON_TONES = ['#0d1220', '#121828', '#171f36', '#0f1526', '#1b2440', '#141b2e'];
+const INK: Record<SheetInk, string> = { ink: '#1c1916', soft: '#4a443c', quiet: '#5a544a', danger: '#843f22', gilt: '#70542a', iron: '#2f2117' };
+/** Iron-gall ink dries a warm brown-black and never to one tone: each glyph takes one of these (7:1 or better on the page at 0.88 opacity). */
+const IRON_TONES = ['#2a1d14', '#2f2117', '#33241a', '#2c1f15', '#3d2a1c', '#36261a'];
 const OXBLOOD = '#5b1017';
 const BRASS = '#b08d57';
 const GILT = '#8a6a37';
@@ -38,6 +38,8 @@ const LEATHER_T = 0.06;
 const PAGE_INSET = 0.17;
 const PAPER_Z = LEATHER_T + 0.006;
 const TEXT_Z = PAPER_Z + 0.006;
+/** Wax seal radius, card units. */
+const SEAL_R = 0.34;
 const SLIDE_IN = 0.8; // seconds
 const SLIDE_OUT = 0.35;
 /** Where the card starts: lifted, towards the player. */
@@ -64,7 +66,7 @@ function useCardMaterials() {
       return {
         leather: new THREE.MeshStandardMaterial({ color: '#4a2218', roughness: 0.7 }),
         brass: new THREE.MeshStandardMaterial({ color: BRASS, roughness: 0.4, metalness: 0.6 }),
-        paper: new THREE.MeshStandardMaterial({ color: '#f4ecda', roughness: 0.9, emissive: '#3e372b' }),
+        paper: new THREE.MeshStandardMaterial({ color: '#e9dcc0', roughness: 0.86, emissive: '#2e281e' }),
         deckle: new THREE.MeshStandardMaterial({ color: '#c9a45a', roughness: 0.5, metalness: 0.4 }),
         wax: new THREE.MeshStandardMaterial({ color: OXBLOOD, roughness: 0.5 }),
         emboss: new THREE.MeshStandardMaterial({ color: '#b48f45', roughness: 0.45, metalness: 0.5 }),
@@ -75,6 +77,7 @@ function useCardMaterials() {
     const hide = makeLeather(1024, 77);
     for (const t of [hide.roughnessMap, hide.normalMap]) t.repeat.set(3, 4.5);
     const sheet = makePaper();
+    for (const t of [sheet.normalMap, sheet.roughnessMap]) t.repeat.set(3, 4.5);
     return {
       leather: new THREE.MeshPhysicalMaterial({
         color: '#4a2218',
@@ -98,15 +101,15 @@ function useCardMaterials() {
         clearcoatRoughness: 0.06,
         envMapIntensity: 1.1,
       }),
-      // Laid cotton paper: faint ribs and fibre in the relief.
+      // Laid cotton paper: warm cream, edges toned, ribs and fibre in the relief to catch the light.
       paper: new THREE.MeshStandardMaterial({
         map: sheet.map,
-        color: '#fffaf0',
-        bumpMap: sheet.bumpMap,
-        bumpScale: 0.09,
-        roughness: 0.94,
-        emissive: '#4a4234',
-        envMapIntensity: 0.3,
+        normalMap: sheet.normalMap,
+        normalScale: new THREE.Vector2(0.32, 0.32),
+        roughnessMap: sheet.roughnessMap,
+        roughness: 1,
+        emissive: '#2a2419',
+        envMapIntensity: 0.35,
       }),
       // Gilt page edges: burnished gold leaf along the deckle.
       deckle: new THREE.MeshPhysicalMaterial({ color: '#d2ab5c', metalness: 1, roughness: 0.3, clearcoat: 0.4, clearcoatRoughness: 0.2, envMapIntensity: 1 }),
@@ -129,7 +132,7 @@ const rings = { outer: new THREE.RingGeometry(0.255, 0.265, 48), inner: new THRE
 const capsule = new THREE.MeshBasicMaterial({ color: RULE, map: makeCapsule(), transparent: true, depthWrite: false, opacity: 0 });
 const impression = new THREE.MeshBasicMaterial({ color: '#2e2414', map: makeImpression(), transparent: true, depthWrite: false, opacity: 0 });
 
-/** A page whose edge wanders a fraction of a millimetre, like a mould-made sheet. UVs are 0–1 across the page. */
+/** A page whose edge wanders a fraction of a millimetre, like a mould-made sheet. UVs are 0–1 across the page (maps tile by their own repeat). */
 function deckledPage(w: number, h: number, amp: number, seed: number) {
   let a = seed;
   const rnd = () => {
@@ -153,7 +156,7 @@ function deckledPage(w: number, h: number, amp: number, seed: number) {
   const g = new THREE.ShapeGeometry(new THREE.Shape(pts));
   const uv = g.attributes.uv as THREE.BufferAttribute;
   const pos = g.attributes.position as THREE.BufferAttribute;
-  for (let i = 0; i < uv.count; i++) uv.setXY(i, (pos.getX(i) / w + 0.5) * 3, (pos.getY(i) / h + 0.5) * 4.5);
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, pos.getX(i) / w + 0.5, pos.getY(i) / h + 0.5);
   return g;
 }
 
@@ -262,8 +265,8 @@ function inkTones(text: string) {
 }
 
 /**
- * Copperplate accent: a fountain-pen hand in iron-gall blue-black. Each glyph takes a slightly different
- * tone (the nib's flow varies) and a soft darker halo bleeds into the fibres of the paper.
+ * Copperplate accent: a fine pen hand in warm iron-gall. Each glyph takes a slightly different
+ * tone (the nib's flow varies); the ink sits a touch translucent with only a whisper of bleed, so the hairlines stay thin.
  */
 function Script({ item, onBounds }: { item: SheetText; onBounds(item: SheetItem, b: Bounds): void }) {
   const align = item.align ?? 'left';
@@ -280,8 +283,8 @@ function Script({ item, onBounds }: { item: SheetText; onBounds(item: SheetItem,
       textAlign={align}
       sdfGlyphSize={LITE ? 32 : 128}
       {...(colorRanges ? { colorRanges } : {})}
-      fillOpacity={LITE ? 1 : 0.96}
-      {...(LITE ? {} : { outlineColor: '#1a2132', outlineOpacity: 0.85, outlineBlur: '4%', outlineWidth: '2.5%' })}
+      fillOpacity={LITE ? 1 : 0.88}
+      {...(LITE ? {} : { outlineColor: '#3a2818', outlineOpacity: 0.18, outlineBlur: '3%', outlineWidth: 0 })}
       onSync={(t: { textRenderInfo?: { blockBounds: Bounds } }) => t.textRenderInfo && onBounds(item, t.textRenderInfo.blockBounds)}
     >
       {item.text}
@@ -349,7 +352,7 @@ export function Sheet() {
     const frame = [ridge(W - 2 * PAGE_INSET + 0.1, H - 2 * PAGE_INSET + 0.1, 0.03, 0.026, 0.012), ridge(W - 2 * PAGE_INSET + 0.2, H - 2 * PAGE_INSET + 0.2, 0.05, 0.01, 0.007)];
     const page = deckledPage(W - 2 * PAGE_INSET, H - 2 * PAGE_INSET, 0.007, 91);
     const edge = deckledPage(W - 2 * PAGE_INSET + 0.03, H - 2 * PAGE_INSET + 0.03, 0.011, 17);
-    return { leather, brass, frame, page, edge, seal: waxSeal(0.3, 5) };
+    return { leather, brass, frame, page, edge, seal: waxSeal(SEAL_R, 5) };
   }, [W, H]);
 
   useFrame((_, dt) => {
@@ -465,7 +468,7 @@ export function Sheet() {
           <group position={[last.seal.x, last.seal.y, PAPER_Z + 0.002]} rotation={[0, 0, 0.35]}>
             <mesh geometry={geometries.seal.outer} material={m.wax} />
             <mesh geometry={geometries.seal.ring} material={m.wax} position={[0, 0, 0.03]} />
-            <Text font={scriptFont} fontSize={0.34} color="#3c0a0f" position={[0, -0.12, 0.034]} rotation={[0, 0, -0.35]} anchorX="center" anchorY="bottom-baseline" sdfGlyphSize={LITE ? 32 : 64} fillOpacity={0.9}>
+            <Text font={scriptFont} fontSize={SEAL_R * 1.12} color="#3c0a0f" position={[0, -SEAL_R * 0.38, 0.034]} rotation={[0, 0, -0.35]} anchorX="center" anchorY="bottom-baseline" sdfGlyphSize={LITE ? 32 : 64} fillOpacity={0.9}>
               P
             </Text>
           </group>

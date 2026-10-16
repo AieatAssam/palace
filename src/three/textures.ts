@@ -376,7 +376,7 @@ export function makeWindingNormal(size = 64): THREE.CanvasTexture {
     for (let x = 0; x < size; x++) {
       // Ridges run around the string (U), repeating along its length (V),
       // with a slight helix: phase depends mostly on v, a little on u.
-      const phase = ((y + x * 0.125) / size) * Math.PI * 2 * 8;
+      const phase = ((y + x * 0.125) / size) * Math.PI * 2 * WINDING_PERIODS;
       const ny = Math.cos(phase) * 0.75;
       const nz = Math.sqrt(1 - ny * ny);
       const o = (y * size + x) * 4;
@@ -389,9 +389,16 @@ export function makeWindingNormal(size = 64): THREE.CanvasTexture {
   ctx.putImageData(img, 0, 0);
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  // Mipmapped and trilinear, so distant windings average to a smooth wire instead of aliasing.
+  t.generateMipmaps = true;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.magFilter = THREE.LinearFilter;
   t.anisotropy = ANISOTROPY;
   return t;
 }
+
+/** Winding ridges per tile of `makeWindingNormal` (along V). */
+export const WINDING_PERIODS = 8;
 
 export interface PearlMaps {
   /** Albedo: pale nacre with soft, cloudy drifts of colour. */
@@ -466,54 +473,105 @@ export function makePearl(size = 256, seed = 11): PearlMaps {
 }
 
 export interface PaperMaps {
+  /** Albedo across the whole page (UV 0–1): warm cream, slow tonal drift, edges toned darker. */
   map: THREE.CanvasTexture;
-  bumpMap: THREE.CanvasTexture;
+  /** Tileable relief: laid lines, chain lines and cotton fibre. */
+  normalMap: THREE.CanvasTexture;
+  /** Tileable roughness (G): 0.80–0.88, a touch glossier along the laid ribs. */
+  roughnessMap: THREE.CanvasTexture;
 }
 
-/** Clean cream paper: a barely-there mottle and a faint fibre tooth for the bump. */
+/** Paper albedo: #e9dcc0, a warm laid cream. */
+const PAPER: RGB = [233, 220, 192];
+
+/**
+ * Laid cotton paper. The albedo spans the page once, so it carries what a real sheet varies
+ * slowly: a soft cloud of tone and the edges aged a shade darker. The relief tiles: close laid
+ * ribs, wider chain lines and a fibre tooth, as a normal map so they catch a raking light.
+ */
 export function makePaper(size = 512, seed = 47): PaperMaps {
   const rng = mulberry32(seed);
-  const cloud = noise2D(rng, 4, 4);
+  const cloud = noise2D(rng, 4, 6);
+  const drift = noise2D(rng, 9, 13);
+  const speck = noise2D(rng, 160, 240);
   const fibre = noise2D(rng, 96, 96);
   const grain = noise2D(rng, 160, 160);
-  const color = canvas(size, size);
-  const bump = canvas(size, size);
+  const strand = noise2D(rng, 96, 24);
+
+  // Albedo: one image for the page, taller than wide like the sheet.
+  const cw = size;
+  const ch = Math.round(size * 1.5);
+  const color = canvas(cw, ch);
   const cctx = color.getContext('2d')!;
-  const bctx = bump.getContext('2d')!;
-  const cimg = cctx.createImageData(size, size);
-  const bimg = bctx.createImageData(size, size);
+  const cimg = cctx.createImageData(cw, ch);
+  for (let y = 0; y < ch; y++) {
+    for (let x = 0; x < cw; x++) {
+      const u = x / cw;
+      const v = y / ch;
+      const m = (cloud(u * 4, v * 6) - 0.5) * 0.045 + (drift(u * 9, v * 13) - 0.5) * 0.02;
+      // Edge toning: distance to the nearest edge, eased so only the outer tenth darkens.
+      const e = Math.min(u, 1 - u, (v * ch) / cw, ((1 - v) * ch) / cw);
+      const edge = 1 - 0.1 * Math.pow(1 - Math.min(1, e / 0.12), 2);
+      const fleck = speck(u * 160, v * 240) > 0.88 ? -0.025 : 0;
+      const t = (1 + m + fleck) * edge;
+      const i = (y * cw + x) * 4;
+      // Aged areas yellow slightly as they darken.
+      cimg.data[i] = Math.min(255, PAPER[0] * t);
+      cimg.data[i + 1] = Math.min(255, PAPER[1] * t * (0.995 + 0.005 * edge));
+      cimg.data[i + 2] = Math.min(255, PAPER[2] * t * (0.97 + 0.03 * edge));
+      cimg.data[i + 3] = 255;
+    }
+  }
+  cctx.putImageData(cimg, 0, 0);
+
+  // Relief: a tileable height field, then normals by central differences.
+  const height = new Float32Array(size * size);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const u = x / size;
       const v = y / size;
-      const m = cloud(u * 4, v * 4) - 0.5;
-      
       const f = fibre(u * 96, v * 96) * 0.6 + grain(u * 160, v * 160) * 0.4;
-      // Laid lines (close, faint ribs across the sheet) and the odd darker cotton fibre.
       const laid = Math.sin(v * Math.PI * 2 * 48) * 0.5 + 0.5;
       const chain = Math.pow(Math.max(0, Math.cos(u * Math.PI * 2 * 4)), 24);
-      const fleck = fibre(u * 96 + 31, v * 24) > 0.86 ? -0.012 : 0;
-      const t = 1 + m * 0.02 + (f - 0.5) * 0.012 + (laid - 0.5) * 0.006 + fleck;
-      const i = (y * size + x) * 4;
-      cimg.data[i] = Math.min(255, 238 * t);
-      cimg.data[i + 1] = Math.min(255, 230 * t);
-      cimg.data[i + 2] = Math.min(255, 213 * t);
-      cimg.data[i + 3] = 255;
-      const h = Math.round(255 * (0.5 + (f - 0.5) * 0.25 + (laid - 0.5) * 0.08 + chain * 0.05));
-      bimg.data[i] = bimg.data[i + 1] = bimg.data[i + 2] = h;
-      bimg.data[i + 3] = 255;
+      const thread = Math.max(0, strand(u * 96, v * 24) - 0.8) * 2;
+      height[y * size + x] = (f - 0.5) * 0.55 + laid * 0.35 + chain * 0.25 + thread * 0.3;
     }
   }
-  cctx.putImageData(cimg, 0, 0);
-  bctx.putImageData(bimg, 0, 0);
-  const tex = (c: HTMLCanvasElement, srgb: boolean) => {
+  const normal = canvas(size, size);
+  const rough = canvas(size, size);
+  const nctx = normal.getContext('2d')!;
+  const rctx = rough.getContext('2d')!;
+  const nimg = nctx.createImageData(size, size);
+  const rimg = rctx.createImageData(size, size);
+  const at = (x: number, y: number) => height[((y + size) % size) * size + ((x + size) % size)]!;
+  const strength = 2.2;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = (at(x + 1, y) - at(x - 1, y)) * strength;
+      const dy = (at(x, y + 1) - at(x, y - 1)) * strength;
+      const len = Math.hypot(dx, dy, 1);
+      const i = (y * size + x) * 4;
+      nimg.data[i] = (-dx / len) * 127.5 + 127.5;
+      // Canvas rows run down, texture V runs up.
+      nimg.data[i + 1] = (dy / len) * 127.5 + 127.5;
+      nimg.data[i + 2] = (1 / len) * 127.5 + 127.5;
+      nimg.data[i + 3] = 255;
+      const r = Math.round(255 * (0.84 + (0.5 - at(x, y)) * 0.06 + (rng() - 0.5) * 0.02));
+      rimg.data[i] = rimg.data[i + 1] = rimg.data[i + 2] = Math.max(204, Math.min(224, r));
+      rimg.data[i + 3] = 255;
+    }
+  }
+  nctx.putImageData(nimg, 0, 0);
+  rctx.putImageData(rimg, 0, 0);
+
+  const tex = (c: HTMLCanvasElement, srgb: boolean, tile: boolean) => {
     const t = new THREE.CanvasTexture(c);
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.wrapS = t.wrapT = tile ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
     t.anisotropy = ANISOTROPY;
     if (srgb) t.colorSpace = THREE.SRGBColorSpace;
     return t;
   };
-  return { map: tex(color, true), bumpMap: tex(bump, false) };
+  return { map: tex(color, true, false), normalMap: tex(normal, false, true), roughnessMap: tex(rough, false, true) };
 }
 
 /** A soft rounded-rectangle shadow, for a card lying on the desk (alpha only). */
