@@ -20,8 +20,7 @@ export default defineConfig({
   fullyParallel: false,
   // One worker: two CPU-rendered WebGL pages fighting over a small CI runner is what made runs flaky.
   workers: process.env.CI ? 1 : 2,
-  // SwiftShader on shared CI runners occasionally drops frames mid-animation.
-  retries: process.env.CI ? 1 : 0,
+  retries: 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: `http://localhost:${PORT}`,
