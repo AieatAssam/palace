@@ -172,9 +172,10 @@ const MIN_HALF_PX = 0.6;
  * Thin-line handling for a cylinder along Y: where the tube's radius is under
  * MIN_HALF_PX of screen, it swells to that floor and its alpha falls with the
  * shortfall, so the line keeps a steady weight and stops crawling between pixel rows.
- * The alpha fade is full-path only: lite draws strings opaque (blending is costly on a CPU rasteriser).
+ * Full path only: lite (a CPU rasteriser at DPR 1) draws strings as they were.
  */
 function injectThinLine(shader: THREE.WebGLProgramParametersWithUniforms) {
+  if (LITE) return;
   shader.uniforms.uPixel = PIXEL;
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', '#include <common>\nuniform float uPixel; varying float vCover;')
@@ -192,7 +193,7 @@ function injectThinLine(shader: THREE.WebGLProgramParametersWithUniforms) {
     );
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', '#include <common>\nvarying float vCover;')
-    .replace('#include <opaque_fragment>', LITE ? '#include <opaque_fragment>' : 'diffuseColor.a *= vCover;\n#include <opaque_fragment>');
+    .replace('#include <opaque_fragment>', 'diffuseColor.a *= vCover;\n#include <opaque_fragment>');
 }
 
 /** Adds the lock dimming and the cue lift to a string material's shader. */
