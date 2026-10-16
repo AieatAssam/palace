@@ -100,8 +100,9 @@ export function markerPoint(p: Position): [number, number, number] {
 }
 
 /**
- * Open-string halo footprint (neck-local): long along the string, narrower
- * than the string spacing across it, so it can't spill onto a neighbour.
+ * Open-string cue footprint (neck-local): the brass frame runs back along the
+ * string from the nut, and is narrower than the string spacing across it, so
+ * it can't spill onto a neighbour.
  */
 export const OPEN_HALO = { length: 1.1, width: 0.36 } as const;
 

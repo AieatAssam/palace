@@ -14,7 +14,7 @@ export function App() {
   return (
     <div className="app">
       <Scene />
-      <Hud onSettings={() => setSettings(true)} />
+      <Hud onSettings={() => setSettings(true)} hidden={intro} />
       {settings && (
         <Settings
           onClose={() => setSettings(false)}

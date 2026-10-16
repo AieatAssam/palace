@@ -12,9 +12,13 @@ function useInsetReporter() {
   useLayoutEffect(() => {
     const measure = () => {
       const h = window.innerHeight;
-      const t = top.current?.getBoundingClientRect();
-      const b = bottom.current?.getBoundingClientRect();
-      setInsets(t ? t.bottom : 0, b ? Math.max(0, h - b.top) : 0);
+      const topRect = top.current?.getBoundingClientRect();
+      const bottomRect = bottom.current?.getBoundingClientRect();
+      // Soft insets: UI overlays the scene; leave a little margin so the neck
+      // is not buried under the pad, but do not letterbox the 3D.
+      const insetTop = topRect ? topRect.bottom * 0.55 : 0;
+      const insetBottom = bottomRect ? Math.max(0, h - bottomRect.top) * 0.7 : 0;
+      setInsets(insetTop, insetBottom);
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -33,11 +37,11 @@ function DrillSwitch() {
   const drill = usePalace((s) => s.drill);
   const setDrill = usePalace((s) => s.setDrill);
   return (
-    <div className="switch" role="tablist" aria-label="Drill">
+    <div className="modes" role="tablist" aria-label="Drill">
       {(
         [
-          ['name', 'Name it'],
-          ['find', 'Find all'],
+          ['name', 'Name'],
+          ['find', 'Find'],
         ] as const
       ).map(([kind, label]) => (
         <button
@@ -61,7 +65,7 @@ function Prompt() {
   const feedback = usePalace((s) => s.feedback);
   if (q.kind === 'name') {
     const where = positionLabel(q.position);
-    let line = 'Name the glowing note';
+    let line = 'What note is this?';
     if (feedback?.kind === 'correct') line = pretty(q.answer);
     if (feedback?.kind === 'miss') line = `It's ${pretty(q.answer)}`;
     return (
@@ -82,7 +86,7 @@ function Prompt() {
         Find every <em>{pretty(q.note)}</em>
       </h1>
       <p className="prompt-sub">
-        {found.length} of {q.targets.length} found
+        Tap each place it lives · {found.length} of {q.targets.length} found
       </p>
     </div>
   );
@@ -92,6 +96,8 @@ function Progress() {
   const saved = usePalace((s) => s.saved);
   const session = usePalace((s) => s.session);
   const stage = usePalace((s) => s.stage)();
+  const finding = usePalace((s) => s.question.kind === 'find');
+  const next = usePalace((s) => s.nextQuestion);
   const prog = stageProgress(stage, saved.deck);
   return (
     <div className="progress" data-testid="progress">
@@ -99,9 +105,15 @@ function Progress() {
       <span className="hairline" aria-hidden>
         <span style={{ width: `${Math.round(prog.toward * 100)}%` }} />
       </span>
-      <span className="streak" title="Correct in a row">
-        {session.streak > 0 ? `${session.streak} in a row` : `${session.correct}/${session.answered}`}
-      </span>
+      {finding ? (
+        <button className="skip" onClick={next}>
+          Skip
+        </button>
+      ) : (
+        <span className="streak" title="Correct in a row">
+          {session.streak > 0 ? `${session.streak} in a row` : `${session.correct}/${session.answered}`}
+        </span>
+      )}
     </div>
   );
 }
@@ -134,20 +146,6 @@ function NamePad() {
   );
 }
 
-function FindBar() {
-  const q = usePalace((s) => s.question);
-  const next = usePalace((s) => s.nextQuestion);
-  if (q.kind !== 'find') return null;
-  return (
-    <div className="findbar">
-      <span>Tap each place it lives on the neck.</span>
-      <button className="ghost" onClick={next}>
-        Skip
-      </button>
-    </div>
-  );
-}
-
 function Notice() {
   const notice = usePalace((s) => s.unlockedNotice);
   const dismiss = usePalace((s) => s.dismissNotice);
@@ -165,11 +163,12 @@ function Notice() {
   );
 }
 
-export function Hud({ onSettings }: { onSettings: () => void }) {
+/** `hidden`: kept laid out (so the camera framing doesn't jump) but invisible and inert, e.g. under the intro. */
+export function Hud({ onSettings, hidden = false }: { onSettings: () => void; hidden?: boolean }) {
   const { top, bottom } = useInsetReporter();
   return (
     <>
-      <header ref={top} className="hud-top" id="hud-top">
+      <header ref={top} className={`hud-top ${hidden ? 'hud-hidden' : ''}`} id="hud-top" inert={hidden}>
         <div className="bar">
           <div className="brand">
             <span className="wordmark">Palace</span>
@@ -186,10 +185,9 @@ export function Hud({ onSettings }: { onSettings: () => void }) {
         </div>
         <Prompt />
       </header>
-      <Notice />
-      <footer ref={bottom} className="hud-bottom" id="hud-bottom">
+      {!hidden && <Notice />}
+      <footer ref={bottom} className={`hud-bottom ${hidden ? 'hud-hidden' : ''}`} id="hud-bottom" inert={hidden}>
         <NamePad />
-        <FindBar />
         <Progress />
       </footer>
     </>

@@ -7,12 +7,12 @@ const STEPS = [
     body: 'Train recall. One room at a time. This is the Fretboard room.',
   },
   {
-    kicker: 'Name it',
-    title: 'A fret glows.',
-    body: 'Tap the note it sounds. Answer quickly — quick, sure answers grow strongest.',
+    kicker: 'Name',
+    title: 'One fret, framed in brass.',
+    body: 'Tap the note it sounds. Quick, sure answers grow strongest.',
   },
   {
-    kicker: 'Find all',
+    kicker: 'Find',
     title: 'One note, many homes.',
     body: 'Tap every place a note lives on the neck. Mastery opens new strings and frets.',
   },
@@ -23,8 +23,8 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   const s = STEPS[step]!;
   const last = step === STEPS.length - 1;
   return (
-    <div className="scrim intro" data-testid="onboarding">
-      <div className="panel intro-panel" role="dialog" aria-modal="true" aria-label="Introduction">
+    <div className="intro" data-testid="onboarding">
+      <div className="intro-body" role="dialog" aria-modal="true" aria-label="Introduction">
         <p className="kicker">{s.kicker}</p>
         <h2 className="display">{s.title}</h2>
         <p className="body">{s.body}</p>
