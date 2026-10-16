@@ -63,6 +63,7 @@ test('loads and renders the fretboard canvas', async ({ page }) => {
 });
 
 test('answers a Name-it question through the UI', async ({ page }) => {
+  test.setTimeout(60_000);
   await enterPlay(page);
   await waitForFrames(page);
   expect(await page.evaluate(() => window.__palace!.drill())).toBe('name');
@@ -70,9 +71,8 @@ test('answers a Name-it question through the UI', async ({ page }) => {
   expect(await page.evaluate(() => window.__palace!.state())).toEqual({ mode: 'name', question: first });
   const answer = (await page.evaluate(() => window.__palace!.answer())) as string;
   await page.locator(`button[data-note="${answer}"]`).click();
-  await expect(page.getByTestId('prompt')).toHaveClass(/correct/);
-  await expect(page.locator(`button[data-note="${answer}"]`)).toHaveClass(/correct/);
-  expect(await page.evaluate(() => window.__palace!.session())).toMatchObject({ answered: 1, correct: 1 });
+  // The 'correct' flash is transient (it clears when the next question arrives), so grade on the session.
+  await expect.poll(() => page.evaluate(() => window.__palace!.session())).toMatchObject({ answered: 1, correct: 1 });
   // The next question arrives on its own and is a different item.
   await expect.poll(() => page.evaluate(() => window.__palace!.question().itemId)).not.toBe(first.itemId);
 

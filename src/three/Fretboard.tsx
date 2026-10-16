@@ -33,7 +33,7 @@ import {
 } from './layout';
 import { COLORS } from './palette';
 import { COARSE, LITE } from './quality';
-import { makePearl, makeRosewood, makeWindingNormal } from './textures';
+import { makePearl, makeRosewood, makeWindingNormal, WINDING_PERIODS } from './textures';
 
 const STRING_END = 30; // strings run off-frame towards the bridge
 
@@ -194,6 +194,24 @@ function injectThinLine(shader: THREE.WebGLProgramParametersWithUniforms) {
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', '#include <common>\nvarying float vCover;')
     .replace('#include <opaque_fragment>', 'diffuseColor.a *= vCover;\n#include <opaque_fragment>');
+}
+
+/**
+ * Winding fade for a wound string: where one winding period spans under ~2 px of screen, the
+ * ridges can only alias into moiré, so the normal map eases to a smooth wire (mipmaps alone
+ * still leave a crawl at grazing angles). The period size comes from the UV derivative.
+ */
+function injectWindingFade(shader: THREE.WebGLProgramParametersWithUniforms, size: number) {
+  const texelsPerPeriod = (size / WINDING_PERIODS).toFixed(1);
+  shader.fragmentShader = shader.fragmentShader.replace(
+    '#include <normal_fragment_maps>',
+    THREE.ShaderChunk.normal_fragment_maps.replace(
+      'mapN.xy *= normalScale;',
+      `float windTexels = max(fwidth(vNormalMapUv.y) * ${size.toFixed(1)}, 1e-4);
+	float windPx = ${texelsPerPeriod} / windTexels;
+	mapN.xy *= normalScale * smoothstep(1.5, 3.0, windPx);`,
+    ),
+  );
 }
 
 /** Adds the lock dimming and the cue lift to a string material's shader. */
@@ -566,6 +584,7 @@ function makeStringMaterial(string: number, m: Materials, len: number) {
   mat.onBeforeCompile = (shader) => {
     injectCue(shader, m.cues[string]!, m.lock);
     injectThinLine(shader);
+    if (wound) injectWindingFade(shader, (m.winding.image as HTMLCanvasElement).height);
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
       .replace(
