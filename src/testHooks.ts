@@ -1,6 +1,6 @@
 import { type Position, noteAt } from './game/notes';
 import { stagePositions } from './game/unlocks';
-import { usePalace } from './store';
+import { type Screen, type SessionStats, usePalace } from './store';
 import { type HighlightReport, inspectHighlight, projectPosition, renderInfo } from './three/view';
 
 /**
@@ -19,7 +19,9 @@ export interface PalaceTestHooks {
   /** Unlocked positions with their note names. */
   positions(): (Position & { note: string })[];
   leftHanded(): boolean;
-  session(): { answered: number; correct: number; streak: number };
+  session(): SessionStats;
+  /** attract | primer | play | session. */
+  screen(): Screen;
   /** Find-all positions found so far in the current question. */
   found(): Position[];
   /** Page CSS-pixel coordinates of a position on the 3D neck (null before first frame). */
@@ -54,6 +56,7 @@ export function installTestHooks() {
     positions: () => stagePositions(s().stage()).map((p) => ({ ...p, note: noteAt(p) })),
     leftHanded: () => s().saved.settings.leftHanded,
     session: () => s().session,
+    screen: () => s().screen,
     found: () => s().found,
     project: (p) => projectPosition(p),
     render: () => ({ ...renderInfo }),

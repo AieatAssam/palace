@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { NOTE_NAMES, type NoteName } from '../game/notes';
 import { stageProgress } from '../game/unlocks';
 import { usePalace } from '../store';
@@ -16,7 +16,9 @@ function useInsetReporter() {
       const bottomRect = bottom.current?.getBoundingClientRect();
       // Soft insets: UI overlays the scene; leave a little margin so the neck
       // is not buried under the pad, but do not letterbox the 3D.
-      const insetTop = topRect ? topRect.bottom * 0.55 : 0;
+      // Portrait: the headstock sits above the nut, so keep the nut clear of the question.
+      const portrait = h > window.innerWidth * 1.05;
+      const insetTop = topRect ? topRect.bottom * (portrait ? 0.9 : 0.55) : 0;
       const insetBottom = bottomRect ? Math.max(0, h - bottomRect.top) * 0.7 : 0;
       setInsets(insetTop, insetBottom);
     };
@@ -64,17 +66,16 @@ function Prompt() {
   const found = usePalace((s) => s.found);
   const feedback = usePalace((s) => s.feedback);
   if (q.kind === 'name') {
-    const where = positionLabel(q.position);
     let line = 'What note is this?';
     if (feedback?.kind === 'correct') line = pretty(q.answer);
-    if (feedback?.kind === 'miss') line = `It's ${pretty(q.answer)}`;
+    if (feedback?.kind === 'miss') line = `It\u2019s ${pretty(q.answer)}`;
     return (
       <div className="prompt" aria-live="polite">
         <h1 className={`prompt-title ${feedback?.kind ?? ''}`} data-testid="prompt">
           {line}
         </h1>
         <p className="prompt-sub" data-testid="prompt-where">
-          {where}
+          {positionLabel(q.position)}
         </p>
       </div>
     );
@@ -82,38 +83,45 @@ function Prompt() {
   const done = found.length === q.targets.length;
   return (
     <div className="prompt" aria-live="polite">
-      <h1 className={`prompt-title ${done ? feedback?.kind ?? '' : ''}`} data-testid="prompt">
+      <h1 className={`prompt-title ${done ? (feedback?.kind ?? '') : ''}`} data-testid="prompt">
         Find every <em>{pretty(q.note)}</em>
       </h1>
-      <p className="prompt-sub">
-        Tap each place it lives · {found.length} of {q.targets.length} found
+      <p className="prompt-sub" data-testid="prompt-where">
+        {found.length} of {q.targets.length}
       </p>
     </div>
   );
 }
 
-function Progress() {
-  const saved = usePalace((s) => s.saved);
-  const session = usePalace((s) => s.session);
+/** One hairline, the room, the run. Skip (Find) and End as plain words. */
+function Meta() {
+  const deck = usePalace((s) => s.saved.deck);
+  const streak = usePalace((s) => s.session.streak);
   const stage = usePalace((s) => s.stage)();
   const finding = usePalace((s) => s.question.kind === 'find');
   const next = usePalace((s) => s.nextQuestion);
-  const prog = stageProgress(stage, saved.deck);
+  const end = usePalace((s) => s.endSession);
+  const prog = stageProgress(stage, deck);
   return (
-    <div className="progress" data-testid="progress">
-      <span className="progress-title">{stage.title}</span>
+    <div className="meta" data-testid="progress">
+      <span className="meta-stage">{stage.title}</span>
       <span className="hairline" aria-hidden>
         <span style={{ width: `${Math.round(prog.toward * 100)}%` }} />
       </span>
-      {finding ? (
-        <button className="skip" onClick={next}>
+      <span className="meta-run" title="Correct in a row">
+        <span className="meta-label">Run</span>
+        <span className="numeral-run" data-testid="streak">
+          {streak}
+        </span>
+      </span>
+      {finding && (
+        <button className="meta-action" onClick={next} data-testid="find-skip">
           Skip
         </button>
-      ) : (
-        <span className="streak" title="Correct in a row">
-          {session.streak > 0 ? `${session.streak} in a row` : `${session.correct}/${session.answered}`}
-        </span>
       )}
+      <button className="meta-action" onClick={end} data-testid="session-end">
+        End
+      </button>
     </div>
   );
 }
@@ -146,49 +154,28 @@ function NamePad() {
   );
 }
 
-function Notice() {
-  const notice = usePalace((s) => s.unlockedNotice);
-  const dismiss = usePalace((s) => s.dismissNotice);
-  useEffect(() => {
-    if (!notice) return;
-    const t = setTimeout(dismiss, 4000);
-    return () => clearTimeout(t);
-  }, [notice, dismiss]);
-  if (!notice) return null;
-  return (
-    <div className="notice" role="status" onClick={dismiss}>
-      <span className="notice-kicker">New room in the neck</span>
-      {notice}
-    </div>
-  );
-}
-
-/** `hidden`: kept laid out (so the camera framing doesn't jump) but invisible and inert, e.g. under the intro. */
+/**
+ * Play overlay: question at the top, pad and meta at the bottom, no wordmark.
+ * `hidden`: kept laid out (so the camera framing doesn't jump between screens)
+ * but invisible and inert.
+ */
 export function Hud({ onSettings, hidden = false }: { onSettings: () => void; hidden?: boolean }) {
   const { top, bottom } = useInsetReporter();
   return (
     <>
       <header ref={top} className={`hud-top ${hidden ? 'hud-hidden' : ''}`} id="hud-top" inert={hidden}>
         <div className="bar">
-          <div className="brand">
-            <span className="wordmark">Palace</span>
-            <span className="room">Fretboard</span>
-          </div>
           <DrillSwitch />
-          <button className="icon" aria-label="Settings" data-testid="settings-open" onClick={onSettings}>
-            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden>
-              <path d="M4 7h10M18 7h2M4 17h4M12 17h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              <circle cx="16" cy="7" r="2" fill="none" stroke="currentColor" strokeWidth="1.5" />
-              <circle cx="10" cy="17" r="2" fill="none" stroke="currentColor" strokeWidth="1.5" />
-            </svg>
+          <button className="settings-mark" aria-label="Settings" data-testid="settings-open" onClick={onSettings}>
+            <span />
+            <span />
           </button>
         </div>
         <Prompt />
       </header>
-      {!hidden && <Notice />}
       <footer ref={bottom} className={`hud-bottom ${hidden ? 'hud-hidden' : ''}`} id="hud-bottom" inert={hidden}>
         <NamePad />
-        <Progress />
+        <Meta />
       </footer>
     </>
   );

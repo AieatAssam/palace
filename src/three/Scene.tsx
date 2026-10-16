@@ -3,6 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Bloom, EffectComposer, N8AO, Vignette } from '@react-three/postprocessing';
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { isCalm } from '../motion';
 import { usePalace } from '../store';
 import { Desk, SHADOW_Y } from './Desk';
 import { Fretboard } from './Fretboard';
@@ -105,16 +106,28 @@ function NeckRig({ children }: { children: React.ReactNode }) {
 
   const lookNow = useRef(target.look.clone());
   const first = useRef(true);
+  /** Attract idle drift: 1 on the title, eases to 0 when play starts (camera settles, no whip-pan). */
+  const idle = useRef(0);
+  const drift = useMemo(() => new THREE.Vector3(), []);
+  const goal = useMemo(() => new THREE.Vector3(), []);
 
-  useFrame((_, dt) => {
+  useFrame((state, dt) => {
     renderInfo.frames++;
+    const wantIdle = usePalace.getState().screen === 'attract' && !isCalm() ? 1 : 0;
+    idle.current += (wantIdle - idle.current) * (1 - Math.exp(-dt * 1.4));
+    if (idle.current < 1e-3 && !wantIdle) idle.current = 0;
+    // A slow figure-of-eight over the desk, a few percent of the viewing distance.
+    const reach = target.pos.distanceTo(target.look) * 0.035 * idle.current;
+    const t = state.clock.elapsedTime;
+    drift.set(Math.sin(t * 0.16) * reach, 0, Math.sin(t * 0.11) * Math.cos(t * 0.16) * reach * 0.6);
+    goal.copy(target.pos).add(drift);
     if (first.current) {
-      camera.position.copy(target.pos);
+      camera.position.copy(goal);
       lookNow.current.copy(target.look);
       first.current = false;
     } else {
       const k = 1 - Math.exp(-dt * 3.2); // ~1.2 s dolly
-      camera.position.lerp(target.pos, k);
+      camera.position.lerp(goal, k);
       lookNow.current.lerp(target.look, k);
     }
     camera.up.set(0, 0, -1);

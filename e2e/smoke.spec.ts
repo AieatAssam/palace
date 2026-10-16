@@ -2,10 +2,13 @@ import { type Page, expect, test } from '@playwright/test';
 
 type Pos = { string: number; fret: number };
 
-async function skipIntro(page: Page) {
-  await expect(page.getByTestId('onboarding')).toBeVisible();
-  await page.getByTestId('onboarding-skip').click();
-  await expect(page.getByTestId('onboarding')).toBeHidden();
+/** Attract → (primer on a first visit, skipped) → play. */
+async function enterPlay(page: Page) {
+  await expect(page.getByTestId('attract')).toBeVisible();
+  await page.getByTestId('attract-begin').click();
+  if ((await page.evaluate(() => window.__palace!.screen())) === 'primer') await page.getByTestId('primer-skip').click();
+  await expect(page.getByTestId('attract')).toBeHidden();
+  await expect.poll(() => page.evaluate(() => window.__palace!.screen())).toBe('play');
 }
 
 async function waitForFrames(page: Page, n = 10) {
@@ -41,7 +44,7 @@ test.beforeEach(async ({ page }) => {
 
 test('loads and renders the fretboard canvas', async ({ page }) => {
   await expect(page).toHaveTitle(/Palace/);
-  await skipIntro(page);
+  await enterPlay(page);
   const canvas = page.locator('canvas');
   await expect(canvas).toBeVisible();
   const box = await canvas.boundingBox();
@@ -60,7 +63,7 @@ test('loads and renders the fretboard canvas', async ({ page }) => {
 });
 
 test('answers a Name-it question through the UI', async ({ page }) => {
-  await skipIntro(page);
+  await enterPlay(page);
   await waitForFrames(page);
   expect(await page.evaluate(() => window.__palace!.drill())).toBe('name');
   const first = await page.evaluate(() => window.__palace!.question());
@@ -83,7 +86,7 @@ test('answers a Name-it question through the UI', async ({ page }) => {
 });
 
 test('Find-all: tapping the neck finds a target', async ({ page }) => {
-  await skipIntro(page);
+  await enterPlay(page);
   await waitForFrames(page);
   await page.getByTestId('drill-find').click();
   expect(await page.evaluate(() => window.__palace!.drill())).toBe('find');
@@ -100,18 +103,19 @@ test('Find-all: tapping the neck finds a target', async ({ page }) => {
 });
 
 test('toggles left-handed mode (mirrors the neck, persists)', async ({ page }) => {
-  await skipIntro(page);
+  await enterPlay(page);
   await waitForFrames(page);
   const probe = { string: 0, fret: 3 };
   const before = await settledProjection(page, probe);
   const width = page.viewportSize()!.width;
 
   await page.getByTestId('settings-open').click();
-  const toggle = page.getByTestId('toggle-left-handed');
-  await expect(toggle).not.toBeChecked();
-  await page.getByText('Left-handed').click();
-  await expect(toggle).toBeChecked();
+  await expect(page.getByTestId('settings')).toBeVisible();
+  await expect(page.getByTestId('hand-false')).toHaveAttribute('aria-checked', 'true');
+  await page.getByTestId('hand-true').click();
+  await expect(page.getByTestId('hand-true')).toHaveAttribute('aria-checked', 'true');
   await page.getByTestId('settings-close').click();
+  await expect(page.getByTestId('settings')).toBeHidden();
   expect(await page.evaluate(() => window.__palace!.leftHanded())).toBe(true);
 
   // The neck is mirrored horizontally: the probe moves to the other side of centre.
@@ -126,7 +130,58 @@ test('toggles left-handed mode (mirrors the neck, persists)', async ({ page }) =
   expect(JSON.parse(stored!).settings.leftHanded).toBe(true);
   await page.reload();
   expect(await page.evaluate(() => window.__palace!.leftHanded())).toBe(true);
-  await expect(page.getByTestId('onboarding')).toBeHidden();
+  // A returning player goes straight from the title to play: no primer.
+  await page.getByTestId('attract-begin').click();
+  await expect(page.getByTestId('primer')).toBeHidden();
+  expect(await page.evaluate(() => window.__palace!.screen())).toBe('play');
+});
+
+test('first visit: title, three-beat primer, then play without the wordmark', async ({ page }) => {
+  await expect(page.getByTestId('attract')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Palace' })).toBeVisible();
+  await expect(page.getByTestId('attract-begin')).toHaveText('Begin');
+  await page.getByTestId('attract-begin').click();
+  const primer = page.getByTestId('primer');
+  await expect(primer).toBeVisible();
+  await expect(primer.locator('.numeral')).toHaveText('I');
+  await page.getByTestId('primer-next').click();
+  await expect(primer.locator('.numeral')).toHaveText('II');
+  // Tapping anywhere turns the page too.
+  await primer.click({ position: { x: 20, y: 200 } });
+  await expect(primer.locator('.numeral')).toHaveText('III');
+  await page.getByTestId('primer-next').click();
+  await expect(primer).toBeHidden();
+  expect(await page.evaluate(() => window.__palace!.screen())).toBe('play');
+  await expect(page.getByTestId('prompt')).toBeVisible();
+  await expect(page.getByText('Palace', { exact: true })).toHaveCount(0);
+  const stored = await page.evaluate(() => localStorage.getItem('palace.fretboard.v1'));
+  expect(JSON.parse(stored!).onboarded).toBe(true);
+});
+
+test('a full sitting closes on the session sheet; Again and Leave', async ({ page }) => {
+  test.setTimeout(60_000);
+  await enterPlay(page);
+  await waitForFrames(page);
+  for (let i = 0; i < 10; i++) {
+    const q = await page.evaluate(() => window.__palace!.question());
+    const answer = (await page.evaluate(() => window.__palace!.answer())) as string;
+    await page.locator(`button[data-note="${answer}"]`).click();
+    if (i < 9) await expect.poll(() => page.evaluate(() => window.__palace!.question().itemId)).not.toBe(q.itemId);
+  }
+  const sheet = page.getByTestId('session-sheet');
+  await expect(sheet).toBeVisible();
+  await expect(sheet).toContainText('Today');
+  await expect(sheet).toContainText('10 of 10');
+  await page.getByTestId('session-again').click();
+  await expect(sheet).toBeHidden();
+  expect(await page.evaluate(() => window.__palace!.session())).toMatchObject({ answered: 0, correct: 0 });
+
+  // A deliberate End, then Leave returns to the title.
+  await page.getByTestId('session-end').click();
+  await expect(sheet).toBeVisible();
+  await page.getByTestId('session-leave').click();
+  await expect(page.getByTestId('attract')).toBeVisible();
+  await expect(page.getByTestId('attract-begin')).toHaveText('Continue');
 });
 
 /**
@@ -162,6 +217,7 @@ for (const leftHanded of [false, true]) {
   test(`the highlighted position matches the prompt (${leftHanded ? 'left' : 'right'}-handed)`, async ({ page }) => {
     await page.addInitScript((save) => localStorage.setItem('palace.fretboard.v1', save), seededSave(STAGE_ALL_STRINGS, ALL_0_5, PROBES, leftHanded));
     await page.goto('./');
+    await enterPlay(page);
     await waitForFrames(page);
     expect(await page.evaluate(() => window.__palace!.leftHanded())).toBe(leftHanded);
     const names = ['low E', 'A', 'D', 'G', 'B', 'high E'];

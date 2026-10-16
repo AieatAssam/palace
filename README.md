@@ -33,7 +33,7 @@ else gets built.
   The camera frames the unlocked region inside the space the HUD leaves free. Edge
   strings get wider tap zones, and Find-all forgives near-misses toward a target on the
   adjacent string.
-- **Left-handed** toggle mirrors the neck. Onboarding is three short, skippable cards.
+- **Flow:** title (Begin / Continue) → a three-beat primer on the first visit → play → a session sheet after 10 answers or a deliberate End. Settings: handedness (mirrors the neck), sound, haptics, reduce motion.
 - **Performance**: DPR is clamped (1.75 on touch devices), there are no shadow maps, and
   drei's `PerformanceMonitor` steps down post-processing and DPR when frames drop.
 - **Lite render path** (`src/three/quality.ts`): DPR 1, no post-processing, standard
@@ -83,7 +83,7 @@ src/
   game/        pure logic: notes, srs, unlocks, drills, storage (+ tests)
   audio/       Karplus–Strong synth (pure, tested) + Web Audio engine
   three/       neck layout maths, procedural textures, Fretboard, Scene
-  ui/          HUD, settings, onboarding
+  ui/          title, primer, HUD, session sheet, settings
   store.ts     Zustand game store
   testHooks.ts window.__palace
 e2e/           Playwright smoke tests

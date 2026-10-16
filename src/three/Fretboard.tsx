@@ -534,7 +534,10 @@ function GuitarString({ string, m, thick }: { string: number; m: Materials; thic
       usePalace.subscribe((s, prev) => {
         if (s.lastPluck && s.lastPluck !== prev.lastPluck && s.lastPluck.position.string === string) {
           const f = s.lastPluck.position.fret;
-          excite.current = { at: performance.now(), amp: 0.032, decay: 2.0, shimmer: 1 };
+          // An idle shimmer (attract) is a softer, slower sigh than a pluck.
+          excite.current = s.lastPluck.quiet
+            ? { at: performance.now(), amp: 0.01, decay: 1.4, shimmer: 0.55 }
+            : { at: performance.now(), amp: 0.032, decay: 2.0, shimmer: 1 };
           uniforms.uStart.value = f === 0 ? 0 : fretX(f) / STRING_END;
         }
         if (s.lastMiss && s.lastMiss !== prev.lastMiss && s.lastMiss.position.string === string) {
@@ -683,9 +686,11 @@ function Highlights({ m, thick }: { m: Materials; thick: number }) {
   const found = usePalace((s) => s.found);
   const lastMiss = usePalace((s) => s.lastMiss);
   const lastPluck = usePalace((s) => s.lastPluck);
+  // The neck only asks during play; on the title, primer and session sheet it rests.
+  const asking = usePalace((s) => s.screen === 'play');
 
   const out: React.ReactNode[] = [];
-  if (question.kind === 'name') {
+  if (asking && question.kind === 'name') {
     const tone: CueTone = feedback?.kind === 'correct' ? 'correct' : feedback?.kind === 'miss' ? 'miss' : 'ask';
     out.push(
       <Cue
@@ -698,15 +703,15 @@ function Highlights({ m, thick }: { m: Materials; thick: number }) {
         question
       />,
     );
-  } else {
+  } else if (asking) {
     for (const p of found) out.push(<Cue key={`f-s${p.string}f${p.fret}`} position={p} tone="correct" m={m} thick={thick} />);
   }
   if (lastMiss && !(question.kind === 'name' && samePosition(lastMiss.position, question.position))) {
     out.push(<Cue key={`m-${lastMiss.id}`} position={lastMiss.position} tone="miss" m={m} thick={thick} fadeFrom={lastMiss.at} />);
   }
   // A pluck on a cell that's already framed (the answer, a found target) only shimmers its string.
-  const framed = question.kind === 'name' ? [question.position] : found;
-  if (lastPluck && !framed.some((p) => samePosition(p, lastPluck.position))) {
+  const framed = !asking ? [] : question.kind === 'name' ? [question.position] : found;
+  if (lastPluck && !lastPluck.quiet && !framed.some((p) => samePosition(p, lastPluck.position))) {
     out.push(<Cue key={`p-${lastPluck.id}`} position={lastPluck.position} tone="spark" m={m} thick={thick} fadeFrom={lastPluck.at} />);
   }
   return <group>{out}</group>;

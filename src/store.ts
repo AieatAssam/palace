@@ -15,6 +15,8 @@ export interface PluckEvent {
   id: number;
   position: Position;
   at: number;
+  /** Idle shimmer (attract): the string sings, no cell lights up. */
+  quiet?: boolean;
 }
 export interface MissEvent {
   id: number;
@@ -26,10 +28,35 @@ export interface SessionStats {
   answered: number;
   correct: number;
   streak: number;
+  /** Longest run of correct answers this session. */
+  best: number;
+  /** Distinct items whose review interval grew / fell back this session. */
+  strengthened: string[];
+  slipped: string[];
+  /** Title of a stage opened during this session, if any. */
+  opened: string | null;
+}
+
+/**
+ * Where the player is. The 3D desk is always behind; screens are ink over it.
+ * attract → (primer, first visit) → play → session sheet → play | attract.
+ */
+export type Screen = 'attract' | 'primer' | 'play' | 'session';
+
+/** Answers per sitting before the session sheet closes the page. */
+export const SESSION_LENGTH = 10;
+
+function emptySession(): SessionStats {
+  return { answered: 0, correct: 0, streak: 0, best: 0, strengthened: [], slipped: [], opened: null };
+}
+
+function addOnce(list: string[], id: string) {
+  return list.includes(id) ? list : [...list, id];
 }
 
 interface PalaceState {
   saved: SavedState;
+  screen: Screen;
   drill: DrillKind;
   question: Question;
   askedAt: number;
@@ -40,8 +67,6 @@ interface PalaceState {
   lastPluck: PluckEvent | null;
   lastMiss: MissEvent | null;
   session: SessionStats;
-  /** Set when a new stage unlocks, for a quiet toast. */
-  unlockedNotice: string | null;
   /** True while waiting to advance to the next question. */
   locked: boolean;
 
@@ -50,10 +75,20 @@ interface PalaceState {
   answerName(note: NoteName): void;
   tapPosition(p: Position): void;
   nextQuestion(): void;
-  setLeftHanded(on: boolean): void;
-  setSound(on: boolean): void;
-  completeOnboarding(): void;
-  dismissNotice(): void;
+  /** Attract → primer (first visit) or play. */
+  begin(): void;
+  /** Primer finished or skipped: remember it, then play. */
+  completePrimer(): void;
+  replayPrimer(): void;
+  /** Close the page: the session sheet. */
+  endSession(): void;
+  /** Session sheet → a fresh sitting. */
+  again(): void;
+  /** Session sheet → back to the title. */
+  leave(): void;
+  /** Idle string shimmer, silent and ungraded. */
+  shimmer(p: Position): void;
+  updateSettings(patch: Partial<Settings>): void;
   resetProgress(): void;
 }
 
@@ -77,9 +112,17 @@ export const usePalace = create<PalaceState>()((set, get) => {
   setSoundEnabled(initial.settings.sound);
   const firstQuestion = makeQuestion('name', stageAt(initial.stage), initial.deck, now());
 
+  /** After feedback: the next question, or the session sheet once the sitting is full. */
   const scheduleNext = (ms: number) => {
     clearTimeout(advanceTimer);
-    advanceTimer = setTimeout(() => get().nextQuestion(), ms);
+    advanceTimer = setTimeout(() => {
+      if (get().session.answered >= SESSION_LENGTH) get().endSession();
+      else get().nextQuestion();
+    }, ms);
+  };
+
+  const buzz = (ms: number) => {
+    if (get().saved.settings.haptics) haptic(ms);
   };
 
   /** Record a review and handle stage unlocks. */
@@ -87,20 +130,34 @@ export const usePalace = create<PalaceState>()((set, get) => {
     const { saved } = get();
     const t = now();
     let deck: Deck = ensureCards(saved.deck, [itemId], t);
-    deck = { ...deck, [itemId]: review(deck[itemId]!, gradeFromResponse(correct, ms), t, ms) };
+    const before = deck[itemId]!;
+    const after = review(before, gradeFromResponse(correct, ms), t, ms);
+    deck = { ...deck, [itemId]: after };
     const stage = unlockedStageIndex(deck, saved.stage);
     const next: SavedState = { ...saved, deck, stage };
     persist(next);
     const s = get().session;
+    const streak = correct ? s.streak + 1 : 0;
     set({
       saved: next,
       session: {
         answered: s.answered + 1,
         correct: s.correct + (correct ? 1 : 0),
-        streak: correct ? s.streak + 1 : 0,
+        streak,
+        best: Math.max(s.best, streak),
+        strengthened: after.interval > before.interval ? addOnce(s.strengthened, itemId) : s.strengthened,
+        slipped: !correct ? addOnce(s.slipped, itemId) : s.slipped,
+        opened: stage > saved.stage ? stageAt(stage).title : s.opened,
       },
-      unlockedNotice: stage > saved.stage ? stageAt(stage).title : get().unlockedNotice,
     });
+  };
+
+  /** Enter play: keep a question nobody has touched yet (restarting its clock), otherwise draw the next. */
+  const startPlay = () => {
+    const { locked, feedback, found } = get();
+    set({ screen: 'play', session: emptySession() });
+    if (locked || feedback || found.length) get().nextQuestion();
+    else set({ askedAt: now() });
   };
 
   const emitPluck = (position: Position) => {
@@ -114,6 +171,7 @@ export const usePalace = create<PalaceState>()((set, get) => {
 
   return {
     saved: initial,
+    screen: 'attract',
     drill: 'name',
     question: firstQuestion,
     askedAt: now(),
@@ -122,8 +180,7 @@ export const usePalace = create<PalaceState>()((set, get) => {
     findMisses: 0,
     lastPluck: null,
     lastMiss: null,
-    session: { answered: 0, correct: 0, streak: 0 },
-    unlockedNotice: null,
+    session: emptySession(),
     locked: false,
 
     stage: () => stageAt(get().saved.stage),
@@ -150,15 +207,15 @@ export const usePalace = create<PalaceState>()((set, get) => {
     },
 
     answerName(note) {
-      const { question, locked, askedAt } = get();
-      if (question.kind !== 'name' || locked) return;
+      const { question, locked, askedAt, screen } = get();
+      if (question.kind !== 'name' || locked || screen !== 'play') return;
       unlockAudio();
       const correct = note === question.answer;
       const ms = now() - askedAt;
       grade(question.itemId, correct, ms);
       if (correct) {
         emitPluck(question.position);
-        haptic(10);
+        buzz(10);
         set({ feedback: { kind: 'correct', at: now(), chosen: note }, locked: true });
         scheduleNext(CORRECT_DELAY);
       } else {
@@ -170,9 +227,9 @@ export const usePalace = create<PalaceState>()((set, get) => {
 
     tapPosition(p) {
       unlockAudio();
-      const { question, locked, found, saved } = get();
+      const { question, locked, found, saved, screen } = get();
       if (!isUnlocked(stageAt(saved.stage), p)) return;
-      if (question.kind === 'name') {
+      if (screen !== 'play' || question.kind === 'name') {
         // Exploring the neck in Name-it: let it ring quietly, no grading.
         if (!locked) {
           set({ lastPluck: { id: ++eventId, position: p, at: performance.now() } });
@@ -189,7 +246,7 @@ export const usePalace = create<PalaceState>()((set, get) => {
         return;
       }
       emitPluck(p);
-      haptic(8);
+      buzz(8);
       const nextFound = [...found, p];
       set({ found: nextFound, feedback: null });
       if (nextFound.length === question.targets.length) {
@@ -200,34 +257,54 @@ export const usePalace = create<PalaceState>()((set, get) => {
       }
     },
 
-    setLeftHanded(on) {
-      const saved = { ...get().saved, settings: { ...get().saved.settings, leftHanded: on } };
-      persist(saved);
-      set({ saved });
+    begin() {
+      unlockAudio();
+      if (!get().saved.onboarded) set({ screen: 'primer' });
+      else startPlay();
     },
 
-    setSound(on) {
-      setSoundEnabled(on);
-      const saved = { ...get().saved, settings: { ...get().saved.settings, sound: on } };
-      persist(saved);
-      set({ saved });
-    },
-
-    completeOnboarding() {
+    completePrimer() {
       const saved = { ...get().saved, onboarded: true };
       persist(saved);
-      set({ saved, askedAt: now() });
+      set({ saved });
+      startPlay();
     },
 
-    dismissNotice() {
-      set({ unlockedNotice: null });
+    replayPrimer() {
+      clearTimeout(advanceTimer);
+      set({ screen: 'primer' });
+    },
+
+    endSession() {
+      clearTimeout(advanceTimer);
+      set({ screen: 'session', locked: true });
+    },
+
+    again() {
+      startPlay();
+    },
+
+    leave() {
+      clearTimeout(advanceTimer);
+      set({ screen: 'attract', session: emptySession(), feedback: null, found: [], locked: false });
+    },
+
+    shimmer(p) {
+      set({ lastPluck: { id: ++eventId, position: p, at: performance.now(), quiet: true } });
+    },
+
+    updateSettings(patch) {
+      if (patch.sound !== undefined) setSoundEnabled(patch.sound);
+      const saved = { ...get().saved, settings: { ...get().saved.settings, ...patch } };
+      persist(saved);
+      set({ saved });
     },
 
     resetProgress() {
       const { settings } = get().saved;
       const saved: SavedState = { ...emptyState(), settings, onboarded: true };
       persist(saved);
-      set({ saved, session: { answered: 0, correct: 0, streak: 0 } });
+      set({ saved, session: emptySession() });
       get().nextQuestion();
     },
   };
