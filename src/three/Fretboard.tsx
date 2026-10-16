@@ -116,15 +116,15 @@ function withLock<M extends THREE.Material>(mat: M, lock: LockUniforms): M {
 }
 
 /**
- * Nacre's play of colour: pastel hues that drift across the shell's growth
- * bands and shift with viewing angle. Physical iridescence only tints the
+ * Nacre's play of colour: pastel hues that drift across the shell's soft
+ * clouds and shift with viewing angle. Physical iridescence only tints the
  * specular reflection, which a dim room barely shows; this carries the
  * colour in the body of the pearl too (and survives the lite path).
  */
-function withNacre(mat: THREE.MeshStandardMaterial, bands: THREE.Texture, lock: LockUniforms) {
+function withNacre(mat: THREE.MeshStandardMaterial, clouds: THREE.Texture, lock: LockUniforms) {
   mat.onBeforeCompile = (shader) => {
     injectLock(shader, lock);
-    shader.uniforms.uNacre = { value: bands };
+    shader.uniforms.uNacre = { value: clouds };
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform sampler2D uNacre;')
       .replace(
@@ -132,11 +132,11 @@ function withNacre(mat: THREE.MeshStandardMaterial, bands: THREE.Texture, lock: 
         `#include <normal_fragment_maps>
 {
   float ndv = clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0);
-  float band = texture2D(uNacre, vMapUv).g;
-  float ph = band * 0.9 + (1.0 - ndv) * 1.2;
+  float cloud = texture2D(uNacre, vMapUv).g;
+  float ph = cloud * 0.75 + (1.0 - ndv) * 1.1;
   vec3 hue = 0.5 + 0.5 * cos(6.2831853 * (ph + vec3(0.0, 0.33, 0.67)));
-  diffuseColor.rgb *= mix(vec3(1.0), 0.55 + 0.65 * hue, 0.62);
-  totalEmissiveRadiance += diffuseColor.rgb * hue * 0.12 * (0.35 + band);
+  diffuseColor.rgb *= mix(vec3(1.0), 0.62 + 0.55 * hue, 0.5);
+  totalEmissiveRadiance += diffuseColor.rgb * hue * 0.1 * (0.4 + cloud);
 }`,
       );
   };
@@ -200,14 +200,16 @@ function useMaterials() {
       clearcoatRoughness: 0.32,
       envMapIntensity: 0.85,
     });
+    // The neck back: satin lacquer, so its curve shades from lit to dark
+    // rather than mirroring the room as a pale band at grazing angles.
     const neck = physical({
       color: COLORS.mahogany,
       normalMap: wood.normalMap,
       normalScale: new THREE.Vector2(0.2, 0.2),
-      roughness: 0.5,
-      clearcoat: 0.7,
-      clearcoatRoughness: 0.28,
-      envMapIntensity: 0.85,
+      roughness: 0.55,
+      clearcoat: 0.35,
+      clearcoatRoughness: 0.4,
+      envMapIntensity: 0.4,
     });
     const headstock = board.clone();
     headstock.color = new THREE.Color('#8a7a70');
@@ -219,7 +221,12 @@ function useMaterials() {
     if (headstock instanceof THREE.MeshPhysicalMaterial) headstock.clearcoat = 0.12;
     // Tuner posts: brushed brass, undimmed. Frets: polished nickel-silver, sharing the lock.
     const post = new THREE.MeshStandardMaterial({ color: COLORS.brass, metalness: 1, roughness: 0.34 });
-    const nickel = withLock(new THREE.MeshStandardMaterial({ color: COLORS.nickel, metalness: 1, roughness: 0.22 }), lock);
+    // Nickel, a shade down and slightly satin: from the low hero angle a bright
+    // mirror crown flares every fret into a white bar.
+    const nickel = withLock(
+      new THREE.MeshStandardMaterial({ color: '#a8a397', metalness: 1, roughness: 0.26, envMapIntensity: 0.6 }),
+      lock,
+    );
     const nut = physical({
       color: COLORS.bone,
       roughness: 0.36,
@@ -284,7 +291,11 @@ function taperedBoardGeometry(): THREE.BufferGeometry {
   return g;
 }
 
-/** Rounded neck back (a half-ellipse sweep that tapers with the board). */
+/**
+ * Rounded neck back: a half-ellipse sweep that tapers with the board and
+ * thickens towards the body, deep enough (about half the board's width) that
+ * the low hero camera reads its curve under the board's edge.
+ */
 function neckBackGeometry(): THREE.BufferGeometry {
   const nx = 40;
   const na = 24;
@@ -294,7 +305,7 @@ function neckBackGeometry(): THREE.BufferGeometry {
   for (let i = 0; i <= nx; i++) {
     const x = NUT_X0 + ((BOARD_END - NUT_X0) * i) / nx;
     const half = neckWidth(x) / 2;
-    const depth = 0.5 + 0.12 * (x / BOARD_END);
+    const depth = 0.66 + 0.1 * (x / BOARD_END);
     for (let j = 0; j <= na; j++) {
       const a = (Math.PI * j) / na;
       positions.push(x, -BOARD_THICKNESS - Math.sin(a) * depth, Math.cos(a) * half);
@@ -305,7 +316,8 @@ function neckBackGeometry(): THREE.BufferGeometry {
     for (let j = 0; j < na; j++) {
       const a = i * (na + 1) + j;
       const b = a + na + 1;
-      index.push(a, b, a + 1, b, b + 1, a + 1);
+      // Wound so the faces (and computed normals) point outward, away from the neck's core.
+      index.push(a, a + 1, b, b, a + 1, b + 1);
     }
   }
   const g = new THREE.BufferGeometry();

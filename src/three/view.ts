@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { Vector3 } from 'three';
 import type { Position } from '../game/notes';
 
 /** Shared view state between the DOM overlay and the 3D scene. */
@@ -52,3 +53,6 @@ export function inspectHighlight() {
 
 /** Render statistics for tests: frames drawn, meshes and triangles in the scene. */
 export const renderInfo = { frames: 0, meshes: 0, triangles: 0 };
+
+/** World-space point the camera frames (centre of the unlocked board): depth-of-field focus. */
+export const focusPoint = new Vector3();

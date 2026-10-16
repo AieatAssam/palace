@@ -8,6 +8,8 @@ const SHIMMER_EVERY = 4600;
 export function Attract() {
   const begin = usePalace((s) => s.begin);
   const returning = usePalace((s) => Object.keys(s.saved.deck).length > 0);
+  // The neck steps right (left for left-handers) on the title; the type takes the other side.
+  const leftHanded = usePalace((s) => s.saved.settings.leftHanded);
   const calm = useCalm();
 
   // Every few seconds one open string sighs: silent, ungraded.
@@ -23,17 +25,23 @@ export function Attract() {
   }, [calm]);
 
   return (
-    <section className="attract" data-testid="attract" aria-labelledby="attract-title">
-      <div className="attract-title">
+    <section
+      className={`attract ${leftHanded ? 'attract-mirror' : ''}`}
+      data-testid="attract"
+      aria-labelledby="attract-title"
+    >
+      <div className="attract-block">
+        <p className="attract-kicker">The Fretboard room</p>
         <h1 id="attract-title" className="wordmark-large">
           Palace
         </h1>
         <p className="attract-line">A room for recall</p>
+        <span className="attract-rule" aria-hidden />
+        <button className="text-action attract-action" onClick={begin} data-testid="attract-begin" autoFocus>
+          {returning ? 'Continue' : 'Begin'}
+        </button>
+        <p className="attract-foot">Progress is kept on this device</p>
       </div>
-      <button className="text-action attract-action" onClick={begin} data-testid="attract-begin" autoFocus>
-        {returning ? 'Continue' : 'Begin'}
-      </button>
-      <p className="attract-foot">The Fretboard room · progress is kept on this device</p>
     </section>
   );
 }

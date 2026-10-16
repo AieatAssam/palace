@@ -102,6 +102,30 @@ test('Find-all: tapping the neck finds a target', async ({ page }) => {
   expect(await page.evaluate(() => window.__palace!.session().answered - window.__palace!.session().correct)).toBe(0);
 });
 
+test('every unlocked cell is tappable where it is drawn, with phone-sized string spacing', async ({ page }) => {
+  await enterPlay(page);
+  await waitForFrames(page);
+  const positions = (await page.evaluate(() => window.__palace!.positions())).map(({ string, fret }) => ({ string, fret }));
+  await settledProjection(page, positions[0]!);
+  const phone = test.info().project.name === 'phone';
+  for (const p of positions) {
+    const pt = (await page.evaluate((q) => window.__palace!.project(q), p))!;
+    // Nothing in the HUD sits over a playable cell.
+    expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.tagName, pt)).toBe('CANVAS');
+    await tapAt(page, pt.x, pt.y);
+    await expect.poll(() => page.evaluate(() => window.__palace!.lastTap())).toEqual(p);
+    // Wait out the pluck so the next tap is a fresh event.
+    await page.waitForTimeout(50);
+  }
+  if (phone) {
+    // Adjacent strings at least a fingertip apart (≥ 44 CSS px) right at the nut.
+    for (const fret of [0, 1, 5]) {
+      const [a, b] = await page.evaluate((f) => [window.__palace!.project({ string: 0, fret: f }), window.__palace!.project({ string: 1, fret: f })], fret);
+      expect(Math.hypot(a!.x - b!.x, a!.y - b!.y)).toBeGreaterThanOrEqual(44);
+    }
+  }
+});
+
 test('toggles left-handed mode (mirrors the neck, persists)', async ({ page }) => {
   await enterPlay(page);
   await waitForFrames(page);

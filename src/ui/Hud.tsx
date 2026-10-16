@@ -39,7 +39,7 @@ function DrillSwitch() {
   const drill = usePalace((s) => s.drill);
   const setDrill = usePalace((s) => s.setDrill);
   return (
-    <div className="modes" role="tablist" aria-label="Drill">
+    <div className="modes scrimmed" role="tablist" aria-label="Drill">
       {(
         [
           ['name', 'Name'],
@@ -70,7 +70,7 @@ function Prompt() {
     if (feedback?.kind === 'correct') line = pretty(q.answer);
     if (feedback?.kind === 'miss') line = `It\u2019s ${pretty(q.answer)}`;
     return (
-      <div className="prompt" aria-live="polite">
+      <div className="prompt scrimmed" aria-live="polite">
         <h1 className={`prompt-title ${feedback?.kind ?? ''}`} data-testid="prompt">
           {line}
         </h1>
@@ -82,7 +82,7 @@ function Prompt() {
   }
   const done = found.length === q.targets.length;
   return (
-    <div className="prompt" aria-live="polite">
+    <div className="prompt scrimmed" aria-live="polite">
       <h1 className={`prompt-title ${done ? (feedback?.kind ?? '') : ''}`} data-testid="prompt">
         Find every <em>{pretty(q.note)}</em>
       </h1>
@@ -103,7 +103,7 @@ function Meta() {
   const end = usePalace((s) => s.endSession);
   const prog = stageProgress(stage, deck);
   return (
-    <div className="meta" data-testid="progress">
+    <div className="meta scrimmed" data-testid="progress">
       <span className="meta-stage">{stage.title}</span>
       <span className="hairline" aria-hidden>
         <span style={{ width: `${Math.round(prog.toward * 100)}%` }} />

@@ -23,6 +23,8 @@
   /* Ink over the room: a tight shadow, never a glow or a panel. */
   --lift: 0 1px 2px rgba(10, 7, 5, 0.7);
   --lift-deep: 0 1px 2px rgba(10, 7, 5, 0.8), 0 0 14px rgba(10, 7, 5, 0.55);
+  /* A very soft local shade behind a line of type: no edge, no panel. */
+  --scrim: radial-gradient(closest-side, rgba(12, 9, 7, 0.34), rgba(12, 9, 7, 0.18) 55%, rgba(12, 9, 7, 0));
   color-scheme: dark;
 }
 
@@ -148,6 +150,21 @@ button:focus-visible {
   color: inherit;
 }
 
+/* Type over the room sits on a soft, edgeless shade that only exists behind the words. */
+.scrimmed {
+  position: relative;
+  isolation: isolate;
+}
+
+.scrimmed::before {
+  content: '';
+  position: absolute;
+  inset: -14px -36px;
+  z-index: -1;
+  background: var(--scrim);
+  pointer-events: none;
+}
+
 .meta-label {
   font-size: 10px;
   font-weight: 500;
@@ -188,49 +205,76 @@ button:focus-visible {
   position: absolute;
   inset: 0;
   display: grid;
-  grid-template-rows: 1fr auto auto;
-  justify-items: center;
-  padding: max(24px, env(safe-area-inset-top)) 24px max(18px, env(safe-area-inset-bottom));
-  text-shadow: var(--lift);
+  /* Desktop: a left column over the dark desk; the neck sits to the right and below. */
+  align-items: start;
+  justify-items: start;
+  padding: max(24px, env(safe-area-inset-top)) clamp(28px, 7vw, 120px) max(18px, env(safe-area-inset-bottom));
+  padding-top: clamp(48px, 15vh, 160px);
   pointer-events: none;
   animation: fade 280ms var(--ease);
 }
 
-.attract > * {
+.attract-mirror {
+  justify-items: end;
+}
+
+.attract-mirror .attract-block {
+  text-align: right;
+  align-items: flex-end;
+}
+
+.attract-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: 34ch;
+  text-shadow: var(--lift-deep);
   pointer-events: auto;
 }
 
-.attract-title {
-  align-self: center;
-  text-align: center;
-  pointer-events: none;
+.attract-kicker {
+  margin: 0 0 18px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--stone-lit);
 }
 
 .wordmark-large {
-  margin: 0;
+  margin: 0 0 0 -0.04em;
   font-family: var(--display);
   font-weight: 500;
-  font-size: clamp(64px, 11vw, 120px);
-  line-height: 0.95;
-  letter-spacing: 0.02em;
+  font-size: clamp(64px, 9vw, 128px);
+  line-height: 0.9;
+  letter-spacing: 0.01em;
 }
 
 .attract-line {
-  margin: 14px 0 0;
+  margin: 16px 0 0;
   font-family: var(--display);
   font-style: italic;
-  font-size: clamp(19px, 2.2vw, 24px);
-  color: var(--stone-lit);
+  font-size: clamp(20px, 2vw, 26px);
+  color: #d6cdbd;
+}
+
+.attract-rule {
+  display: block;
+  width: 56px;
+  height: 1px;
+  margin: 34px 0 10px;
+  background: var(--brass);
+  opacity: 0.8;
 }
 
 .attract-action {
   font-size: 16px;
-  margin-bottom: 18px;
 }
 
 .attract-foot {
-  margin: 0;
+  margin: 6px 0 0;
   font-size: 11px;
+  letter-spacing: 0.02em;
   color: var(--stone-lit);
 }
 
@@ -335,7 +379,8 @@ button:focus-visible {
   min-height: 44px;
   padding: 0 2px;
   font-size: 13px;
-  color: var(--stone-lit);
+  letter-spacing: 0.02em;
+  color: #c4bcad;
   transition: color var(--fade) var(--ease);
 }
 
@@ -396,7 +441,8 @@ button:focus-visible {
 
 .prompt {
   text-align: center;
-  margin-top: -6px;
+  margin-top: 2px;
+  padding: 0 12px;
 }
 
 /* The one serif line during play: the question. */
@@ -422,19 +468,20 @@ button:focus-visible {
 }
 
 .prompt-sub {
-  margin: 6px 0 0;
-  font-size: 13px;
-  color: var(--stone-lit);
+  margin: 8px 0 0;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+  color: #d3cab9;
   font-variant-numeric: tabular-nums;
 }
 
 .hud-bottom {
   bottom: 0;
-  padding: 10px clamp(16px, 6vw, 72px) max(12px, env(safe-area-inset-bottom));
-  gap: 14px;
+  padding: 10px clamp(16px, 6vw, 72px) max(14px, env(safe-area-inset-bottom));
+  gap: 16px;
 }
 
-/* Answer pad: piano rhythm — naturals tall and cream, accidentals short and rosewood. No container. */
+/* Answer pad: piano rhythm — ivory naturals, tall; ebony accidentals, short. No container. */
 .pad {
   display: grid;
   grid-template-columns: repeat(12, minmax(42px, 54px));
@@ -443,46 +490,75 @@ button:focus-visible {
   align-items: start;
 }
 
+/*
+ * A key: slightly bevelled — a lit top edge, an inner shade along the front —
+ * and set on the desk with a soft drop shadow. `--ring` carries the state
+ * outline so it composes with the bevel.
+ */
 .note {
+  --ring: 0 0 0 0 transparent;
+  --face: linear-gradient(180deg, #f7f1e3 0%, #efe6d3 72%, #e6dbc4 100%);
+  --edge-hi: rgba(255, 252, 244, 0.95);
+  --edge-lo: rgba(120, 96, 62, 0.22);
+  position: relative;
   min-height: 56px;
-  border-radius: 2px;
-  font-size: 15px;
+  padding-top: 2px;
+  border-radius: 2px 2px 5px 5px;
+  font-family: var(--display);
+  font-size: 21px;
   font-weight: 500;
-  background: var(--paper);
-  border: 1px solid rgba(28, 25, 22, 0.25);
-  color: var(--ink);
-  box-shadow: 0 2px 6px rgba(8, 5, 3, 0.4);
+  line-height: 1;
+  font-variant-numeric: lining-nums;
+  color: #2a241e;
+  /* Ivory: faint lengthwise grain over a warm off-white face. */
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75 0.035' numOctaves='2' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.42 0 0 0 0 0.33 0 0 0 0 0.2 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E"),
+    var(--face);
+  box-shadow:
+    var(--ring),
+    inset 0 1px 0 var(--edge-hi),
+    inset 1px 0 0 rgba(255, 252, 244, 0.35),
+    inset 0 -4px 0 var(--edge-lo),
+    inset 0 -5px 6px -4px rgba(90, 70, 44, 0.25),
+    0 1px 1px rgba(8, 5, 3, 0.55),
+    0 4px 10px -2px rgba(8, 5, 3, 0.55);
   transition:
-    background 200ms var(--ease),
     color 200ms var(--ease),
-    border-color 200ms var(--ease),
+    box-shadow 200ms var(--ease),
     transform 120ms var(--ease),
     opacity 280ms var(--ease);
 }
 
+/* Ebony: near-black with a dull polish; the label is ivory. */
 .note.sharp {
+  --face: linear-gradient(180deg, #2b2622 0%, #181512 60%, #100d0b 100%);
+  --edge-hi: rgba(255, 244, 226, 0.16);
+  --edge-lo: rgba(0, 0, 0, 0.55);
   min-height: 44px;
-  background: var(--rosewood);
-  border-color: rgba(237, 230, 217, 0.16);
-  color: #e9dfcc;
+  font-size: 19px;
+  color: #e6dccb;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75 0.035' numOctaves='2' seed='9' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 0.95 0 0 0 0 0.88 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E"),
+    var(--face);
 }
 
 .note:hover {
-  border-color: var(--brass);
+  --ring: 0 0 0 1px rgba(176, 141, 87, 0.75);
 }
 
 .note:active {
-  transform: scale(0.98);
+  transform: translateY(1px) scale(0.98);
 }
 
 .note.correct {
-  background: var(--correct);
-  border-color: var(--correct);
-  color: var(--paper);
+  --face: linear-gradient(180deg, #3a8270 0%, #2f6f5e 70%, #285e50 100%);
+  --edge-hi: rgba(220, 255, 240, 0.35);
+  --edge-lo: rgba(0, 0, 0, 0.25);
+  color: #f5f0e6;
 }
 
 .note.miss {
-  border-color: var(--miss);
+  --ring: 0 0 0 1.5px var(--miss);
   color: var(--miss);
 }
 
@@ -491,12 +567,12 @@ button:focus-visible {
 }
 
 .note.reveal {
-  border-color: var(--correct);
+  --ring: 0 0 0 1.5px var(--correct);
   color: var(--correct);
-  box-shadow: inset 0 0 0 1px var(--correct);
 }
 
 .note.sharp.reveal {
+  --ring: 0 0 0 1.5px var(--correct-lit);
   color: var(--correct-lit);
 }
 
@@ -513,7 +589,7 @@ button:focus-visible {
   align-items: center;
   gap: 16px;
   font-size: 12px;
-  color: var(--stone-lit);
+  color: #c4bcad;
   text-shadow: var(--lift);
 }
 
@@ -713,11 +789,27 @@ button:focus-visible {
 /* -------------------------------------------------------- Phone layout */
 
 @media (max-width: 760px) {
+  .hud-top {
+    padding-bottom: 4px;
+  }
   .prompt {
-    margin-top: 0;
+    margin-top: -4px;
   }
   .prompt-title {
-    font-size: 30px;
+    font-size: 28px;
+  }
+  .prompt-sub {
+    margin-top: 6px;
+    font-size: 13px;
+  }
+  /* On a phone the headstock runs up under the question: a deeper shade there. */
+  .prompt.scrimmed {
+    --scrim: radial-gradient(closest-side, rgba(12, 9, 7, 0.62), rgba(12, 9, 7, 0.4) 50%, rgba(12, 9, 7, 0));
+  }
+  .hud-bottom {
+    gap: 10px;
+    padding-left: 14px;
+    padding-right: 14px;
   }
   .pad {
     grid-template-columns: repeat(6, 1fr);
@@ -726,18 +818,28 @@ button:focus-visible {
     gap: 6px;
   }
   .note {
-    min-height: 52px;
+    min-height: 50px;
   }
   .note.sharp {
-    min-height: 46px;
+    min-height: 44px;
   }
+  /* Phone: the progress rule gets its own line under the words, so nothing crowds. */
   .meta {
-    gap: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 18px;
+    row-gap: 0;
+  }
+  .meta .hairline {
+    order: 1;
+    flex: 1 0 100%;
   }
   .meta-stage {
+    flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 44vw;
   }
   .ledger {
     padding: 30px 24px 18px;

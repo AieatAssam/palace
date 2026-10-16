@@ -1,6 +1,7 @@
 import { ContactShadows, Environment, Lightformer, PerformanceMonitor } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Bloom, EffectComposer, N8AO, Vignette } from '@react-three/postprocessing';
+import { Bloom, DepthOfField, EffectComposer, N8AO, Vignette } from '@react-three/postprocessing';
+import type { DepthOfFieldEffect } from 'postprocessing';
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { isCalm } from '../motion';
@@ -8,9 +9,9 @@ import { usePalace } from '../store';
 import { Desk, SHADOW_Y } from './Desk';
 import { Fretboard } from './Fretboard';
 import { COLORS } from './palette';
-import { markerPoint, neckMatrix, neckToWorld, regionBounds } from './layout';
+import { BOARD_THICKNESS, markerPoint, neckMatrix, neckToWorld, regionBounds } from './layout';
 import { LITE } from './quality';
-import { renderInfo, setInspector, setProjector, useView } from './view';
+import { focusPoint, renderInfo, setInspector, setProjector, useView } from './view';
 
 const FOV = 30;
 
@@ -25,6 +26,13 @@ const FOV = 30;
 const HDRI = `${import.meta.env.BASE_URL}hdri/reading_room_1k.hdr`;
 /** Swings the room's window (≈ az 210° in the file) round to the upper left of the screen. */
 const HDRI_ROTATION: [number, number, number] = [0, 2.9, 0];
+/**
+ * Left-handed: the whole photograph mirrors, window included, so the hero
+ * camera (which swings to the other side) never looks straight into it. The
+ * window sits at world azimuth −135° (−X, −Z); reflecting it to +135° is a
+ * further 270° turn of the map.
+ */
+const HDRI_ROTATION_MIRRORED: [number, number, number] = [0, 2.9 + (3 * Math.PI) / 2 - 2 * Math.PI, 0];
 
 function isCoarsePointer() {
   return typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
@@ -54,14 +62,90 @@ function useLayout() {
 }
 
 /**
+ * Hero camera: low and angled, a three-quarter view from the player's side
+ * and a little towards the headstock, so the board's edge and the rounded
+ * neck back read as a carved object. Portrait sits higher so the frets keep
+ * their rhythm down the phone; landscape sits lower and swings further round.
+ */
+const HERO = {
+  landscape: { elevation: 28, yaw: -22 },
+  portrait: { elevation: 42, yaw: -11 },
+} as const;
+
+interface Framing {
+  look: THREE.Vector3;
+  pos: THREE.Vector3;
+  /** Centre of the unlocked region on the board: what the lens focuses on. */
+  focus: THREE.Vector3;
+}
+
+/** Screen box (NDC, y up) the region should fill. */
+interface Box {
+  x0: number;
+  x1: number;
+  y0: number;
+  y1: number;
+}
+
+const probe = new THREE.PerspectiveCamera(FOV, 1, 0.5, 120);
+
+/**
+ * Fits the region's corner points (board top, board edge and neck back) into
+ * `box` from a fixed viewing direction: scales the distance until the
+ * projected extent fills the box, then slides the look point so it's centred.
+ * Perspective makes this nonlinear; a handful of passes converge.
+ */
+function fitCamera(points: THREE.Vector3[], dir: THREE.Vector3, aspect: number, box: Box): Framing {
+  const look = new THREE.Vector3();
+  for (const p of points) look.add(p);
+  look.divideScalar(points.length);
+  const focus = look.clone().setY(0);
+  probe.aspect = aspect;
+  probe.updateProjectionMatrix();
+  probe.up.set(0, 1, 0);
+  let D = 20;
+  const v = new THREE.Vector3();
+  const right = new THREE.Vector3();
+  const up = new THREE.Vector3();
+  const tanV = Math.tan(THREE.MathUtils.degToRad(FOV / 2));
+  for (let i = 0; i < 8; i++) {
+    probe.position.copy(look).addScaledVector(dir, D);
+    probe.lookAt(look);
+    probe.updateMatrixWorld();
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    for (const p of points) {
+      v.copy(p).project(probe);
+      x0 = Math.min(x0, v.x);
+      x1 = Math.max(x1, v.x);
+      y0 = Math.min(y0, v.y);
+      y1 = Math.max(y1, v.y);
+    }
+    const s = Math.max((x1 - x0) / (box.x1 - box.x0), (y1 - y0) / (box.y1 - box.y0));
+    // Recentre at the current distance, then dolly.
+    const dx = (box.x0 + box.x1) / 2 - (x0 + x1) / 2;
+    const dy = (box.y0 + box.y1) / 2 - (y0 + y1) / 2;
+    right.setFromMatrixColumn(probe.matrixWorld, 0);
+    up.setFromMatrixColumn(probe.matrixWorld, 1);
+    look.addScaledVector(right, -dx * D * tanV * aspect).addScaledVector(up, -dy * D * tanV);
+    D *= s;
+  }
+  return { look, pos: look.clone().addScaledVector(dir, D), focus };
+}
+
+/**
  * Positions the neck (portrait: nut at top; landscape: nut at left, mirrored
  * for left-handed players) and dollies the camera to frame the unlocked region
- * inside the space left free by the HUD.
+ * inside the space left free by the HUD. On the title the neck steps aside
+ * (right and down, or down on a phone) to leave the wordmark clear space.
  */
 function NeckRig({ children }: { children: React.ReactNode }) {
   const { portrait, size } = useLayout();
   const leftHanded = usePalace((s) => s.saved.settings.leftHanded);
   const stageIdx = usePalace((s) => s.saved.stage);
+  const attract = usePalace((s) => s.screen === 'attract');
   const insets = useView((s) => s.insets);
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const gl = useThree((s) => s.gl);
@@ -71,38 +155,49 @@ function NeckRig({ children }: { children: React.ReactNode }) {
 
   const target = useMemo(() => {
     const stage = usePalace.getState().stage();
-    const b = regionBounds(stage.maxFret);
-    const corners = [
-      neckToWorld(b.x0, b.z0, view),
-      neckToWorld(b.x1, b.z0, view),
-      neckToWorld(b.x0, b.z1, view),
-      neckToWorld(b.x1, b.z1, view),
-    ];
-    const xs = corners.map((c) => c[0]);
-    const zs = corners.map((c) => c[1]);
-    const minX = Math.min(...xs);
-    const maxX = Math.max(...xs);
-    const minZ = Math.min(...zs);
-    const maxZ = Math.max(...zs);
-    const W = maxX - minX;
-    const H = maxZ - minZ;
-    const cx = (minX + maxX) / 2;
-    const cz = (minZ + maxZ) / 2;
+    // Portrait (narrow) frames the strings in play; landscape and the title show the whole neck.
+    const b = regionBounds(stage.maxFret, portrait && !attract ? stage.strings : undefined);
+    // Board top, the board's lower edge and the bottom of the neck back, so the
+    // carved side is framed along with the strings.
+    const points: THREE.Vector3[] = [];
+    for (const x of [b.x0, b.x1])
+      for (const z of [b.z0, b.z1]) {
+        const [wx, wz] = neckToWorld(x, z, view);
+        points.push(new THREE.Vector3(wx, 0.2, wz), new THREE.Vector3(wx, -BOARD_THICKNESS, wz));
+      }
+    for (const x of [b.x0, b.x1]) {
+      const [wx, wz] = neckToWorld(x, 0, view);
+      points.push(new THREE.Vector3(wx, -0.82, wz));
+    }
 
-    const tilt = THREE.MathUtils.degToRad(portrait ? 16 : 24);
-    const t = Math.tan(THREE.MathUtils.degToRad(FOV / 2));
-    const aspect = size.width / Math.max(1, size.height);
-    const avail = Math.max(0.3, (size.height - insets.top - insets.bottom) / Math.max(1, size.height));
-    const dV = (H * Math.cos(tilt)) / (2 * t * avail * 0.94);
-    const dH = W / (2 * t * aspect * (portrait ? 0.96 : 0.9));
-    const D = Math.max(dV, dH) * 1.02;
-    // Shift so the region centres inside the free band between the HUD panels.
-    const yc = (insets.bottom - insets.top) / 2 / Math.max(1, size.height / 2);
-    const look = new THREE.Vector3(cx, 0, cz + (yc * D * t) / Math.cos(tilt));
-    const pos = look.clone().add(new THREE.Vector3(0, D * Math.cos(tilt), D * Math.sin(tilt)));
-    return { look, pos };
+    const hero = portrait ? HERO.portrait : HERO.landscape;
+    const el = THREE.MathUtils.degToRad(hero.elevation);
+    // Yaw towards the headstock (and the low-E side in portrait): mirrored for left-handers.
+    const yaw = THREE.MathUtils.degToRad(hero.yaw) * (leftHanded ? -1 : 1);
+    const dir = new THREE.Vector3(Math.sin(yaw) * Math.cos(el), Math.sin(el), Math.cos(yaw) * Math.cos(el));
+
+    const h = Math.max(1, size.height);
+    const aspect = size.width / h;
+    let box: Box;
+    if (attract) {
+      // Title: clear space for the wordmark. Landscape keeps a left column
+      // (right for left-handers, so the title sits over the desk, not the
+      // headstock); portrait keeps the upper part of the screen.
+      box = portrait
+        ? { x0: -0.96, x1: 0.96, y0: -0.98, y1: -0.12 }
+        : leftHanded
+          ? { x0: -0.98, x1: 0.05, y0: -0.92, y1: 0.3 }
+          : { x0: -0.05, x1: 0.98, y0: -0.92, y1: 0.3 };
+    } else {
+      const top = 1 - (2 * insets.top) / h;
+      const bottom = -1 + (2 * insets.bottom) / h;
+      box = portrait
+        ? { x0: -0.97, x1: 0.97, y0: bottom, y1: Math.max(bottom + 0.3, top) }
+        : { x0: -0.92, x1: 0.92, y0: bottom * 0.96, y1: Math.max(bottom + 0.3, top) * 0.96 };
+    }
+    return fitCamera(points, dir, aspect, box);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, portrait, size.width, size.height, insets.top, insets.bottom, stageIdx]);
+  }, [view, portrait, attract, size.width, size.height, insets.top, insets.bottom, stageIdx]);
 
   const lookNow = useRef(target.look.clone());
   const first = useRef(true);
@@ -130,8 +225,9 @@ function NeckRig({ children }: { children: React.ReactNode }) {
       camera.position.lerp(goal, k);
       lookNow.current.lerp(target.look, k);
     }
-    camera.up.set(0, 0, -1);
+    camera.up.set(0, 1, 0);
     camera.lookAt(lookNow.current);
+    focusPoint.copy(target.focus);
   });
 
   // Register a projector (and scene stats) for the e2e test hooks.
@@ -182,10 +278,22 @@ function NeckRig({ children }: { children: React.ReactNode }) {
       // Nearest string on screen: distance to each rendered string segment.
       let renderedString = -1;
       let best = Infinity;
+      // A string can run past the camera (the low hero view sits over the far
+      // strings), so clip each segment to the near plane before projecting it.
+      const view = camera.matrixWorldInverse;
+      const nearZ = -camera.near * 1.01;
+      const clip = (p: THREE.Vector3, q: THREE.Vector3) => {
+        const pc = p.clone().applyMatrix4(view);
+        const qc = q.clone().applyMatrix4(view);
+        if (pc.z <= nearZ) return p;
+        return p.clone().lerp(q, (pc.z - nearZ) / (pc.z - qc.z));
+      };
       for (const mesh of strings) {
         const h = (mesh.geometry as THREE.CylinderGeometry).parameters.height;
-        const a = toPage(new THREE.Vector3(0, -h / 2, 0).applyMatrix4(mesh.matrixWorld));
-        const b = toPage(new THREE.Vector3(0, h / 2, 0).applyMatrix4(mesh.matrixWorld));
+        const wa = new THREE.Vector3(0, -h / 2, 0).applyMatrix4(mesh.matrixWorld);
+        const wb = new THREE.Vector3(0, h / 2, 0).applyMatrix4(mesh.matrixWorld);
+        const a = toPage(clip(wa, wb));
+        const b = toPage(clip(wb, wa));
         const ab = b.clone().sub(a);
         const t = THREE.MathUtils.clamp(at.clone().sub(a).dot(ab) / ab.lengthSq(), 0, 1);
         const dist = a.addScaledVector(ab, t).distanceTo(at);
@@ -217,6 +325,12 @@ function NeckRig({ children }: { children: React.ReactNode }) {
 
   return (
     <group ref={group} matrixAutoUpdate={false}>
+      {/*
+        A low bench lamp on the player's side, in neck space so it follows
+        portrait and left-handed layouts: it rakes across the board's edge and
+        the rounded neck back that the window key (behind) leaves dark.
+      */}
+      <directionalLight position={[-3, 1.4, 6]} intensity={LITE ? 0.5 : 0.55} color="#ffd9b0" />
       {children}
     </group>
   );
@@ -227,17 +341,18 @@ function NeckRig({ children }: { children: React.ReactNode }) {
  * from the upper left and a weak cool fill opposite. Lite: the same key and
  * fill over a cheap Lightformer room (no file load).
  */
-function Studio() {
+function Studio({ mirrored }: { mirrored: boolean }) {
+  const sx = mirrored ? -1 : 1;
   return (
     <>
       <hemisphereLight args={['#f6ead8', '#2a2018', LITE ? 0.45 : 0.18]} />
-      {/* World −X is screen left, −Z screen top. */}
-      <directionalLight position={[-5, 9, -4]} intensity={LITE ? 1.5 : 1.7} color="#fff0dc" />
-      <directionalLight position={[6, 3, 5]} intensity={0.22} color="#dfe6ee" />
+      {/* World −X is screen left, −Z screen top (mirrored for left-handers). */}
+      <directionalLight position={[-5 * sx, 9, -4]} intensity={LITE ? 1.5 : 1.7} color="#fff0dc" />
+      <directionalLight position={[6 * sx, 3, 5]} intensity={0.22} color="#dfe6ee" />
       {LITE ? (
         <Environment resolution={64} frames={1}>
-          <Lightformer form="rect" intensity={2} color="#fff0dc" position={[-4, 6, -3]} rotation={[Math.PI / 2, 0, 0]} scale={[8, 4, 1]} />
-          <Lightformer form="rect" intensity={0.8} color="#e8eef2" position={[6, 2, 2]} rotation={[0, -Math.PI / 2, 0]} scale={[6, 2, 1]} />
+          <Lightformer form="rect" intensity={2} color="#fff0dc" position={[-4 * sx, 6, -3]} rotation={[Math.PI / 2, 0, 0]} scale={[8, 4, 1]} />
+          <Lightformer form="rect" intensity={0.8} color="#e8eef2" position={[6 * sx, 2, 2]} rotation={[0, (-sx * Math.PI) / 2, 0]} scale={[6, 2, 1]} />
           <mesh scale={30}>
             <sphereGeometry args={[1, 16, 16]} />
             <meshBasicMaterial color="#3a2e24" side={THREE.BackSide} />
@@ -245,14 +360,28 @@ function Studio() {
         </Environment>
       ) : (
         <Suspense fallback={null}>
-          <Environment files={HDRI} environmentIntensity={0.75} environmentRotation={HDRI_ROTATION} />
+          <Environment files={HDRI} environmentIntensity={0.75} environmentRotation={mirrored ? HDRI_ROTATION_MIRRORED : HDRI_ROTATION} />
         </Suspense>
       )}
     </>
   );
 }
 
+/** Keeps the lens on the framed region and the in-focus band proportional to the viewing distance. */
+function Focus({ dof }: { dof: React.RefObject<DepthOfFieldEffect | null> }) {
+  const camera = useThree((s) => s.camera);
+  useFrame(() => {
+    const e = dof.current;
+    if (!e) return;
+    if (!e.target) e.target = new THREE.Vector3();
+    e.target.copy(focusPoint);
+    e.cocMaterial.focusRange = camera.position.distanceTo(focusPoint) * 0.55;
+  });
+  return null;
+}
+
 function Effects({ tier }: { tier: Quality['tier'] }) {
+  const dof = useRef<DepthOfFieldEffect>(null);
   if (tier === 0) return null;
   // Bloom threshold sits above everything but the brightest specular ticks on
   // nickel and brass: it never blooms the cue, the pearl or the wood.
@@ -266,13 +395,19 @@ function Effects({ tier }: { tier: Quality['tier'] }) {
       </EffectComposer>
     );
   }
-  // Desktop: soft contact occlusion under strings, frets and the neck. No depth of field — the neck stays sharp.
+  // Desktop: soft contact occlusion under strings, frets and the neck, and a
+  // shallow depth of field — the unlocked region stays sharp, the far desk
+  // and headstock fall gently soft, as in a bench photograph.
   return (
-    <EffectComposer multisampling={4}>
-      <N8AO halfRes quality="performance" aoRadius={0.5} distanceFalloff={0.6} intensity={1.6} color="#120c08" />
-      {bloom}
-      {vignette}
-    </EffectComposer>
+    <>
+      <Focus dof={dof} />
+      <EffectComposer multisampling={4}>
+        <N8AO halfRes quality="performance" aoRadius={0.5} distanceFalloff={0.6} intensity={1.6} color="#120c08" />
+        <DepthOfField ref={dof} target={[0, 0, 0]} focusRange={10} bokehScale={2.2} resolutionScale={0.5} />
+        {bloom}
+        {vignette}
+      </EffectComposer>
+    </>
   );
 }
 
@@ -305,7 +440,7 @@ export function Scene() {
           }
         />
       )}
-      <Studio />
+      <Studio mirrored={leftHanded} />
       <NeckRig>
         <Desk />
         <Fretboard />
