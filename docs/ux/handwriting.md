@@ -12,7 +12,7 @@ A restrained copperplate hand on the 3D cards only. Everything functional (butto
 | Every primer and session card | "P" cypher in a double gilt ring at the head | gold foil |
 | Session card | Oxblood wax seal with a raised lip and uneven rim, "P" pressed in | wax |
 
-**Ink.** Iron-gall blue-black `#1f2638` (≥ 13:1 on the page). Each glyph takes one of six nearby tones (troika `colorRanges`, hashed from the text so redraws do not shimmer), at 94 % fill, with a 30 % dark halo (`outlineBlur` 9 %) that bleeds into the paper. Script sizes are 0.30–0.34 card units.
+**Ink.** Iron-gall blue-black `#121828` (≥ 15:1 before the halo on the page). Each glyph takes one of six nearby tones (troika `colorRanges`, hashed from the text so redraws do not shimmer), at 96 % fill, with a 85 % iron halo (`outlineWidth` 2.5 %, `outlineBlur` 4 %: it thickens the hairlines and softens the edge as ink spreads in the fibres) that bleeds into the paper. SDF glyph size is a power of two (troika's atlas needs it). Script sizes are 0.34 card units.
 
 **Gilt edging.** The page's deckle edge is burnished gold leaf, a hair wider than the paper.
 

@@ -21,7 +21,7 @@ const BEATS = [
 /** The one personal line, in a hand. */
 const LINE = 'Take your time.';
 const NUMERALS = ['I', 'II', 'III'];
-const HEIGHT = 5.4;
+const HEIGHT = 6;
 const X = 1.2;
 
 /** First visit only: three beats on a page laid on the desk. Tap anywhere to turn it. */

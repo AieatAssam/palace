@@ -24,9 +24,9 @@ import { sheetDom, sheetPose, sheetUi } from './view';
  */
 const FONTS: Record<SheetFont, string> = { roman: romanFont, smcp: smcpFont, italic: italicFont, figures: figuresFont, script: scriptFont };
 /** On cream paper: all four clear 4.5:1. */
-const INK: Record<SheetInk, string> = { ink: '#1c1916', soft: '#4a443c', quiet: '#5f594f', danger: '#8a4527', gilt: '#7a5c2b', iron: '#1f2638' };
+const INK: Record<SheetInk, string> = { ink: '#1c1916', soft: '#4a443c', quiet: '#5f594f', danger: '#8a4527', gilt: '#7a5c2b', iron: '#121828' };
 /** Iron-gall ink never dries to one tone: each glyph of a script word takes one of these (all above 10:1 on the page). */
-const IRON_TONES = ['#1a2132', '#1f2638', '#262e45', '#1c2336', '#2b3350', '#20283b'];
+const IRON_TONES = ['#0d1220', '#121828', '#171f36', '#0f1526', '#1b2440', '#141b2e'];
 const OXBLOOD = '#5b1017';
 const BRASS = '#b08d57';
 const GILT = '#8a6a37';
@@ -278,10 +278,10 @@ function Script({ item, onBounds }: { item: SheetText; onBounds(item: SheetItem,
       anchorX={align}
       anchorY="bottom-baseline"
       textAlign={align}
-      sdfGlyphSize={LITE ? 32 : 96}
+      sdfGlyphSize={LITE ? 32 : 128}
       {...(colorRanges ? { colorRanges } : {})}
-      fillOpacity={LITE ? 1 : 0.94}
-      {...(LITE ? {} : { outlineColor: '#141a2c', outlineOpacity: 0.3, outlineBlur: '9%', outlineWidth: '1%' })}
+      fillOpacity={LITE ? 1 : 0.96}
+      {...(LITE ? {} : { outlineColor: '#1a2132', outlineOpacity: 0.85, outlineBlur: '4%', outlineWidth: '2.5%' })}
       onSync={(t: { textRenderInfo?: { blockBounds: Bounds } }) => t.textRenderInfo && onBounds(item, t.textRenderInfo.blockBounds)}
     >
       {item.text}
@@ -491,7 +491,7 @@ function Monogram({ y, material }: { y: number; material: THREE.Material | null 
         position={[0.01, -0.16, 0.002]}
         anchorX="center"
         anchorY="bottom-baseline"
-        sdfGlyphSize={LITE ? 32 : 96}
+        sdfGlyphSize={LITE ? 32 : 128}
         material={material ?? undefined}
         {...(LITE ? {} : { outlineColor: '#4a3a1c', outlineOpacity: 0.25, outlineBlur: '6%', outlineOffsetX: '-1.5%', outlineOffsetY: '2%', outlineWidth: 0 })}
       >
