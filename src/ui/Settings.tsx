@@ -85,7 +85,7 @@ export function Settings({ onClose, onReplayPrimer }: { onClose: () => void; onR
     if (confirming) {
       items.push(
         { kind: 'text', text: 'Keep', x: -0.7, y: linkY - 0.5, size: 0.23, font: 'smcp', ink: 'soft', align: 'center' },
-        { kind: 'text', text: 'Clear everything', x: 0.5, y: linkY - 0.5, size: 0.23, font: 'smcp', ink: 'danger', align: 'center' },
+        { kind: 'text', text: 'Clear all', x: 0.5, y: linkY - 0.5, size: 0.23, font: 'smcp', ink: 'danger', align: 'center' },
       );
       rects.push({ id: 'keep', x: -0.7, y: linkY - 0.43, w: 0.9, h: 0.5 }, { id: 'clear-confirm', x: 0.5, y: linkY - 0.43, w: 1.7, h: 0.5 });
     } else {
@@ -116,7 +116,7 @@ export function Settings({ onClose, onReplayPrimer }: { onClose: () => void; onR
           {
             id: 'clear-confirm',
             testId: 'clear-confirm',
-            label: 'Clear everything',
+            label: 'Clear all',
             onActivate: () => {
               reset();
               setConfirming(false);

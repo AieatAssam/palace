@@ -69,7 +69,7 @@ function Prompt() {
   const found = usePalace((s) => s.found);
   const feedback = usePalace((s) => s.feedback);
   if (q.kind === 'name') {
-    let line = 'What note is this?';
+    let line = 'Name this note.';
     if (feedback?.kind === 'correct') line = pretty(q.answer);
     if (feedback?.kind === 'miss') line = `It\u2019s ${pretty(q.answer)}`;
     return (

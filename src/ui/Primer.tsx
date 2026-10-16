@@ -5,16 +5,16 @@ import { type SheetItem, type SheetRect, SHEET_WIDTH } from './sheet';
 
 const BEATS = [
   {
-    title: 'A light rests on the neck.',
-    body: 'Each question is one place on the fretboard, marked in brass. Name the note it sounds.',
+    title: 'A brass light marks a place.',
+    body: 'Name the note that sounds there.',
   },
   {
-    title: 'Answer on the keys, or the neck.',
-    body: 'In Name, choose from the twelve keys. In Find, touch every place a note lives.',
+    title: 'Name it, or find it.',
+    body: 'Name: pick one of twelve keys. Find: touch every place the note lives.',
   },
   {
-    title: 'The room remembers.',
-    body: 'Sure answers settle; slow ones return sooner. New strings and frets open as you learn.',
+    title: 'Slow answers come back.',
+    body: 'Sure answers rest. Slow ones return sooner. Strings and frets open as you advance.',
   },
 ];
 
@@ -53,8 +53,8 @@ export function Primer() {
       { kind: 'rule', y: 1.12, x0: -X, x1: X, weight: 'double' },
       { kind: 'text', text: b.title, x: 0, y: 0.9, size: 0.34, font: 'italic', align: 'center', maxWidth: 2.4, lineHeight: 1.12 },
       { kind: 'text', text: b.body, x: 0, y: -0.28, size: 0.2, align: 'center', maxWidth: 2.4, lineHeight: 1.4 },
-      { kind: 'text', text: 'Skip primer', x: -0.78, y: -1.92, size: 0.2, font: 'smcp', ink: 'quiet', align: 'center' },
-      { kind: 'text', text: last ? 'Begin' : 'Continue', x: 0.62, y: -1.92, size: 0.23, font: 'smcp', align: 'center' },
+      { kind: 'text', text: 'Skip', x: -0.78, y: -1.92, size: 0.2, font: 'smcp', ink: 'quiet', align: 'center' },
+      { kind: 'text', text: last ? 'Begin' : 'Next', x: 0.62, y: -1.92, size: 0.23, font: 'smcp', align: 'center' },
     );
     const rects: SheetRect[] = [
       { id: 'skip', x: -0.78, y: -1.86, w: 1.2, h: 0.5 },
@@ -71,8 +71,8 @@ export function Primer() {
       onEscape={done}
       onBackdrop={advance}
       controls={[
-        { id: 'skip', testId: 'primer-skip', label: 'Skip primer', onActivate: done },
-        { id: 'next', testId: 'primer-next', label: last ? 'Begin' : 'Continue', onActivate: advance, autoFocus: true },
+        { id: 'skip', testId: 'primer-skip', label: 'Skip', onActivate: done },
+        { id: 'next', testId: 'primer-next', label: last ? 'Begin' : 'Next', onActivate: advance, autoFocus: true },
       ]}
     >
       <p className="numeral" aria-label={`${beat + 1} of ${BEATS.length}`}>
