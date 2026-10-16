@@ -261,8 +261,8 @@ for (const leftHanded of [false, true]) {
       await expect
         .poll(() => page.evaluate(() => window.__palace!.highlight()))
         .toMatchObject({ string, fret, tone: 'ask', renderedString: string, renderedFret: fret });
-      const h = (await page.evaluate(() => window.__palace!.highlight()))!;
-      const projected = (await page.evaluate((p) => window.__palace!.project(p), q.position))!;
+      // Read both in the same task so camera settling between calls can't skew them.
+      const { h, projected } = (await page.evaluate((p) => ({ h: window.__palace!.highlight()!, projected: window.__palace!.project(p)! }), q.position));
       expect(Math.hypot(h.screen.x - projected.x, h.screen.y - projected.y)).toBeLessThan(8);
 
       await page.locator(`button[data-note="${q.answer}"]`).click();
