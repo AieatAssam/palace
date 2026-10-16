@@ -7,8 +7,9 @@ import figuresFont from '../assets/fonts/ledger-figures.ttf?url';
 import italicFont from '../assets/fonts/ledger-italic.ttf?url';
 import romanFont from '../assets/fonts/ledger-roman.ttf?url';
 import smcpFont from '../assets/fonts/ledger-smcp.ttf?url';
+import scriptFont from '../assets/fonts/pinyon-script.ttf?url';
 import { isCalm } from '../motion';
-import { type SheetFont, type SheetInk, type SheetItem, type SheetRect, useSheet } from '../ui/sheet';
+import { type SheetFont, type SheetInk, type SheetItem, type SheetRect, type SheetText, useSheet } from '../ui/sheet';
 import { DESK_Y } from './Desk';
 import { LITE } from './quality';
 import { makeCapsule, makeCardShadow, makeImpression, makeLeather, makePaper } from './textures';
@@ -17,12 +18,16 @@ import { sheetDom, sheetPose, sheetUi } from './view';
 /**
  * A card laid on the desk: tooled leather, a ledger page set into it and a brass edge.
  * It slides in from the player's side while the camera eases over to frame it.
+ * A restrained hand (Pinyon Script, iron-gall ink) is kept for a few accents; everything functional is Garamond.
  * The words are SDF text in the self-hosted EB Garamond (troika reads TTF, not WOFF2;
  * the files in assets/fonts have the old-style figures and small caps baked into the cmap).
  */
-const FONTS: Record<SheetFont, string> = { roman: romanFont, smcp: smcpFont, italic: italicFont, figures: figuresFont };
+const FONTS: Record<SheetFont, string> = { roman: romanFont, smcp: smcpFont, italic: italicFont, figures: figuresFont, script: scriptFont };
 /** On cream paper: all four clear 4.5:1. */
-const INK: Record<SheetInk, string> = { ink: '#1c1916', soft: '#4a443c', quiet: '#5f594f', danger: '#8a4527', gilt: '#7a5c2b' };
+const INK: Record<SheetInk, string> = { ink: '#1c1916', soft: '#4a443c', quiet: '#5f594f', danger: '#8a4527', gilt: '#7a5c2b', iron: '#1f2638' };
+/** Iron-gall ink never dries to one tone: each glyph of a script word takes one of these (all above 10:1 on the page). */
+const IRON_TONES = ['#1a2132', '#1f2638', '#262e45', '#1c2336', '#2b3350', '#20283b'];
+const OXBLOOD = '#5b1017';
 const BRASS = '#b08d57';
 const GILT = '#8a6a37';
 /** Focus rule under a label: 6:1 on the page. */
@@ -60,7 +65,8 @@ function useCardMaterials() {
         leather: new THREE.MeshStandardMaterial({ color: '#4a2218', roughness: 0.7 }),
         brass: new THREE.MeshStandardMaterial({ color: BRASS, roughness: 0.4, metalness: 0.6 }),
         paper: new THREE.MeshStandardMaterial({ color: '#f4ecda', roughness: 0.9, emissive: '#3e372b' }),
-        deckle: new THREE.MeshStandardMaterial({ color: '#fbf6e8', roughness: 1, emissive: '#3e372b' }),
+        deckle: new THREE.MeshStandardMaterial({ color: '#c9a45a', roughness: 0.5, metalness: 0.4 }),
+        wax: new THREE.MeshStandardMaterial({ color: OXBLOOD, roughness: 0.5 }),
         emboss: new THREE.MeshStandardMaterial({ color: '#b48f45', roughness: 0.45, metalness: 0.5 }),
         foil: null,
       };
@@ -102,7 +108,10 @@ function useCardMaterials() {
         emissive: '#4a4234',
         envMapIntensity: 0.3,
       }),
-      deckle: new THREE.MeshStandardMaterial({ color: '#fbf6e8', roughness: 1, emissive: '#4a4234', envMapIntensity: 0.2 }),
+      // Gilt page edges: burnished gold leaf along the deckle.
+      deckle: new THREE.MeshPhysicalMaterial({ color: '#d2ab5c', metalness: 1, roughness: 0.3, clearcoat: 0.4, clearcoatRoughness: 0.2, envMapIntensity: 1 }),
+      // Sealing wax: dense, slightly glossy, a deep oxblood.
+      wax: new THREE.MeshPhysicalMaterial({ color: OXBLOOD, roughness: 0.38, clearcoat: 0.55, clearcoatRoughness: 0.28, sheen: 0.4, sheenColor: new THREE.Color('#a8323a'), envMapIntensity: 0.6 }),
       // Blind-tooled gilt: raised metal ridge pressed into the hide.
       emboss: new THREE.MeshPhysicalMaterial({ color: '#c39a4a', metalness: 1, roughness: 0.34, clearcoat: 0.3, clearcoatRoughness: 0.3, envMapIntensity: 0.9 }),
       // Gold-foil headings: darkened so they hold 4.5:1 on the page.
@@ -116,6 +125,7 @@ const gold = new THREE.MeshBasicMaterial({ color: GILT });
 const track = new THREE.MeshBasicMaterial({ color: '#b3a78e' });
 const hair = new THREE.MeshBasicMaterial({ color: '#8a8272' });
 
+const rings = { outer: new THREE.RingGeometry(0.255, 0.265, 48), inner: new THREE.RingGeometry(0.225, 0.2295, 48) };
 const capsule = new THREE.MeshBasicMaterial({ color: RULE, map: makeCapsule(), transparent: true, depthWrite: false, opacity: 0 });
 const impression = new THREE.MeshBasicMaterial({ color: '#2e2414', map: makeImpression(), transparent: true, depthWrite: false, opacity: 0 });
 
@@ -147,6 +157,31 @@ function deckledPage(w: number, h: number, amp: number, seed: number) {
   return g;
 }
 
+/** A seal of wax: a round blob with an uneven rim and a thin flash of squeezed-out wax, pressed to a flat disc with a raised lip. */
+function waxSeal(r: number, seed: number) {
+  let a = seed;
+  const rnd = () => {
+    a = (a * 1664525 + 1013904223) >>> 0;
+    return a / 4294967296;
+  };
+  const n = 36;
+  const wob = Array.from({ length: n }, () => rnd());
+  const pts = Array.from({ length: n }, (_, i) => {
+    const t = (i / n) * Math.PI * 2;
+    // Two slow lobes plus per-point jitter; one flat side where the wax ran.
+    const rad = r * (1 + 0.05 * Math.sin(2 * t + 1) + 0.04 * Math.sin(3 * t + 2) + (wob[i]! - 0.5) * 0.06);
+    return new THREE.Vector2(Math.cos(t) * rad, Math.sin(t) * rad);
+  });
+  const outer = new THREE.ExtrudeGeometry(new THREE.Shape(pts), { depth: 0.02, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.014, bevelSegments: 3, curveSegments: 6 });
+  const lip = new THREE.Shape();
+  lip.absarc(0, 0, r * 0.74, 0, Math.PI * 2, false);
+  const hole = new THREE.Path();
+  hole.absarc(0, 0, r * 0.66, 0, Math.PI * 2, true);
+  lip.holes.push(hole);
+  const ring = new THREE.ExtrudeGeometry(lip, { depth: 0.012, bevelEnabled: true, bevelThickness: 0.006, bevelSize: 0.006, bevelSegments: 2, curveSegments: 24 });
+  return { outer, ring };
+}
+
 /** A raised ridge: the outline of a rounded rectangle, `t` wide, as an extruded ring with a soft bevel. */
 function ridge(w: number, h: number, r: number, t: number, height: number) {
   const outer = roundedRect(new THREE.Shape(), w + t, h + t, r + t / 2);
@@ -163,6 +198,7 @@ type Bounds = [number, number, number, number];
 function Item({ item, foil, onBounds }: { item: SheetItem; foil: THREE.Material | null; onBounds(item: SheetItem, b: Bounds): void }) {
   switch (item.kind) {
     case 'text': {
+      if (item.font === 'script') return <Script item={item} onBounds={onBounds} />;
       const align = item.align ?? 'left';
       const font = item.font ?? 'roman';
       return (
@@ -212,6 +248,45 @@ function Item({ item, foil, onBounds }: { item: SheetItem; foil: THREE.Material 
     case 'lozenge':
       return <Flat x={item.x} y={item.y} w={0.06} h={0.06} material={gold} rot={Math.PI / 4} />;
   }
+}
+
+/** Deterministic per-glyph ink tone, so a redraw never shimmers. */
+function inkTones(text: string) {
+  const ranges: Record<number, number> = {};
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h = Math.imul(h ^ text.charCodeAt(i), 16777619) ^ (i * 40503);
+    ranges[i] = new THREE.Color(IRON_TONES[(h >>> 0) % IRON_TONES.length]!).getHex();
+  }
+  return ranges;
+}
+
+/**
+ * Copperplate accent: a fountain-pen hand in iron-gall blue-black. Each glyph takes a slightly different
+ * tone (the nib's flow varies) and a soft darker halo bleeds into the fibres of the paper.
+ */
+function Script({ item, onBounds }: { item: SheetText; onBounds(item: SheetItem, b: Bounds): void }) {
+  const align = item.align ?? 'left';
+  const colorRanges = useMemo(() => (LITE ? undefined : inkTones(item.text)), [item.text]);
+  return (
+    <Text
+      font={scriptFont}
+      fontSize={item.size}
+      color={INK[item.ink ?? 'iron']}
+      position={[item.x, item.y, TEXT_Z]}
+      rotation={[0, 0, THREE.MathUtils.degToRad(item.tilt ?? 0)]}
+      anchorX={align}
+      anchorY="bottom-baseline"
+      textAlign={align}
+      sdfGlyphSize={LITE ? 32 : 96}
+      {...(colorRanges ? { colorRanges } : {})}
+      fillOpacity={LITE ? 1 : 0.94}
+      {...(LITE ? {} : { outlineColor: '#141a2c', outlineOpacity: 0.3, outlineBlur: '9%', outlineWidth: '1%' })}
+      onSync={(t: { textRenderInfo?: { blockBounds: Bounds } }) => t.textRenderInfo && onBounds(item, t.textRenderInfo.blockBounds)}
+    >
+      {item.text}
+    </Text>
+  );
 }
 
 const ease = (t: number) => 1 - Math.pow(1 - t, 3);
@@ -273,8 +348,8 @@ export function Sheet() {
     });
     const frame = [ridge(W - 2 * PAGE_INSET + 0.1, H - 2 * PAGE_INSET + 0.1, 0.03, 0.026, 0.012), ridge(W - 2 * PAGE_INSET + 0.2, H - 2 * PAGE_INSET + 0.2, 0.05, 0.01, 0.007)];
     const page = deckledPage(W - 2 * PAGE_INSET, H - 2 * PAGE_INSET, 0.007, 91);
-    const edge = deckledPage(W - 2 * PAGE_INSET + 0.014, H - 2 * PAGE_INSET + 0.014, 0.011, 17);
-    return { leather, brass, frame, page, edge };
+    const edge = deckledPage(W - 2 * PAGE_INSET + 0.03, H - 2 * PAGE_INSET + 0.03, 0.011, 17);
+    return { leather, brass, frame, page, edge, seal: waxSeal(0.3, 5) };
   }, [W, H]);
 
   useFrame((_, dt) => {
@@ -385,10 +460,43 @@ export function Sheet() {
         <mesh geometry={geometries.page} material={m.paper} position={[0, 0, PAPER_Z]} />
         <mesh ref={markRef} geometry={unit} material={impression} visible={false} renderOrder={3} />
         <mesh ref={ruleRef} geometry={unit} material={capsule} visible={false} renderOrder={4} />
+        {last.monogram && <Monogram y={H / 2 - PAGE_INSET - 0.36} material={m.foil} />}
+        {last.seal && (
+          <group position={[last.seal.x, last.seal.y, PAPER_Z + 0.002]} rotation={[0, 0, 0.35]}>
+            <mesh geometry={geometries.seal.outer} material={m.wax} />
+            <mesh geometry={geometries.seal.ring} material={m.wax} position={[0, 0, 0.03]} />
+            <Text font={scriptFont} fontSize={0.34} color="#3c0a0f" position={[0, -0.12, 0.034]} rotation={[0, 0, -0.35]} anchorX="center" anchorY="bottom-baseline" sdfGlyphSize={LITE ? 32 : 64} fillOpacity={0.9}>
+              P
+            </Text>
+          </group>
+        )}
         {last.items.map((item, i) => (
           <Item key={`${last.key}-${i}`} item={item} foil={m.foil} onBounds={onBounds} />
         ))}
       </group>
+    </group>
+  );
+}
+
+/** A gilt "P" cypher inside a double ring, engraved at the head of the page. */
+function Monogram({ y, material }: { y: number; material: THREE.Material | null }) {
+  return (
+    <group position={[0, y, TEXT_Z - 0.002]}>
+      <mesh geometry={rings.outer} material={gold} />
+      <mesh geometry={rings.inner} material={gold} />
+      <Text
+        font={scriptFont}
+        fontSize={0.42}
+        color={GILT}
+        position={[0.01, -0.16, 0.002]}
+        anchorX="center"
+        anchorY="bottom-baseline"
+        sdfGlyphSize={LITE ? 32 : 96}
+        material={material ?? undefined}
+        {...(LITE ? {} : { outlineColor: '#4a3a1c', outlineOpacity: 0.25, outlineBlur: '6%', outlineOffsetX: '-1.5%', outlineOffsetY: '2%', outlineWidth: 0 })}
+      >
+        P
+      </Text>
     </group>
   );
 }

@@ -18,8 +18,10 @@ const BEATS = [
   },
 ];
 
+/** The one personal line, in a hand. */
+const LINE = 'Take your time.';
 const NUMERALS = ['I', 'II', 'III'];
-const HEIGHT = 4.9;
+const HEIGHT = 5.4;
 const X = 1.2;
 
 /** First visit only: three beats on a page laid on the desk. Tap anywhere to turn it. */
@@ -53,6 +55,7 @@ export function Primer() {
       { kind: 'rule', y: 1.12, x0: -X, x1: X, weight: 'double' },
       { kind: 'text', text: b.title, x: 0, y: 0.9, size: 0.34, font: 'italic', align: 'center', maxWidth: 2.4, lineHeight: 1.12 },
       { kind: 'text', text: b.body, x: 0, y: -0.28, size: 0.2, align: 'center', maxWidth: 2.4, lineHeight: 1.4 },
+      ...(last ? [{ kind: 'text', text: LINE, x: 0, y: -1.55, size: 0.34, font: 'script', ink: 'iron', align: 'center', tilt: 2 } as SheetItem] : []),
       { kind: 'text', text: 'Skip', x: -0.78, y: -1.92, size: 0.2, font: 'smcp', ink: 'quiet', align: 'center' },
       { kind: 'text', text: last ? 'Begin' : 'Next', x: 0.62, y: -1.92, size: 0.23, font: 'smcp', align: 'center' },
     );
@@ -60,7 +63,7 @@ export function Primer() {
       { id: 'skip', x: -0.78, y: -1.86, w: 1.2, h: 0.5 },
       { id: 'next', x: 0.62, y: -1.85, w: 1.2, h: 0.5 },
     ];
-    return { key: 'primer', width: SHEET_WIDTH, height: HEIGHT, items, rects };
+    return { key: 'primer', width: SHEET_WIDTH, height: HEIGHT, items, rects, monogram: true };
   }, [beat, b, last]);
 
   return (
@@ -80,6 +83,7 @@ export function Primer() {
       </p>
       <h2>{b.title}</h2>
       <p>{b.body}</p>
+      {last && <p>{LINE}</p>}
     </SheetLayer>
   );
 }
