@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import { LITE } from './quality';
+
+/** Requested anisotropy: three clamps it to the renderer's maximum. Lite stays cheap on a CPU rasteriser. */
+const ANISOTROPY = LITE ? 4 : 16;
 
 /**
  * Procedural textures, generated once on a 2D canvas: rosewood and walnut
@@ -167,7 +171,7 @@ function makeWood(w: number, h: number, seed: number, spec: WoodSpec): WoodMaps 
   const normalMap = new THREE.CanvasTexture(normal);
   for (const t of [map, roughnessMap, normalMap]) {
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.anisotropy = 16;
+    t.anisotropy = ANISOTROPY;
   }
   return { map, roughnessMap, normalMap };
 }
@@ -264,7 +268,7 @@ export function makeWalnut(size = 1024, seed = 23): WoodMaps {
     tx.generateMipmaps = true;
     tx.minFilter = THREE.LinearMipmapLinearFilter;
     tx.magFilter = THREE.LinearFilter;
-    tx.anisotropy = 16; // clamped to the GPU maximum by three
+    tx.anisotropy = ANISOTROPY; // clamped to the GPU maximum by three
     if (n === 0) tx.colorSpace = THREE.SRGBColorSpace;
     return tx;
   });
@@ -357,7 +361,7 @@ export function makeLeather(size = 1024, seed = 31): WoodMaps {
     const t = new THREE.CanvasTexture(m.c);
     if (srgb) t.colorSpace = THREE.SRGBColorSpace;
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.anisotropy = 16;
+    t.anisotropy = ANISOTROPY;
     return t;
   };
   return { map: tex(albedo, true), roughnessMap: tex(rough, false), normalMap: tex(normal, false) };
@@ -385,7 +389,7 @@ export function makeWindingNormal(size = 64): THREE.CanvasTexture {
   ctx.putImageData(img, 0, 0);
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.anisotropy = 16;
+  t.anisotropy = ANISOTROPY;
   return t;
 }
 
@@ -455,7 +459,7 @@ export function makePearl(size = 256, seed = 11): PearlMaps {
     m.ctx.putImageData(m.img, 0, 0);
     const t = new THREE.CanvasTexture(m.c);
     if (srgb) t.colorSpace = THREE.SRGBColorSpace;
-    t.anisotropy = 16;
+    t.anisotropy = ANISOTROPY;
     return t;
   };
   return { map: tex(albedo, true), thickness: tex(thick, false), roughnessMap: tex(rough, false) };
@@ -505,7 +509,7 @@ export function makePaper(size = 512, seed = 47): PaperMaps {
   const tex = (c: HTMLCanvasElement, srgb: boolean) => {
     const t = new THREE.CanvasTexture(c);
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.anisotropy = 16;
+    t.anisotropy = ANISOTROPY;
     if (srgb) t.colorSpace = THREE.SRGBColorSpace;
     return t;
   };
@@ -550,6 +554,6 @@ export function makeCapsule(w = 256, h = 16): THREE.CanvasTexture {
   ctx.roundRect(1, 1, w - 2, h - 2, (h - 2) / 2);
   ctx.fill();
   const t = new THREE.CanvasTexture(c);
-  t.anisotropy = 16;
+  t.anisotropy = ANISOTROPY;
   return t;
 }
