@@ -5,7 +5,7 @@ Every user-facing string was read against the stop-slop rules (`docs/ux/stop-slo
 | Where | Before | After | Why |
 |---|---|---|---|
 | Primer I title | A light rests on the neck. | A brass light marks a place. | Names the object and the action. |
-| Primer I body | Each question is one place on the fretboard, marked in brass. Name the note it sounds. | Name the note that sounds there. | Title already said brass; cut the restatement. |
+| Primer I body | Each question is one place on the fretboard, marked in brass. Name the note it sounds. | Name its note. | Title already said brass; cut the restatement. |
 | Primer II title | Answer on the keys, or the neck. | Name it, or find it. | Matches the two drills' names. |
 | Primer II body | In Name, choose from the twelve keys. In Find, touch every place a note lives. | Name: pick one of twelve keys. Find: touch every place the note lives. | Shorter, parallel. |
 | Primer III title | The room remembers. | Slow answers come back. | Inanimate subject doing a human verb; say what happens. |

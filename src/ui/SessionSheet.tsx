@@ -32,7 +32,7 @@ export function SessionSheet() {
   const geom = useMemo(() => {
     const items: SheetItem[] = [
       { kind: 'text', text: 'Palace · Fretboard', x: 0, y: 2.55, size: 0.17, font: 'smcp', ink: 'soft', align: 'center' },
-      { kind: 'text', text: 'Today', x: 0, y: 1.95, size: 0.54, font: 'italic', align: 'center' },
+      { kind: 'text', text: 'Today', x: 0, y: 1.95, size: 0.54, font: 'italic', ink: 'gilt', align: 'center' },
       { kind: 'text', text: today, x: 0, y: 1.62, size: 0.18, ink: 'soft', align: 'center' },
       { kind: 'rule', y: 1.4, x0: -X, x1: X, weight: 'double' },
       { kind: 'text', text: figure, x: 0, y: 0.72, size: 0.74, font: 'figures', align: 'center' },

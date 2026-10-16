@@ -178,6 +178,29 @@ test('the settings sheet is a real dialog: focus, Escape, and no slide under red
   await expect(page.getByTestId('settings-open')).toBeFocused();
 });
 
+test('primer buttons paint no browser border, outline or box when pressed or focused; targets stay 44px', async ({ page }) => {
+  await page.getByTestId('attract-begin').click();
+  await expect(page.getByTestId('primer')).toBeVisible();
+  const next = page.getByTestId('primer-next');
+  await expect(next).toHaveClass(/placed/);
+  const box = (await next.boundingBox())!;
+  expect(box.width).toBeGreaterThanOrEqual(44);
+  expect(box.height).toBeGreaterThanOrEqual(44);
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.keyboard.press('Tab');
+  for (const id of ['primer-next', 'primer-skip']) {
+    const paint = await page
+      .getByTestId(id)
+      .evaluate((el) => {
+        const c = getComputedStyle(el);
+        return { outline: c.outlineStyle, shadow: c.boxShadow, border: c.borderTopStyle, bg: c.backgroundColor };
+      });
+    expect(paint).toEqual({ outline: 'none', shadow: 'none', border: 'none', bg: 'rgba(0, 0, 0, 0)' });
+  }
+  await page.mouse.up();
+});
+
 test('first visit: title, three-beat primer, then play without the wordmark', async ({ page }) => {
   await expect(page.getByTestId('attract')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Palace' })).toBeVisible();

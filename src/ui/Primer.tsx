@@ -6,7 +6,7 @@ import { type SheetItem, type SheetRect, SHEET_WIDTH } from './sheet';
 const BEATS = [
   {
     title: 'A brass light marks a place.',
-    body: 'Name the note that sounds there.',
+    body: 'Name its note.',
   },
   {
     title: 'Name it, or find it.',
@@ -44,7 +44,7 @@ export function Primer() {
 
   const geom = useMemo(() => {
     const items: SheetItem[] = [
-      { kind: 'text', text: 'The Fretboard Room', x: 0, y: 1.98, size: 0.17, font: 'smcp', ink: 'soft', align: 'center' },
+      { kind: 'text', text: 'The Fretboard Room', x: 0, y: 1.98, size: 0.17, font: 'smcp', ink: 'gilt', align: 'center' },
     ];
     NUMERALS.forEach((n, i) => {
       items.push({ kind: 'text', text: n, x: (i - 1) * 0.7, y: 1.42, size: i === beat ? 0.4 : 0.28, ink: i === beat ? 'ink' : 'quiet', align: 'center' });

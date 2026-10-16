@@ -180,7 +180,7 @@ function Item({ item, foil, onBounds }: { item: SheetItem; foil: THREE.Material 
           sdfGlyphSize={64}
           material={item.ink === 'gilt' && foil ? foil : undefined}
           // Letterpress: a faint shadow just up-left of the stroke, as ink sits in the sheet.
-          {...(LITE ? {} : { outlineColor: '#6e6249', outlineOpacity: 0.32, outlineBlur: '9%', outlineOffsetX: '-2.5%', outlineOffsetY: '3%', outlineWidth: 0 })}
+          {...(LITE ? {} : { outlineColor: '#6e6249', outlineOpacity: 0.2, outlineBlur: '5%', outlineOffsetX: '-1.5%', outlineOffsetY: '2%', outlineWidth: 0 })}
           onSync={(t: { textRenderInfo?: { blockBounds: Bounds } }) => t.textRenderInfo && onBounds(item, t.textRenderInfo.blockBounds)}
         >
           {item.text}

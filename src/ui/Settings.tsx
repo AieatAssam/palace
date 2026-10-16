@@ -61,7 +61,7 @@ export function Settings({ onClose, onReplayPrimer }: { onClose: () => void; onR
   const linkY = TOP_RULE - BAND * rows.length - 0.42;
   const geom = useMemo(() => {
     const items: SheetItem[] = [
-      { kind: 'text', text: 'Settings', x: 0, y: 2.0, size: 0.5, font: 'italic', align: 'center' },
+      { kind: 'text', text: 'Settings', x: 0, y: 2.0, size: 0.5, font: 'italic', ink: 'gilt', align: 'center' },
       { kind: 'rule', y: TOP_RULE + 0.22, x0: -X, x1: X, weight: 'double' },
     ];
     const rects: SheetRect[] = [];
