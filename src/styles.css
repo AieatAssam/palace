@@ -394,7 +394,7 @@ button:focus-visible {
 
 .modes .rn {
   font-variant-caps: normal;
-  font-size: 14px;
+  font-size: 16px;
   letter-spacing: 0.04em;
   color: var(--stone-lit);
 }

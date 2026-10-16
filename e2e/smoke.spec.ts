@@ -160,6 +160,24 @@ test('toggles left-handed mode (mirrors the neck, persists)', async ({ page }) =
   expect(await page.evaluate(() => window.__palace!.screen())).toBe('play');
 });
 
+test('the settings sheet is a real dialog: focus, Escape, and no slide under reduced motion', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await enterPlay(page);
+  await waitForFrames(page);
+  await page.getByTestId('settings-open').click();
+  const close = page.getByTestId('settings-close');
+  await expect(page.getByTestId('settings')).toBeVisible();
+  await expect(close).toBeFocused();
+  // Reduced motion: the card is on the desk at once, its buttons live without waiting for a slide.
+  await expect(close).toHaveClass(/placed/);
+  const box = (await close.boundingBox())!;
+  expect(box.width).toBeGreaterThanOrEqual(44);
+  expect(box.height).toBeGreaterThanOrEqual(44);
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('settings')).toBeHidden();
+  await expect(page.getByTestId('settings-open')).toBeFocused();
+});
+
 test('first visit: title, three-beat primer, then play without the wordmark', async ({ page }) => {
   await expect(page.getByTestId('attract')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Palace' })).toBeVisible();

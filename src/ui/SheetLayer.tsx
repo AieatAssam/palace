@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { sheetDom } from '../three/view';
 import { type SheetGeom, useSheet } from './sheet';
 
@@ -48,15 +48,17 @@ export function SheetLayer({
   useEffect(() => show(stable), [show, stable]);
   useEffect(() => () => show(null), [show]);
 
-  // Put focus on the sheet and give it back to whatever had it.
+  // Put focus on the sheet and give it back to whatever had it. The opener is read while
+  // rendering, before the page behind goes inert, and refocused once it is live again.
+  const [opener] = useState(() => document.activeElement as HTMLElement | null);
   useLayoutEffect(() => {
-    const before = document.activeElement as HTMLElement | null;
-    const first = root.current?.querySelector<HTMLElement>('[data-autofocus]');
-    first?.focus({ preventScroll: true });
+    root.current?.querySelector<HTMLElement>('[data-autofocus]')?.focus({ preventScroll: true });
     return () => {
-      if (before?.isConnected) before.focus({ preventScroll: true });
+      requestAnimationFrame(() => {
+        if (opener?.isConnected) opener.focus({ preventScroll: true });
+      });
     };
-  }, []);
+  }, [opener]);
 
   useEffect(() => {
     if (!onEscape) return;

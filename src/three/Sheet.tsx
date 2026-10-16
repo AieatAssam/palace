@@ -82,7 +82,7 @@ function useCardMaterials() {
         map: sheet.map,
         color: '#fffaf0',
         bumpMap: sheet.bumpMap,
-        bumpScale: 0.6,
+        bumpScale: 0.2,
         roughness: 0.92,
         emissive: '#4a4234',
         envMapIntensity: 0.35,
@@ -222,7 +222,7 @@ export function Sheet() {
     s.position.set(c.position.x + 0.05, DESK_Y + 0.004, c.position.z + 0.07);
     const spread = 1 + lift * 0.9;
     s.scale.set((W + 1.4) * spread, (H + 1.4) * spread, 1);
-    shadowMat.opacity = 0.62 * e * (1 - lift * 0.5);
+    shadowMat.opacity = 0.8 * e * (1 - lift * 0.5);
 
     // Keep each real button over its drawn label.
     if (p < 0.02) return;

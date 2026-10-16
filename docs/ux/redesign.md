@@ -98,7 +98,7 @@ On sheets the same ladder is in card units (body ≈ 0.2, labels ≈ 0.18 ≈ 16
 
 **Colour of type:** ink `#1C1916` / soft `#4A443C` / quiet `#5F594F` on the cream page (all ≥ 5:1); plaster `#EDE6D9` and stone-lit `#B3AB9C` on the dark desk; danger `#8A4527` on paper (5.6:1). Brass is for rules, lozenges and markers, never body text.
 
-**Banned:** a second typeface (any sans, mono or display), tiny tracked grey uppercase labels, underline tabs, icon-only controls (hamburgers, glyph buttons), faux bold/italic/small caps, system font fallback for any glyph, text below 16 px (13 px for the italic colophon excepted: it is decorative).
+**Banned:** a second typeface (any sans, mono or display), tiny tracked grey uppercase labels, underline tabs, icon-only controls (hamburgers, glyph buttons), faux bold/italic/small caps, system font fallback for any glyph, text below 16 px.
 
 **Navigation words:** the Name / Find switch is two engraved words led by roman numerals I and II; the chosen one is lit with its numeral in brass and a small brass lozenge set before it. Settings is the word *Settings* in small caps.
 
