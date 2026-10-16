@@ -7,7 +7,7 @@ import { create } from 'zustand';
  * accessible twin in `SheetLayer`, so the drawn labels and the real buttons cannot drift apart.
  */
 export type SheetFont = 'roman' | 'smcp' | 'italic' | 'figures';
-export type SheetInk = 'ink' | 'soft' | 'quiet' | 'danger';
+export type SheetInk = 'ink' | 'soft' | 'quiet' | 'danger' | 'gilt';
 
 export interface SheetText {
   kind: 'text';
