@@ -385,7 +385,7 @@ function Effects({ tier }: { tier: Quality['tier'] }) {
   if (tier === 0) return null;
   // Bloom threshold sits above everything but the brightest specular ticks on
   // nickel and brass: it never blooms the cue, the pearl or the wood.
-  const bloom = <Bloom mipmapBlur intensity={0.35} luminanceThreshold={0.96} luminanceSmoothing={0.08} resolutionScale={0.5} />;
+  const bloom = <Bloom mipmapBlur intensity={0.18} luminanceThreshold={1.05} luminanceSmoothing={0.05} resolutionScale={0.5} />;
   const vignette = <Vignette offset={0.32} darkness={0.42} />;
   if (tier === 1) {
     return (
@@ -426,7 +426,7 @@ export function Scene() {
       onCreated={({ gl }) => {
         gl.toneMapping = THREE.ACESFilmicToneMapping;
         // Low enough that the rosewood stays dark and rich; metals still find their highlights.
-        gl.toneMappingExposure = LITE ? 0.95 : 0.88;
+        gl.toneMappingExposure = LITE ? 0.95 : 0.85;
       }}
     >
       <color attach="background" args={[COLORS.study]} />

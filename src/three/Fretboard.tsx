@@ -152,10 +152,11 @@ export interface StringCue {
   /** (x0, x1, amount) in neck-local units. */
   uCue: { value: THREE.Vector3 };
   uCueColor: { value: THREE.Color };
+  uCueT: { value: number };
 }
 
 function makeCue(): StringCue {
-  return { uCue: { value: new THREE.Vector3(0, 0, 0) }, uCueColor: { value: new THREE.Color() } };
+  return { uCue: { value: new THREE.Vector3(0, 0, 0) }, uCueColor: { value: new THREE.Color() }, uCueT: { value: 0 } };
 }
 
 /** Adds the lock dimming and the cue lift to a string material's shader. */
@@ -163,14 +164,16 @@ function injectCue(shader: THREE.WebGLProgramParametersWithUniforms, cue: String
   injectLock(shader, lock);
   Object.assign(shader.uniforms, cue);
   shader.fragmentShader = shader.fragmentShader
-    .replace('#include <common>', '#include <common>\nuniform vec3 uCue; uniform vec3 uCueColor;')
+    .replace('#include <common>', '#include <common>\nuniform vec3 uCue; uniform vec3 uCueColor; uniform float uCueT;')
     .replace(
       '#include <emissivemap_fragment>',
       `#include <emissivemap_fragment>
 {
-  float cueIn = smoothstep(uCue.x - 0.03, uCue.x + 0.08, vNeck.x) * (1.0 - smoothstep(uCue.y - 0.08, uCue.y + 0.03, vNeck.x));
-  totalEmissiveRadiance += uCueColor * (uCue.z * cueIn * 1.35);
-  // slight metal catch: darken roughness in the cue band via emissive only
+  float cueIn = smoothstep(uCue.x - 0.04, uCue.x + 0.06, vNeck.x) * (1.0 - smoothstep(uCue.y - 0.06, uCue.y + 0.04, vNeck.x));
+  // A slow band of warm light travels along the segment, over a steady base sheen.
+  float travel = 0.5 + 0.5 * sin(vNeck.x * 9.0 - uCueT * 2.2);
+  float sheen = 0.55 + 0.45 * travel * travel;
+  totalEmissiveRadiance += uCueColor * (uCue.z * cueIn * sheen);
 }`,
     );
 }
@@ -224,7 +227,7 @@ function useMaterials() {
     // Nickel, a shade down and slightly satin: from the low hero angle a bright
     // mirror crown flares every fret into a white bar.
     const nickel = withLock(
-      new THREE.MeshStandardMaterial({ color: '#a8a397', metalness: 1, roughness: 0.26, envMapIntensity: 0.6 }),
+      new THREE.MeshStandardMaterial({ color: '#8f8b82', metalness: 1, roughness: 0.34, envMapIntensity: 0.32 }),
       lock,
     );
     const nut = physical({
@@ -255,7 +258,10 @@ function useMaterials() {
       metalness: 0.08,
     });
     // The seat the pearl is set into: a hairline of dark glue and shadow.
-    const inlaySeat = withLock(new THREE.MeshStandardMaterial({ color: '#140b08', roughness: 0.8 }), lock);
+    const inlaySeat = withLock(new THREE.MeshStandardMaterial({ color: '#140b08', roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), lock);
+    pearl.polygonOffset = true;
+    pearl.polygonOffsetFactor = -4;
+    pearl.polygonOffsetUnits = -4;
     for (const mat of [board, neck, nut]) withLock(mat, lock);
     withNacre(pearl, shell.thickness, lock);
     const winding = makeWindingNormal();
@@ -435,6 +441,9 @@ function Frets({ m }: { m: Materials }) {
 
 const INLAY_R = 0.13;
 
+const inlayGeo = new THREE.CircleGeometry(INLAY_R, 64).rotateX(-Math.PI / 2);
+const seatGeo = new THREE.RingGeometry(INLAY_R - 0.002, INLAY_R + 0.01, 64).rotateX(-Math.PI / 2);
+
 function Inlays({ m }: { m: Materials }) {
   const dots = useMemo(() => {
     const out: [number, number][] = [];
@@ -447,18 +456,14 @@ function Inlays({ m }: { m: Materials }) {
     }
     return out;
   }, []);
-  // Set into the board: the pearl's face sits a hair above the wood, ringed by
-  // a thin dark seat. Each dot is cut from a different part of the shell.
+  // Flush full discs on the board face (y = 0), pulled forward in depth with
+  // polygon offset so nothing z-fights; strings sit well above, frets are clear.
   return (
     <group>
       {dots.map(([x, z], i) => (
-        <group key={i} position={[x, 0, z]} rotation={[0, i * 2.39, 0]}>
-          <mesh position={[0, -0.0015, 0]} material={m.pearl}>
-            <cylinderGeometry args={[INLAY_R, INLAY_R, 0.007, 64]} />
-          </mesh>
-          <mesh position={[0, 0.0003, 0]} rotation={[-Math.PI / 2, 0, 0]} material={m.inlaySeat}>
-            <ringGeometry args={[INLAY_R - 0.004, INLAY_R + 0.009, 48]} />
-          </mesh>
+        <group key={i} position={[x, 0.0006, z]} rotation={[0, i * 2.39, 0]}>
+          <mesh geometry={seatGeo} material={m.inlaySeat} renderOrder={1} />
+          <mesh geometry={inlayGeo} material={m.pearl} position={[0, 0.0002, 0]} renderOrder={2} />
         </group>
       ))}
     </group>
@@ -592,7 +597,7 @@ const TONE: Record<CueTone, { color: string; emissive: THREE.Color; string: THRE
   ask: {
     color: COLORS.brass,
     emissive: new THREE.Color('#e0b56a').multiplyScalar(0.9),
-    string: new THREE.Color('#ffd4a0').multiplyScalar(1.25),
+    string: new THREE.Color('#ffc98a').multiplyScalar(1.9),
   },
   correct: {
     color: COLORS.correct,
@@ -639,23 +644,21 @@ function Cue({
   question?: boolean;
 }) {
   const t = TONE[tone];
-  // Short polished bead on the string: metal that catches the HDRI, slight emissive breathe.
-  const beadMat = useMemo(
+  // Faint warm pool of light in the fret slot under the string: soft-edged, additive, low.
+  const poolMat = useMemo(
     () =>
-      new THREE.MeshPhysicalMaterial({
-        color: t.color,
-        metalness: 1,
-        roughness: 0.18,
-        clearcoat: 0.6,
-        clearcoatRoughness: 0.2,
-        emissive: t.emissive,
-        emissiveIntensity: 0.7,
+      new THREE.MeshBasicMaterial({
+        map: slotPool(),
+        color: new THREE.Color(t.color).multiplyScalar(0.9),
         transparent: true,
-        opacity: 0.95,
+        opacity: 0.5,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
       }),
     [t],
   );
-  useEffect(() => () => beadMat.dispose(), [beadMat]);
+  useEffect(() => () => poolMat.dispose(), [poolMat]);
 
   const cue = m.cues[position.string]!;
   const cell = cueCell(position);
@@ -671,25 +674,55 @@ function Cue({
   useFrame(() => {
     const now = performance.now();
     let k = 1;
-    if (breathe) k = 0.7 + 0.3 * (0.5 + 0.5 * Math.sin((now / 1000) * 2.6));
+    if (breathe) k = 0.78 + 0.22 * (0.5 + 0.5 * Math.sin((now / 1000) * 1.8));
     let o = 1;
     if (fadeFrom !== undefined) o = Math.max(0, 1 - (now - fadeFrom) / 800);
-    beadMat.emissiveIntensity = 0.35 + 0.75 * k * o;
-    beadMat.opacity = 0.4 + 0.55 * o;
-    if (question) cue.uCue.value.z = k * o;
+    poolMat.opacity = 0.42 * k * o;
+    if (question) {
+      cue.uCue.value.z = k * o;
+      cue.uCueT.value = now / 1000;
+    }
   });
 
   const [mx, my, mz] = markerPoint(position);
-  const r = Math.max(STRING_RADII[position.string]! * (thick > 1 ? thick : 1) * 2.4, 0.028);
+  const open = position.fret === 0;
+  const len = Math.max(0.12, cell.x1 - cell.x0);
+  const width = stringSpacing((cell.x0 + cell.x1) / 2) * (thick > 1 ? 0.95 : 0.8);
+  const cx = (cell.x0 + cell.x1) / 2 - mx;
 
   return (
     <group position={[mx, my, mz]} userData={{ role: 'highlight', question, string: position.string, fret: position.fret, tone }}>
-      {/* Bead runs along the string (local X after the neck group orientation). */}
-      <mesh material={beadMat} rotation={[0, 0, Math.PI / 2]} renderOrder={5}>
-        <capsuleGeometry args={[r, Math.max(0.12, (cell.x1 - cell.x0) * 0.55), 6, 12]} />
-      </mesh>
+      {!open && (
+        <mesh material={poolMat} position={[cx, 0.002 - my, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={3}>
+          <planeGeometry args={[len, width]} />
+        </mesh>
+      )}
     </group>
   );
+}
+
+let poolTex: THREE.CanvasTexture | null = null;
+/** Soft rounded-rect falloff, built once: brightest along the string, fading to the fret wires. */
+function slotPool() {
+  if (poolTex) return poolTex;
+  const w = 128, h = 64;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d')!;
+  const img = ctx.createImageData(w, h);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const u = Math.abs(x / (w - 1) - 0.5) * 2;
+      const v = Math.abs(y / (h - 1) - 0.5) * 2;
+      const a = Math.pow(Math.max(0, 1 - u * u), 1.5) * Math.pow(Math.max(0, 1 - v * v), 2.2);
+      const o = (y * w + x) * 4;
+      img.data[o] = img.data[o + 1] = img.data[o + 2] = 255;
+      img.data[o + 3] = Math.round(a * 255);
+    }
+  ctx.putImageData(img, 0, 0);
+  poolTex = new THREE.CanvasTexture(c);
+  poolTex.colorSpace = THREE.SRGBColorSpace;
+  return poolTex;
 }
 
 function Highlights({ m, thick }: { m: Materials; thick: number }) {
