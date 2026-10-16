@@ -17,8 +17,8 @@ import { focusPoint, renderInfo, setInspector, setProjector, sheetPose, useView 
 
 const FOV = 30;
 
-/** Desk sheets: the camera looks almost straight down so the type stays square and legible. */
-const SHEET_ELEVATION = 78;
+/** Desk sheets: a steep but not top-down view, so the card stays legible and the desk reads in perspective. */
+const SHEET_ELEVATION = 64;
 /** Half-width of the leather mat (Desk.tsx) and the gap left before the card. */
 const SHEET_MAT_HALF = 2.3;
 const SHEET_GAP = 0.3;
@@ -227,6 +227,13 @@ function NeckRig({ children }: { children: React.ReactNode }) {
         new THREE.Vector3(pose.x + sx * hw, pose.y, pose.z + sy * hh),
       ]),
     );
+    // Keep the neck and mat in shot beside the card: frame a strip of the mat
+    // across the neck (above the card in landscape, to its left on a phone).
+    const NECK_REACH = 0.9;
+    for (const s of [-1, 1]) {
+      if (portrait) points.push(new THREE.Vector3(0.2, DESK_Y + 0.3, pose.z + s * hh * 0.6));
+      else points.push(new THREE.Vector3(pose.x + s * hw * 1.9, DESK_Y + 0.3, -SHEET_MAT_HALF * NECK_REACH));
+    }
     const el = THREE.MathUtils.degToRad(SHEET_ELEVATION);
     const dir = new THREE.Vector3(0, Math.sin(el), Math.cos(el));
     const box: Box = portrait ? { x0: -0.95, x1: 0.95, y0: -0.93, y1: 0.93 } : { x0: -0.94, x1: 0.94, y0: -0.94, y1: 0.94 };

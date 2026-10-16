@@ -82,7 +82,7 @@ function useCardMaterials() {
         map: sheet.map,
         color: '#fffaf0',
         bumpMap: sheet.bumpMap,
-        bumpScale: 0.2,
+        bumpScale: 0.04,
         roughness: 0.92,
         emissive: '#4a4234',
         envMapIntensity: 0.35,

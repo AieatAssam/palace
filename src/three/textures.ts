@@ -184,16 +184,91 @@ export function makeRosewood(w = 1024, h = 256, seed = 7): WoodMaps {
   });
 }
 
-/** Figured walnut for the desk: a little more figure, lighter and browner than the board. */
-export function makeWalnut(w = 512, h = 256, seed = 23): WoodMaps {
-  return makeWood(w, h, seed, {
-    dark: [40, 27, 19],
-    base: [62, 43, 30],
-    warm: [88, 63, 43],
-    figure: 0.32,
-    pores: 0.0015,
-    roughness: 0.42,
+/**
+ * Quarter-sawn black walnut for the desk: straight, close growth lines with a
+ * gentle wander, short elongated pores (not endless streaks), and a slow
+ * colour drift between boards. Square, seamless, mipmapped, high anisotropy:
+ * one tile is ~2.4 desk units, so a line is a millimetre or two at true scale.
+ */
+export function makeWalnut(size = 1024, seed = 23): WoodMaps {
+  const rng = mulberry32(seed);
+  const wander = noise2D(rng, 2, 3);
+  const wander2 = noise2D(rng, 5, 7);
+  const board = noise2D(rng, 1, 4);
+  const pore = noise2D(rng, 48, 384);
+  const fleck = noise2D(rng, 160, 160);
+  const height = new Float32Array(size * size);
+  const tone = new Float32Array(size * size);
+  const LINES = 38;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = x / size;
+      const v = y / size;
+      const w = (wander(u * 2, v * 3) - 0.5) * 0.06 + (wander2(u * 5, v * 7) - 0.5) * 0.015;
+      const ph = (v + w) * LINES;
+      const f = ph - Math.floor(ph);
+      // Latewood: a narrow dark band at the end of each year, soft-edged.
+      const late = Math.pow(Math.max(0, 1 - Math.abs(f - 0.85) / 0.12), 1.6);
+      // Pores: short dashes along the grain, a few per line, darker and sunk.
+      const pz = pore(u * 48, (v + w) * 384);
+      const poreMask = Math.max(0, (pz - 0.72) / 0.28) * (0.4 + 0.6 * late);
+      const b = board(u, v * 4);
+      const i = y * size + x;
+      tone[i] = 0.55 + (b - 0.5) * 0.35 - late * 0.45 - poreMask * 0.3 + (fleck(u * 160, v * 160) - 0.5) * 0.04;
+      height[i] = 0.5 - late * 0.08 - poreMask * 0.5;
+    }
+  }
+  const dark: RGB = [34, 23, 16];
+  const base: RGB = [66, 45, 31];
+  const warm: RGB = [92, 64, 43];
+  const mk = () => {
+    const c = canvas(size, size);
+    const ctx = c.getContext('2d')!;
+    return { c, ctx, img: ctx.createImageData(size, size) };
+  };
+  const albedo = mk();
+  const rough = mk();
+  const normal = mk();
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = y * size + x;
+      const o = i * 4;
+      const k = Math.max(0, Math.min(1, tone[i]!));
+      const lo = k < 0.5 ? dark : base;
+      const hi = k < 0.5 ? base : warm;
+      const s = k < 0.5 ? k * 2 : (k - 0.5) * 2;
+      for (let c = 0; c < 3; c++) albedo.img.data[o + c] = lo[c]! + (hi[c]! - lo[c]!) * s;
+      albedo.img.data[o + 3] = 255;
+      const rv = Math.round(255 * (0.4 + (0.5 - height[i]!) * 0.6));
+      rough.img.data[o] = rough.img.data[o + 1] = rough.img.data[o + 2] = rv;
+      rough.img.data[o + 3] = 255;
+      const hl = height[y * size + ((x - 1 + size) % size)]!;
+      const hr = height[y * size + ((x + 1) % size)]!;
+      const hu = height[((y - 1 + size) % size) * size + x]!;
+      const hd = height[((y + 1) % size) * size + x]!;
+      let nx = (hl - hr) * 1.6;
+      let ny = (hu - hd) * 1.6;
+      const len = Math.hypot(nx, ny, 1);
+      nx /= len;
+      ny /= len;
+      normal.img.data[o] = (nx * 0.5 + 0.5) * 255;
+      normal.img.data[o + 1] = (ny * 0.5 + 0.5) * 255;
+      normal.img.data[o + 2] = (0.5 / len + 0.5) * 255;
+      normal.img.data[o + 3] = 255;
+    }
+  }
+  const out = [albedo, rough, normal].map(({ c, ctx, img }, n) => {
+    ctx.putImageData(img, 0, 0);
+    const tx = new THREE.CanvasTexture(c);
+    tx.wrapS = tx.wrapT = THREE.RepeatWrapping;
+    tx.generateMipmaps = true;
+    tx.minFilter = THREE.LinearMipmapLinearFilter;
+    tx.magFilter = THREE.LinearFilter;
+    tx.anisotropy = 16; // clamped to the GPU maximum by three
+    if (n === 0) tx.colorSpace = THREE.SRGBColorSpace;
+    return tx;
   });
+  return { map: out[0]!, roughnessMap: out[1]!, normalMap: out[2]! };
 }
 
 /**
@@ -390,7 +465,7 @@ export interface PaperMaps {
   bumpMap: THREE.CanvasTexture;
 }
 
-/** Cream laid paper: a faint warm mottle and a fine fibre tooth for the bump. */
+/** Clean cream paper: a barely-there mottle and a faint fibre tooth for the bump. */
 export function makePaper(size = 256, seed = 47): PaperMaps {
   const rng = mulberry32(seed);
   const cloud = noise2D(rng, 4, 4);
@@ -407,16 +482,15 @@ export function makePaper(size = 256, seed = 47): PaperMaps {
       const u = x / size;
       const v = y / size;
       const m = cloud(u * 4, v * 4) - 0.5;
-      // Laid lines run across the sheet: a very slight ribbing.
-      const laid = Math.sin(v * Math.PI * 2 * 24) * 0.012;
+      
       const f = fibre(u * 96, v * 96) * 0.6 + grain(u * 160, v * 160) * 0.4;
-      const t = 1 + m * 0.05 + laid + (f - 0.5) * 0.035;
+      const t = 1 + m * 0.02 + (f - 0.5) * 0.012;
       const i = (y * size + x) * 4;
       cimg.data[i] = Math.min(255, 238 * t);
       cimg.data[i + 1] = Math.min(255, 230 * t);
       cimg.data[i + 2] = Math.min(255, 213 * t);
       cimg.data[i + 3] = 255;
-      const h = Math.round(255 * (f * 0.8 + 0.1 + laid));
+      const h = Math.round(255 * (0.5 + (f - 0.5) * 0.25));
       bimg.data[i] = bimg.data[i + 1] = bimg.data[i + 2] = h;
       bimg.data[i + 3] = 255;
     }

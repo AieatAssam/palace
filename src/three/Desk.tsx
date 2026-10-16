@@ -39,8 +39,12 @@ function useDeskMaterials() {
       };
     }
     const wood = makeWalnut();
+    const ani = 16;
     // Walnut grain runs along the desk (neck-local x); ~7 × 3.5 units per tile.
-    for (const t of [wood.map, wood.roughnessMap, wood.normalMap]) t.repeat.set(160 / 7, 120 / 3.5);
+    for (const t of [wood.map, wood.roughnessMap, wood.normalMap]) {
+      t.repeat.set(160 / 2.4, 120 / 2.4);
+      t.anisotropy = ani;
+    }
     const hide = makeLeather();
     const len = MAT.x1 - MAT.x0;
     // ~1.6 units per tile: cells of ~0.025 units, a fine grain that still survives mipmapping.
@@ -50,9 +54,9 @@ function useDeskMaterials() {
         map: wood.map,
         roughnessMap: wood.roughnessMap,
         normalMap: wood.normalMap,
-        normalScale: new THREE.Vector2(0.4, 0.4),
+        normalScale: new THREE.Vector2(0.3, 0.3),
         roughness: 1,
-        clearcoat: 0.35,
+        clearcoat: 0.3,
         clearcoatRoughness: 0.35,
         envMapIntensity: 0.6,
       }),
