@@ -31,7 +31,9 @@ export function Attract() {
       aria-labelledby="attract-title"
     >
       <div className="attract-block">
-        <p className="attract-kicker">The Fretboard room</p>
+        <p className="attract-kicker">
+          <span>Nº I</span> The Fretboard Room
+        </p>
         <h1 id="attract-title" className="wordmark-large">
           Palace
         </h1>
@@ -40,8 +42,8 @@ export function Attract() {
         <button className="text-action attract-action" onClick={begin} data-testid="attract-begin" autoFocus>
           {returning ? 'Continue' : 'Begin'}
         </button>
-        <p className="attract-foot">Progress is kept on this device</p>
-      </div>
+        </div>
+      <p className="attract-foot">Progress is kept on this device.</p>
     </section>
   );
 }

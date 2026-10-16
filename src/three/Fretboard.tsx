@@ -32,7 +32,7 @@ import {
   wrapPoint,
 } from './layout';
 import { COLORS } from './palette';
-import { LITE } from './quality';
+import { COARSE, LITE } from './quality';
 import { makePearl, makeRosewood, makeWindingNormal } from './textures';
 
 const STRING_END = 30; // strings run off-frame towards the bridge
@@ -227,7 +227,7 @@ function useMaterials() {
     // Nickel, a shade down and slightly satin: from the low hero angle a bright
     // mirror crown flares every fret into a white bar.
     const nickel = withLock(
-      new THREE.MeshStandardMaterial({ color: '#8a867d', metalness: 1, roughness: 0.42, envMapIntensity: LITE ? 0.16 : 0.26 }),
+      new THREE.MeshStandardMaterial({ color: '#9a958b', metalness: 1, roughness: 0.2, envMapIntensity: LITE ? 0.22 : 0.4 }),
       lock,
     );
     const nut = physical({
@@ -416,8 +416,11 @@ function Nut({ m }: { m: Materials }) {
 
 function Frets({ m }: { m: Materials }) {
   const geo = useMemo(() => {
-    const g = new THREE.CylinderGeometry(0.042, 0.042, 1, 14, 1);
+    // Half-round crown (fret wire seated in its slot): a tight radius so the
+    // polished top concentrates the room into one thin line.
+    const g = new THREE.CylinderGeometry(0.04, 0.04, 1, 32, 1, false, Math.PI / 2, Math.PI);
     g.rotateX(Math.PI / 2);
+    g.scale(1, 0.85, 1);
     return g;
   }, []);
   return (
@@ -441,7 +444,19 @@ function Frets({ m }: { m: Materials }) {
 
 const INLAY_R = 0.13;
 
-const inlayGeo = new THREE.CircleGeometry(INLAY_R, 64).rotateX(-Math.PI / 2);
+const inlayGeo = (() => {
+  // Flat in position, faintly domed in its normals: a flat clearcoat disc
+  // mirrors one hard edge of the room (a window/wall boundary) and splits
+  // light/dark across its face; a gentle dome averages the room into an even lustre.
+  const g = new THREE.CircleGeometry(INLAY_R, 64, 0, Math.PI * 2).rotateX(-Math.PI / 2);
+  const p = g.attributes.position!, n = g.attributes.normal!;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.set(p.getX(i) * 2.2, 1, p.getZ(i) * 2.2).normalize();
+    n.setXYZ(i, v.x, v.y, v.z);
+  }
+  return g;
+})();
 const seatGeo = new THREE.RingGeometry(INLAY_R - 0.002, INLAY_R + 0.01, 64).rotateX(-Math.PI / 2);
 
 function Inlays({ m }: { m: Materials }) {
@@ -677,9 +692,9 @@ function Cue({
     if (breathe) k = 0.78 + 0.22 * (0.5 + 0.5 * Math.sin((now / 1000) * 1.8));
     let o = 1;
     if (fadeFrom !== undefined) o = Math.max(0, 1 - (now - fadeFrom) / 800);
-    poolMat.opacity = 0.42 * k * o;
+    poolMat.opacity = (COARSE ? 0.6 : 0.42) * k * o;
     if (question) {
-      cue.uCue.value.z = k * o;
+      cue.uCue.value.z = (COARSE ? 1.35 : 1) * k * o;
       cue.uCueT.value = now / 1000;
     }
   });

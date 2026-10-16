@@ -10,7 +10,7 @@ import { Desk, SHADOW_Y } from './Desk';
 import { Fretboard } from './Fretboard';
 import { COLORS } from './palette';
 import { BOARD_THICKNESS, markerPoint, neckMatrix, neckToWorld, regionBounds } from './layout';
-import { LITE } from './quality';
+import { LITE, CAPTURE } from './quality';
 import { focusPoint, renderInfo, setInspector, setProjector, useView } from './view';
 
 const FOV = 30;
@@ -430,7 +430,7 @@ export function Scene() {
       }}
     >
       <color attach="background" args={[COLORS.study]} />
-      {!LITE && (
+      {!LITE && !CAPTURE && (
         <PerformanceMonitor
           onDecline={() =>
             setQuality((q) => ({

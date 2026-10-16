@@ -11,8 +11,8 @@ export function SessionSheet() {
   const prog = stageProgress(stage, deck);
   const pct = session.answered ? Math.round((session.correct / session.answered) * 100) : 0;
 
+  const today = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
   const rows: [string, string][] = [
-    ['Accuracy', session.answered ? `${session.correct} of ${session.answered} · ${pct}%` : '—'],
     ['Longest run', String(session.best)],
     ['Strengthened', String(session.strengthened.length)],
     ['To revisit', String(session.slipped.length)],
@@ -21,10 +21,17 @@ export function SessionSheet() {
   return (
     <div className="sheet-scrim">
       <section className="ledger" role="dialog" aria-modal="true" aria-labelledby="ledger-title" data-testid="session-sheet">
-        <p className="ledger-mark">Palace</p>
+        <p className="ledger-mark">Palace · Fretboard</p>
         <h2 id="ledger-title" className="ledger-title">
           Today
         </h2>
+        <p className="ledger-date">{today}</p>
+        <div className="ledger-hero">
+          <span className="ledger-figure">{session.answered ? `${pct}%` : '—'}</span>
+          <span className="ledger-caption">
+            {session.answered ? `${session.correct} of ${session.answered} named` : 'Nothing answered'}
+          </span>
+        </div>
         <dl className="ledger-rows">
           {rows.map(([k, v]) => (
             <div className="ledger-row" key={k}>

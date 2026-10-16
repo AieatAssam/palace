@@ -233,12 +233,21 @@ button:focus-visible {
 }
 
 .attract-kicker {
-  margin: 0 0 18px;
+  margin: 0 0 22px;
   font-size: 11px;
   font-weight: 500;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
   color: var(--stone-lit);
+}
+
+.attract-kicker span {
+  margin-right: 0.9em;
+  font-family: var(--display);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: none;
+  color: var(--brass);
 }
 
 .wordmark-large {
@@ -260,22 +269,38 @@ button:focus-visible {
 
 .attract-rule {
   display: block;
-  width: 56px;
+  width: 40px;
   height: 1px;
-  margin: 34px 0 10px;
+  margin: 40px 0 18px;
   background: var(--brass);
-  opacity: 0.8;
+  opacity: 0.75;
 }
 
 .attract-action {
-  font-size: 16px;
+  font-family: var(--display);
+  font-size: 19px;
+  font-variant: small-caps;
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
 }
 
+/* A colophon at the foot of the page, not under the action. */
 .attract-foot {
-  margin: 6px 0 0;
-  font-size: 11px;
-  letter-spacing: 0.02em;
+  position: absolute;
+  left: clamp(28px, 7vw, 120px);
+  bottom: max(22px, env(safe-area-inset-bottom));
+  margin: 0;
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 13px;
   color: var(--stone-lit);
+  text-shadow: var(--lift-deep);
+  pointer-events: none;
+}
+
+.attract-mirror .attract-foot {
+  left: auto;
+  right: clamp(28px, 7vw, 120px);
 }
 
 /* ------------------------------------------------------------- Primer */
@@ -649,22 +674,56 @@ button:focus-visible {
 }
 
 .ledger-mark {
-  margin: 0 0 22px;
+  margin: 0 0 20px;
   text-align: center;
-  font-family: var(--display);
-  font-size: 18px;
-  letter-spacing: 0.04em;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
   color: var(--stone);
 }
 
 .ledger-title {
-  margin: 0 0 18px;
+  margin: 0;
   text-align: center;
   font-family: var(--display);
   font-style: italic;
   font-weight: 500;
-  font-size: 40px;
+  font-size: 44px;
   line-height: 1;
+}
+
+.ledger-date {
+  margin: 8px 0 0;
+  text-align: center;
+  font-family: var(--display);
+  font-size: 15px;
+  color: var(--stone);
+}
+
+.ledger-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 26px 0 22px;
+  padding-top: 22px;
+  border-top: 3px double var(--brass);
+}
+
+.ledger-figure {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 64px;
+  line-height: 1;
+  font-variant-numeric: lining-nums;
+}
+
+.ledger-caption {
+  margin-top: 6px;
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 15px;
+  color: var(--ink-soft);
 }
 
 .ledger-rows {
@@ -684,7 +743,11 @@ button:focus-visible {
 }
 
 .ledger-row dt {
-  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--stone);
 }
 
 .ledger-row dd {
@@ -706,8 +769,16 @@ button:focus-visible {
   align-items: baseline;
 }
 
+.ledger-actions .text-action {
+  font-family: var(--display);
+  font-size: 18px;
+  font-variant: small-caps;
+  letter-spacing: 0.1em;
+  text-transform: lowercase;
+}
+
 .ledger-actions {
-  margin-top: 22px;
+  margin-top: 26px;
   display: flex;
   justify-content: center;
   gap: 40px;
