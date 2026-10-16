@@ -172,6 +172,7 @@ const MIN_HALF_PX = 0.6;
  * Thin-line handling for a cylinder along Y: where the tube's radius is under
  * MIN_HALF_PX of screen, it swells to that floor and its alpha falls with the
  * shortfall, so the line keeps a steady weight and stops crawling between pixel rows.
+ * The alpha fade is full-path only: lite draws strings opaque (blending is costly on a CPU rasteriser).
  */
 function injectThinLine(shader: THREE.WebGLProgramParametersWithUniforms) {
   shader.uniforms.uPixel = PIXEL;
@@ -191,7 +192,7 @@ function injectThinLine(shader: THREE.WebGLProgramParametersWithUniforms) {
     );
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', '#include <common>\nvarying float vCover;')
-    .replace('#include <opaque_fragment>', 'diffuseColor.a *= vCover;\n#include <opaque_fragment>');
+    .replace('#include <opaque_fragment>', LITE ? '#include <opaque_fragment>' : 'diffuseColor.a *= vCover;\n#include <opaque_fragment>');
 }
 
 /** Adds the lock dimming and the cue lift to a string material's shader. */
@@ -305,7 +306,7 @@ function useMaterials() {
     // Behind the nut each string gets its own material, so the open-string cue can light it.
     const behindNut = cues.map((cue, s) => {
       const w = WOUND[s] ? WIRE.wound : WIRE.plain;
-      const mat = new THREE.MeshStandardMaterial({ color: w.color, metalness: 1, roughness: w.roughness, transparent: true });
+      const mat = new THREE.MeshStandardMaterial({ color: w.color, metalness: 1, roughness: w.roughness, transparent: !LITE });
       mat.onBeforeCompile = (shader) => {
         injectCue(shader, cue, lock);
         injectThinLine(shader);
@@ -552,7 +553,7 @@ function makeStringMaterial(string: number, m: Materials, len: number) {
     normalScale: new THREE.Vector2(1, 1),
     emissive: new THREE.Color('#fff1d2'),
     emissiveIntensity: 0,
-    transparent: true,
+    transparent: !LITE,
   });
   const uniforms: StringUniforms = {
     uAmp: { value: 0 },
