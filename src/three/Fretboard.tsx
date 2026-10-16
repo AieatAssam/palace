@@ -693,7 +693,7 @@ function Cue({
   return (
     <group position={[mx, my, mz]} userData={{ role: 'highlight', question, string: position.string, fret: position.fret, tone }}>
       {!open && (
-        <mesh material={poolMat} position={[cx, 0.002 - my, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={3}>
+        <mesh raycast={noRaycast} material={poolMat} position={[cx, 0.002 - my, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={3}>
           <planeGeometry args={[len, width]} />
         </mesh>
       )}
@@ -701,6 +701,7 @@ function Cue({
   );
 }
 
+const noRaycast = () => {};
 let poolTex: THREE.CanvasTexture | null = null;
 /** Soft rounded-rect falloff, built once: brightest along the string, fading to the fret wires. */
 function slotPool() {
