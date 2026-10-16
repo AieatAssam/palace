@@ -227,7 +227,7 @@ function useMaterials() {
     // Nickel, a shade down and slightly satin: from the low hero angle a bright
     // mirror crown flares every fret into a white bar.
     const nickel = withLock(
-      new THREE.MeshStandardMaterial({ color: '#8f8b82', metalness: 1, roughness: 0.34, envMapIntensity: 0.32 }),
+      new THREE.MeshStandardMaterial({ color: '#8a867d', metalness: 1, roughness: 0.42, envMapIntensity: LITE ? 0.16 : 0.26 }),
       lock,
     );
     const nut = physical({
@@ -246,7 +246,7 @@ function useMaterials() {
       roughness: 1,
       roughnessMap: shell.roughnessMap,
       clearcoat: 1,
-      clearcoatRoughness: 0.04,
+      clearcoatRoughness: 0.2,
       iridescence: 1,
       iridescenceIOR: 1.4,
       iridescenceThicknessRange: [180, 980],
