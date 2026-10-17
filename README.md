@@ -1,103 +1,84 @@
-# Palace · Fretboard
+<p align="center">
+  <a href="https://aieatassam.github.io/palace/"><img src="docs/screenshots/hero-fretboard.webp" alt="A rosewood guitar neck with brass frets and pearl inlays on a walnut desk, twelve ivory and ebony note keys beneath" width="100%"></a>
+</p>
 
-A quiet, premium memory palace. This repository holds the **Day 1–3 prototype gate** from
-[`CONCEPT.md`](./CONCEPT.md): the Fretboard room alone, two drills on a PBR guitar neck,
-spaced repetition underneath. If naming notes on this neck isn't satisfying, nothing
-else gets built.
+<h1 align="center">Palace</h1>
 
-## What's here
+<p align="center"><b>A memory palace in rosewood, brass and leather.</b><br>
+Four rooms, four kinds of memory, one walnut desk.</p>
 
-- **Fretboard room**, standard tuning E A D G B E.
-  - **Name it** — a position is framed in brass; pick its name from 12 note buttons (sharps).
-  - **Find all** — tap every unlocked position of a given note on the neck.
-- **Unlock path** (`src/game/unlocks.ts`, data-driven): low E & A frets 0–5 → add D & G →
-  all six strings → frets 0–7 → 0–9 → 0–12. A stage opens once every position in the
-  current region has been seen and its mean mastery clears the bar.
-- **Spaced repetition** (`src/game/srs.ts`): SM-2 variant with in-session learning steps
-  (20 s, 2 min, 10 min) before day-scale intervals. Fast correct answers grow intervals
-  more than slow ones; misses reset hard. Each position (Name-it) and each note (Find-all)
-  is its own card. Progress lives in `localStorage` (`palace.fretboard.v1`).
-- **3D neck** (react-three-fiber): procedural rosewood board (canvas-generated albedo,
-  roughness and normal maps), mother-of-pearl inlays at 3/5/7/9/12 (iridescent, with a
-  procedural shell pattern, set into the board), brass frets, a bone nut,
-  wound strings with a normal-mapped winding, and a headstock where each string runs straight
-  back to its own inline tuner post. Locked strings and frets are dimmed and desaturated in
-  the shader (no overlay). On phones strings render thicker than true gauge. The lighting
-  is drei `Environment` lightformers plus a soft contact shadow. Post-processing is
-  bloom and vignette, plus depth of field on desktop only.
-- **Feedback**: on a correct answer the string vibrates (vertex shader, from the fretted
-  point to the bridge), shimmers, and plays a Karplus–Strong pluck at the right pitch
-  (`src/audio/karplus.ts`). A miss gets a soft clay-coloured pulse, a muted string and a
-  dry wood knock. There's no red and no screen shake.
-- **Phone portrait** (nut at top, neck filling the frame) and **desktop landscape**.
-  The camera frames the unlocked region inside the space the HUD leaves free. Edge
-  strings get wider tap zones, and Find-all forgives near-misses toward a target on the
-  adjacent string.
-- **Flow:** title (Begin / Continue) → a three-beat primer on the first visit → the hub → a room's stage card → play → a session sheet after 10 answers or a deliberate End (Again, or Leave back to the hub). *Rooms* in play returns to the hub. Settings: handedness (mirrors the neck), sound, haptics, reduce motion.
-- **Hub** (`src/ui/Hub.tsx`): one ledger card on the desk with a plate for each of the six rooms from `CONCEPT.md` §4, each with a gilt emblem. The Fretboard, Echo and Blocks plates open their stage cards; Faces, Ledger and N-Back are *in the workshop* and open a card that says what they will train (`src/ui/Workshop.tsx`). Nothing is locked. The card's foot carries today's record: answers, best run, and days at the desk (the day count cools to stone until you answer today; it never resets). Portrait gets two plates a row, landscape three.
-- **Rooms** (`src/modes/`): `catalog.ts` lists every room as plain data (id, numeral, title, pitch, emblem, open or not); `registry.tsx` registers the built ones as a `Room`: a 3D scene (mounted inside the camera rig), a play overlay, a stage card, its stage list and a progress hook over the shared SRS deck. A new room adds a catalogue entry, registers a `Room`, and reports graded answers to the shared rewards.
-- **Blocks** (`src/blocks/`): a Corsi block-tapping span. Lacquered blocks of rosewood and ebony, some with brass stringing let into the top, lie scattered on an oxblood leather blotter; the board lights a line of blocks (a brass sheen and a soft click and chime) and you tap them back. Seven stages, all open: nine blocks from three, long lines from five, last first, twelve and sixteen blocks, and two moving boards that lay themselves out afresh before every line. A clean line lengthens the next by one; a slip shortens it; three slips close the page. The best clean line is kept per stage (mastery bar per stage) and the stage card shows your best span in order and last first. `layout.ts` scatters the blocks by best-candidate sampling with a guaranteed gap; real buttons sit over every block, never under 48 px, reachable by Tab, the arrow keys (by screen position) and Enter or Space; a screen reader hears each block as it lights.
-- **Keyboard on the neck**: in Find-all and octaves the arrow keys move a brass frame between strings and frets (following the neck however it is turned), Enter or Space picks the place, and a screen reader hears each place and what the pick found (`src/ui/NeckKeys.tsx`).
-- **Shared rewards** (`src/rewards/`): `logic.ts` is pure (the run, milestones every 5 correct in a row, the combo meter's fill, the daily record and its rollover at local midnight); `store.ts` persists the day in `localStorage` (`palace.daily.v1`) and publishes events. A milestone writes a word in Pinyon Script over the room (*Bravo*, *Splendid*, *Superb*, *Bravissimo*), throws gold leaf up from the place just answered and strikes a brass chime synthesised in Web Audio (`src/audio/chime.ts`, silent when sound is off). Gold leaf is torn, crumpled scraps that tumble, flash as a facet turns to the window and fade as they drift down (on the lite path a low golden glow stands in for the reflections it has no room to show). A stage crossing its mastery bar presses an oxblood wax seal down onto a bare patch of desk near the top right, clear of the room's furniture: it drops, squashes as the wax takes the press and stays a little flatter, with a rolled chord and a *Mastered* caption. A slim brass combo meter sits beside the run in the meta line. Reduced motion (OS or setting): no gold leaf, the seal is set down without travel, the words appear and go without movement. Every reward is also announced once through a polite live region.
-- **Desk sheets:** the primer, session sheet and settings are a leather-and-brass card that slides onto the walnut in 3D while the camera eases over to it (`src/three/Sheet.tsx`). Their buttons are real DOM controls kept over the drawn labels (`src/ui/SheetLayer.tsx`), so keyboard, screen readers and tests work as usual.
-- **Type:** EB Garamond only, self-hosted (`src/assets/fonts`, regenerated by `scripts/build-fonts.py`, checked by `scripts/verify-fonts.py`). True small caps and old-style figures; ♯ comes from a Gentium Book Plus subset in the same family. Spec: `docs/ux/redesign.md`.
-- **Performance**: DPR is clamped (1.75 on touch devices), there are no shadow maps, and
-  drei's `PerformanceMonitor` steps down post-processing and DPR when frames drop.
-- **Lite render path** (`src/three/quality.ts`): DPR 1, no post-processing, standard
-  instead of physical materials, smaller procedural textures, a Lightformer room instead
-  of the reading-room HDRI (never fetched), and a flat-coloured desk without fittings. It is
-  used automatically under automation (`navigator.webdriver`) or with `?lite`. Add
-  `?quality=full` to force the full path (for example, for screenshots).
+<p align="center"><a href="https://aieatassam.github.io/palace/"><b>▶&nbsp;&nbsp;Play in your browser</b></a><br>
+<sub>Free. No account, no install. Phone or desktop.</sub></p>
 
-## Scripts
+---
 
-| Script              | What it does                                          |
-| ------------------- | ----------------------------------------------------- |
-| `npm run dev`       | Vite dev server                                       |
-| `npm run typecheck` | `tsc --noEmit`                                        |
-| `npm run lint`      | ESLint (flat config)                                  |
-| `npm test`          | Vitest unit tests (SRS, unlocks, notes, audio, layout) |
-| `npm run build`     | Type-check + production build to `dist/` (base `./`)  |
-| `npm run e2e`       | Playwright smoke tests (desktop 960×600, phone 412×915) |
+You sit at a walnut desk with a gilt-framed card of rooms in front of you. Pick a room, pick a stage, and play a short sitting. Five right in a row and the room writes *Bravo* over the desk in copperplate and throws up gold leaf. Master a stage and an oxblood wax seal lands beside your work.
 
-### End-to-end tests
+<p align="center"><img src="docs/screenshots/hub.webp" alt="The hub: a cream card in a gilt frame with six room plates and today's record" width="100%"></p>
 
-Playwright builds the app and serves it with `vite preview`. In CI it uses the bundled
-Chromium (`npx playwright install chromium`). Locally you can point it at a system Chrome
-instead:
+## The rooms
+
+### I · Fretboard
+Name every note on a guitar neck. Brass marks a place; you name its note, find every place a note sounds, or reach its octave two strings over. Get it right and the string plucks at its true pitch. Thirty-two stages run in two books, naturals then sharps and flats, from a single string to the full twelve frets. Spaced repetition picks the next question.
+
+### II · Echo
+A row of brass hand bells rings a line. You ring it back. A clean line grows by one stroke, a slip shrinks it by one, and three slips close the page. Later stages ring last first, quicken the beat, or strike two bells at once.
+
+<p align="center"><img src="docs/screenshots/echo.webp" alt="Echo: six brass hand bells on a walnut stand, the fourth lit while the line plays" width="100%"></p>
+
+### III · Blocks
+Rosewood and ebony blocks lie scattered on an oxblood blotter. A line of them lights; you tap it back in order. Boards run from nine blocks to sixteen, and two stages rearrange the board before each line.
+
+<p align="center"><img src="docs/screenshots/blocks.webp" alt="Blocks: nine lacquered blocks on an oxblood blotter, two lit in brass" width="100%"></p>
+
+### IV · Faces
+Meet a cast of sitters, each an oil portrait in a gilt frame with a name and sometimes a trade. Then name them. Questions come three ways: a portrait and four names, a name and four portraits, or a portrait and four trades. One stage covers the frames for thirty seconds before it asks. Miss a face and it comes back before the sitting ends.
+
+<p align="center"><img src="docs/screenshots/faces.webp" alt="Faces: an oil portrait in a gilt frame above four name keys" width="100%"></p>
+
+<p align="center">
+  <img src="docs/screenshots/phone-fretboard.webp" alt="Fretboard on a phone, the neck running top to bottom" width="32%">
+  <img src="docs/screenshots/phone-faces.webp" alt="Faces on a phone, meeting the first sitter" width="32%">
+  <img src="docs/screenshots/phone-hub.webp" alt="The hub on a phone, two plates a row" width="32%">
+</p>
+
+**In the workshop:** Ledger (long numbers) and N-Back (a corridor of repeats). Their plates already sit on the card; open one to see what it will train.
+
+## Rewards
+
+- **Flourish.** Five right in a row, in any room, writes a word in Pinyon Script: *Bravo*, then *Splendid*, *Superb*, *Bravissimo*. In Echo and Blocks a clean line counts as one.
+- **Gold leaf.** The same milestone throws torn gold scraps up from the place you answered. They flash as they turn and drift down.
+- **Chime.** A brass chime strikes at each milestone, a step higher on a pentatonic scale each time the run goes on.
+- **Combo meter.** A slim brass bar beside your run fills toward the next milestone.
+- **Wax seal.** Cross a stage's mastery bar and an oxblood seal drops onto a bare patch of desk and squashes under the press. A rolled chord sounds and a *Mastered* caption appears.
+- **Daily record.** The foot of the card keeps today's answers, your best run and your days at the desk. Skip a day and the numeral cools to stone. The count stays.
+
+Every stage in every room is open from your first visit. Choose where to start.
+
+Turn on reduce motion (in your OS or the settings sheet) and the gold leaf stays away and the seal sets down without travel. A screen reader hears each reward once. You can play by keyboard: arrow keys and Enter on the neck and the blotter, number keys for the bells and the Faces choices.
+
+---
+
+## Under the desk
+
+**Stack.** React 19, TypeScript, Vite, three.js through react-three-fiber and drei, Zustand. Web Audio makes every sound: a Karplus–Strong pluck for the strings, additive synthesis for bells and chimes. Type is EB Garamond, self-hosted.
+
+**Layout.** `src/modes/catalog.ts` lists the six rooms as data and `src/modes/registry.tsx` registers the four that are built. Fretboard lives in `src/game` and `src/three`; the others in `src/echo`, `src/blocks` and `src/faces`. Shared rewards sit in `src/rewards`, and the spaced-repetition scheduler (an SM-2 variant with in-session learning steps) in `src/game/srs.ts`.
 
 ```sh
-CHROME_PATH=/usr/bin/google-chrome npm run e2e
+npm install
+npm run dev        # Vite dev server
+npm run typecheck  # tsc --noEmit
+npm run lint       # ESLint
+npm test           # Vitest unit tests
+npm run build      # type-check, then build to dist/
+npm run e2e        # Playwright: desktop 960×600 and phone 412×915
 ```
 
-Headless WebGL runs on SwiftShader (CPU). The full render path manages only ~2 fps there,
-which starved the page and made CI time out. Under automation the app therefore uses its
-lite path, and CI runs one worker. The suite takes about a minute, including the build.
+**Render paths.** The full path has physical materials, an HDRI reading room, bloom, vignette and (on desktop) depth of field. The lite path runs at DPR 1 with standard materials, small textures and no post-processing. The app picks lite under automation (`navigator.webdriver`) or with `?lite`. `?quality=full` forces the full path; add `?capture` to hold it at its top tier and slow the animations for stills.
 
-### Test hooks
+**Tests.** Playwright builds the app and serves it with `vite preview`. Headless WebGL renders on the CPU, so e2e runs the lite path. To use a local Chrome: `CHROME_PATH=/usr/bin/google-chrome npm run e2e`. `window.__palace` exposes hooks for tests and devtools, among them `hub()` and `enter(stageId)` on `fretboard`, `echo`, `blocks` and `faces`.
 
-`window.__palace` exposes read-only hooks for e2e tests and devtools: `screen()`, `mode()`, `modes()`, `hubCard()`, `rewards()` (run, combo, today's record, last flourish, burst and seal), `state()` (`{ mode, question }`),
-`question()`,
-`answer()`, `drill()`, `stage()`, `positions()`, `found()`, `session()`, `leftHanded()`,
-`render()`, `project({ string, fret })`, which gives the page coordinates of a
-position on the 3D neck, and `highlight()`, which reports the question's highlight as
-rendered: the string mesh and fret space it actually sits on, measured on screen.
+**CI.** `.github/workflows/ci.yml` runs typecheck, lint, unit tests and build in one job and splits e2e across four sharded runners, one worker each. `deploy.yml` publishes `dist/` to GitHub Pages on each push to `main`.
 
-## Layout
-
-```
-src/
-  game/        pure logic: notes, srs, unlocks, drills, storage (+ tests)
-  audio/       Karplus–Strong synth (pure, tested) + Web Audio engine
-  three/       neck layout maths, procedural textures, Fretboard, Scene
-  ui/          title, primer, HUD, session sheet, settings
-  store.ts     Zustand game store
-  testHooks.ts window.__palace
-e2e/           Playwright smoke tests
-```
-
-## Deploy
-
-`.github/workflows/deploy.yml` builds on every push to `main` and publishes `dist/` with
-`actions/deploy-pages`. Enable **Settings → Pages → Source: GitHub Actions** once.
-`.github/workflows/ci.yml` runs typecheck, lint, unit tests, build and e2e on pushes and PRs.
+Design notes: [`CONCEPT.md`](./CONCEPT.md) and [`docs/ux/redesign.md`](./docs/ux/redesign.md).
