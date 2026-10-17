@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { midiAt, noteAt, positionKey } from './notes';
 import { type Deck, type Card, newCard, review } from './srs';
+import { TUNES } from './melodies';
 import {
+  BOOKS,
   FIRST_STAGE,
   STAGES,
   type Stage,
+  inBook,
   masteredStages,
   octaveTargets,
   regionPositions,
@@ -30,10 +33,35 @@ function masterStage(stage: Stage, base: Deck = {}): Deck {
 }
 
 describe('syllabus shape', () => {
-  it('has 32 stages: 16 naturals, then 16 sharps and flats', () => {
-    expect(STAGES).toHaveLength(32);
+  it('has 36 stages: 16 naturals, 16 sharps and flats, then 4 melodies', () => {
+    expect(STAGES).toHaveLength(36);
     expect(STAGES.slice(0, 16).every((s) => s.book === 'naturals')).toBe(true);
-    expect(STAGES.slice(16).every((s) => s.book === 'accidentals')).toBe(true);
+    expect(STAGES.slice(16, 32).every((s) => s.book === 'accidentals')).toBe(true);
+    expect(STAGES.slice(32).every((s) => s.book === 'melodies')).toBe(true);
+  });
+
+  it('lists the melodies book last, after naturals and sharps and flats', () => {
+    expect(BOOKS.map((b) => b.id)).toEqual(['naturals', 'accidentals', 'melodies']);
+    expect(STAGES.slice(32).map((s) => s.id)).toEqual(['mel-phrase', 'mel-tune', 'mel-neck', 'mel-recall']);
+  });
+
+  it('gives the melody stages the melody chapter and drill, with their rules', () => {
+    const mel = STAGES.slice(32);
+    expect(mel.every((s) => s.chapter === 'melody' && s.drill === 'melody')).toBe(true);
+    expect(mel.map((s) => s.melody)).toEqual([
+      { part: 'phrase', recall: false, pace: 0.75 },
+      { part: 'whole', recall: false, pace: 1 },
+      { part: 'whole', recall: false, pace: 1 },
+      { part: 'whole', recall: true, pace: 1 },
+    ]);
+    expect(mel[0]!.strings).toEqual([3, 4, 5]);
+    expect(mel[0]!.maxFret).toBe(5);
+    for (const s of mel.slice(1)) expect(s.strings).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(mel.map((s) => s.maxFret)).toEqual([5, 5, 12, 12]);
+  });
+
+  it('keeps melody rules off the note stages', () => {
+    for (const s of STAGES.slice(0, 32)) expect(s.melody).toBeUndefined();
   });
 
   it('walks each book in order: strings, pairs, neck reaches, octaves, find', () => {
@@ -59,7 +87,7 @@ describe('syllabus shape', () => {
   });
 
   it('gives every stage a unique id, with the first being nat-s0', () => {
-    expect(new Set(STAGES.map((s) => s.id)).size).toBe(32);
+    expect(new Set(STAGES.map((s) => s.id)).size).toBe(36);
     expect(FIRST_STAGE.id).toBe('nat-s0');
     expect(STAGES[0]).toBe(FIRST_STAGE);
   });
@@ -78,9 +106,10 @@ describe('coverage', () => {
     expect(keys.size).toBe(78);
   });
 
-  it('every position is a stage position in exactly one book', () => {
+  it('every position is a stage position in exactly one note book', () => {
     const books = new Map<string, Set<string>>();
     for (const s of STAGES) {
+      if (s.book === 'melodies') continue;
       const set = books.get(s.book) ?? new Set<string>();
       for (const p of stagePositions(s)) set.add(positionKey(p));
       books.set(s.book, set);
@@ -93,6 +122,7 @@ describe('coverage', () => {
 describe('stage positions', () => {
   it('naturals stages hold only natural notes; accidentals only sharps', () => {
     for (const s of STAGES) {
+      if (s.book === 'melodies') continue;
       for (const p of stagePositions(s)) {
         if (s.book === 'naturals') expect(noteAt(p)).not.toContain('#');
         else expect(noteAt(p)).toContain('#');
@@ -142,6 +172,23 @@ describe('stageItems', () => {
     const ids = stageItems(byId('acc-oct'));
     expect(ids).toContain('oct:s0f2'); // F# on low E
     expect(ids).not.toContain('oct:s0f0'); // E is not a sharp
+  });
+
+  it('melody stages give one mel: item per tune, in TUNES order', () => {
+    for (const s of STAGES.slice(32)) {
+      expect(stageItems(s)).toEqual(TUNES.map((t) => `mel:${s.id}:${t.id}`));
+    }
+    expect(stageItems(byId('mel-recall'))[0]).toBe('mel:mel-recall:ode');
+  });
+
+  it('melody stages count every tune as an item, whatever the region', () => {
+    expect(stageItems(byId('mel-phrase'))).toHaveLength(TUNES.length);
+    expect(stageItems(byId('mel-neck'))).toHaveLength(TUNES.length);
+  });
+
+  it('the melodies book admits every pitch', () => {
+    expect(inBook('melodies', 'F#')).toBe(true);
+    expect(inBook('melodies', 'E')).toBe(true);
   });
 });
 

@@ -7,6 +7,7 @@ import { type FacesPhase, type FacesSitting, useFaces } from './faces/store';
 import { bellRects } from './echo/fx';
 import { type EchoProgress, expectedOrder, echoProgress, ECHO_STAGES, wantedNow } from './echo/logic';
 import { type EchoPhase, type EchoSitting, lineRng, useEcho } from './echo/store';
+import { TUNES, nameOfMidi, positionsOfPitchClass } from './game/melodies';
 import { type Position, noteAt } from './game/notes';
 import { STAGES, regionPositions, stageProgress } from './game/stages';
 import { LEDGER_STAGES, type LedgerKind, type LedgerProgress, figuresFor, ledgerProgress, pegsFor, wordFor } from './ledger/logic';
@@ -16,7 +17,7 @@ import { NBACK_STAGES, type Channel, type NBackProgress, type Tally, isMatch, nb
 import { type NBackPhase, type NBackSitting, useNBack } from './nback/store';
 import { type Combo, type DailyRecord, comboOf } from './rewards/logic';
 import { useRewards } from './rewards/store';
-import { type Screen, type SessionStats, usePalace } from './store';
+import { type MelodyPhase, type Screen, type SessionStats, usePalace } from './store';
 import { type HighlightReport, type NeckWindow, cameraState, inspectHighlight, projectPosition, renderInfo, useNeckCursor, useNeckWindow } from './three/view';
 
 /**
@@ -26,11 +27,11 @@ import { type HighlightReport, type NeckWindow, cameraState, inspectHighlight, p
  */
 export interface PalaceTestHooks {
   /** Snapshot for tooling: current drill mode and question. */
-  state(): { mode: 'name' | 'find' | 'octave'; question: ReturnType<typeof usePalace.getState>['question'] };
+  state(): { mode: 'name' | 'find' | 'octave' | 'melody'; question: ReturnType<typeof usePalace.getState>['question'] };
   question(): ReturnType<typeof usePalace.getState>['question'];
   /** Correct note (Name-it) or the remaining target positions (Find-all, octaves). */
   answer(): string | Position[];
-  drill(): 'name' | 'find' | 'octave';
+  drill(): 'name' | 'find' | 'octave' | 'melody';
   stage(): { index: number; id: string; title: string };
   /** Every stage, in syllabus order, with its mastery. */
   stages(): { id: string; title: string; book: string; chapter: string; maxFret: number; sure: number; total: number; mastered: boolean }[];
@@ -70,6 +71,8 @@ export interface PalaceTestHooks {
   hub(): void;
   /** Fretboard: walk straight into play on a stage, from any screen (for fast tests). */
   fretboard: { enter(stageId: string): void };
+  /** Fretboard melodies: the tune, the player's place in it, and the places that play the next note. */
+  melody: MelodyHooks;
   /** Echo: the bells, the line and the player's place in it. Bells are numbered from 1 here, as on the plinth. */
   echo: EchoHooks;
   /** Blocks: the board, the line and the player's place in it. Blocks are numbered from 1 here, in reading order. */
@@ -80,6 +83,33 @@ export interface PalaceTestHooks {
   ledger: LedgerHooks;
   /** N-Back: the run, the trial under way, the calls and tallies. Tiles are numbered from 1 here. */
   nback: NBackHooks;
+}
+
+export interface MelodyHooks {
+  /** Null unless the question is a melody. Notes are sounding pitches, e.g. "F#4". */
+  state(): {
+    phase: MelodyPhase;
+    stage: { id: string; title: string; strings: number[]; maxFret: number; recall: boolean };
+    tune: { id: string; title: string };
+    notes: string[];
+    /** Notes per line, as the card shows them. */
+    lines: number[];
+    at: number;
+    misses: number;
+    played: Position[];
+    sounding: number;
+    /** The card shows the tune's notes (false while a from-memory tune is being played). */
+    shown: boolean;
+  } | null;
+  /** The note wanted next and every place in the stage's reach that plays it (any octave); null unless it is the player's turn. */
+  wanted(): { note: string; midi: number; places: Position[] } | null;
+  /** Every tune, its notes as sounding pitches. */
+  tunes(): { id: string; title: string; notes: string[] }[];
+  /** Walk straight into play on a melody stage, from any screen. */
+  enter(stageId: string): void;
+  /** Cut the room's preview or playback short (the playback's grading runs at once). */
+  endPreview(): void;
+  endPlayback(): void;
 }
 
 export interface LedgerHooks {
@@ -225,6 +255,10 @@ export function installTestHooks() {
     answer: () => {
       const q = s().question;
       if (q.kind === 'name') return q.answer;
+      if (q.kind === 'melody') {
+        const n = q.notes[s().melody.at];
+        return n ? positionsOfPitchClass(n.midi, s().stage()) : [];
+      }
       return q.targets.filter((t) => !s().found.some((f) => f.string === t.string && f.fret === t.fret));
     },
     drill: () => s().stage().drill,
@@ -276,6 +310,41 @@ export function installTestHooks() {
         toHub();
         s().chooseStage(stageId);
       },
+    },
+    melody: {
+      state: () => {
+        const q = s().question;
+        if (q.kind !== 'melody') return null;
+        const st = s().stage();
+        const run = s().melody;
+        return {
+          phase: run.phase,
+          stage: { id: st.id, title: st.title, strings: [...st.strings], maxFret: st.maxFret, recall: !!st.melody?.recall },
+          tune: { id: q.tuneId, title: q.title },
+          notes: q.notes.map((n) => nameOfMidi(n.midi)),
+          lines: q.lines.map((l) => l.length),
+          at: run.at,
+          misses: run.misses,
+          played: run.played.map((p) => ({ ...p })),
+          sounding: run.sounding,
+          shown: !(q.recall && run.phase === 'play'),
+        };
+      },
+      wanted: () => {
+        const q = s().question;
+        const run = s().melody;
+        if (q.kind !== 'melody' || run.phase !== 'play' || s().locked) return null;
+        const n = q.notes[run.at];
+        if (!n) return null;
+        return { note: nameOfMidi(n.midi), midi: n.midi, places: positionsOfPitchClass(n.midi, s().stage()) };
+      },
+      tunes: () => TUNES.map((t) => ({ id: t.id, title: t.title, notes: t.lines.flat().map((n) => nameOfMidi(n.midi)) })),
+      enter: (stageId) => {
+        toHub();
+        s().chooseStage(stageId);
+      },
+      endPreview: () => s().endMelodyPreview(),
+      endPlayback: () => s().endMelodyPlayback(),
     },
     echo: {
       seed: (n: number) => {

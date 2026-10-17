@@ -1,4 +1,5 @@
 import { MAX_FRET, NOTE_NAMES, type NoteName, type Position, STRING_COUNT, midiAt, noteAt, positionKey } from './notes';
+import { TUNES } from './melodies';
 import { type Deck, mastery } from './srs';
 
 /**
@@ -9,10 +10,22 @@ import { type Deck, mastery } from './srs';
  * widening reaches, then octave shapes and Find-all. Items (a position to name, a
  * note to find, an octave to reach) are shared between stages, so practice on
  * one string counts towards every stage that contains it.
+ *
+ * A third book holds the melodies: short tunes played note by note on the neck, from an
+ * opening phrase near the nut to a whole tune played from memory. Each tune is an item.
  */
-export type Book = 'naturals' | 'accidentals';
-export type Chapter = 'string' | 'pair' | 'neck' | 'octave' | 'find';
-export type StageDrill = 'name' | 'find' | 'octave';
+export type Book = 'naturals' | 'accidentals' | 'melodies';
+export type Chapter = 'string' | 'pair' | 'neck' | 'octave' | 'find' | 'melody';
+export type StageDrill = 'name' | 'find' | 'octave' | 'melody';
+
+/** A melody stage: how much of each tune, and whether the card hides it after one hearing. */
+export interface MelodyRule {
+  part: 'phrase' | 'whole';
+  /** Hidden after one preview: played from memory. */
+  recall: boolean;
+  /** Playback speed against the tune's own tempo (slow phrases < 1). */
+  pace: number;
+}
 
 export interface Stage {
   id: string;
@@ -27,11 +40,13 @@ export interface Stage {
   /** Frets 0..maxFret are in play. */
   maxFret: number;
   drill: StageDrill;
+  melody?: MelodyRule;
 }
 
 export const BOOKS: readonly { id: Book; title: string; short: string }[] = [
   { id: 'naturals', title: 'Naturals', short: 'naturals' },
   { id: 'accidentals', title: 'Sharps & flats', short: 'sharps & flats' },
+  { id: 'melodies', title: 'Melodies', short: 'melodies' },
 ];
 
 const ALL_STRINGS = [0, 1, 2, 3, 4, 5] as const;
@@ -76,7 +91,18 @@ function bookStages(book: Book): Stage[] {
   return out;
 }
 
-export const STAGES: readonly Stage[] = [...bookStages('naturals'), ...bookStages('accidentals')];
+/**
+ * Melodies, in four steps: the opening phrase on the three treble strings by the nut, slow;
+ * the whole tune in first position; the whole tune anywhere on frets 0–12; then from memory.
+ */
+export const MELODY_STAGES: readonly Stage[] = [
+  { id: 'mel-phrase', book: 'melodies', chapter: 'melody', title: 'Opening phrases', short: 'Phrase', strings: [3, 4, 5], maxFret: 5, drill: 'melody', melody: { part: 'phrase', recall: false, pace: 0.75 } },
+  { id: 'mel-tune', book: 'melodies', chapter: 'melody', title: 'Whole tunes', short: 'Tunes', strings: ALL_STRINGS, maxFret: 5, drill: 'melody', melody: { part: 'whole', recall: false, pace: 1 } },
+  { id: 'mel-neck', book: 'melodies', chapter: 'melody', title: 'Tunes, full neck', short: '0–12', strings: ALL_STRINGS, maxFret: MAX_FRET, drill: 'melody', melody: { part: 'whole', recall: false, pace: 1 } },
+  { id: 'mel-recall', book: 'melodies', chapter: 'melody', title: 'Tunes from memory', short: 'Recall', strings: ALL_STRINGS, maxFret: MAX_FRET, drill: 'melody', melody: { part: 'whole', recall: true, pace: 1 } },
+];
+
+export const STAGES: readonly Stage[] = [...bookStages('naturals'), ...bookStages('accidentals'), ...MELODY_STAGES];
 export const FIRST_STAGE = STAGES[0]!;
 
 export function stageById(id: string | undefined | null): Stage {
@@ -99,6 +125,7 @@ export function stageLabel(stage: Stage): string {
 export const isNatural = (n: NoteName) => !n.includes('#');
 
 export function inBook(book: Book, n: NoteName): boolean {
+  if (book === 'melodies') return true;
   return book === 'naturals' ? isNatural(n) : !isNatural(n);
 }
 
@@ -140,6 +167,7 @@ export function octaveTargets(p: Position, maxFret = MAX_FRET): Position[] {
 export const nameItemId = (p: Position) => `name:${positionKey(p)}`;
 export const findItemId = (n: NoteName) => `find:${n}`;
 export const octaveItemId = (p: Position) => `oct:${positionKey(p)}`;
+export const melodyItemId = (stage: Stage, tuneId: string) => `mel:${stage.id}:${tuneId}`;
 
 export function notesInPositions(positions: readonly Position[]): NoteName[] {
   const set = new Set(positions.map(noteAt));
@@ -156,6 +184,8 @@ export function stageItems(stage: Stage): string[] {
       return notesInPositions(positions).map(findItemId);
     case 'octave':
       return positions.filter((p) => octaveTargets(p, stage.maxFret).length > 0).map(octaveItemId);
+    case 'melody':
+      return TUNES.map((t) => melodyItemId(stage, t.id));
   }
 }
 

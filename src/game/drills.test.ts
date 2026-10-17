@@ -3,6 +3,7 @@ import { NOTE_NAMES, noteAt, positionKey, positionsOfNote } from './notes';
 import { type Deck, type Rng, newCard, review } from './srs';
 import { makeQuestion, questionTargets } from './drills';
 import { FIRST_STAGE, type Stage, octaveTargets, regionPositions, stageById, stageItems } from './stages';
+import { tuneById, tuneLines } from './melodies';
 
 const T0 = 1_700_000_000_000;
 
@@ -129,6 +130,65 @@ describe('octave questions', () => {
         expect(q.targets.length).toBeGreaterThan(0);
         expect(q.targets).toEqual(octaveTargets(q.position, stage.maxFret));
       }
+    }
+  });
+});
+
+describe('melody questions', () => {
+  it('on the phrase stage asks for the opening phrase of the first tune at 75% pace', () => {
+    const stage = stageById('mel-phrase');
+    const q = makeQuestion(stage, {}, T0, () => 0);
+    expect(q.kind).toBe('melody');
+    if (q.kind !== 'melody') throw new Error('unreachable');
+    expect(q.itemId).toBe('mel:mel-phrase:ode');
+    expect(q.tuneId).toBe('ode');
+    expect(q.title).toBe('Ode to Joy');
+    expect(q.source).toBe('Beethoven, 1824');
+    expect(q.tempo).toBe(75); // Ode to Joy is 100 bpm
+    expect(q.recall).toBe(false);
+    expect(q.targets).toEqual([]);
+  });
+
+  it('gives the notes of the lines as one run', () => {
+    for (const id of ['mel-phrase', 'mel-tune', 'mel-neck', 'mel-recall']) {
+      const stage = stageById(id);
+      for (const item of stageItems(stage)) {
+        const q = makeQuestion(stage, deckWithOnly(stage, item, T0), T0, () => 0);
+        if (q.kind !== 'melody') throw new Error('expected a melody question');
+        expect(q.itemId).toBe(item);
+        const tune = tuneById(q.tuneId);
+        expect(q.lines).toEqual(tuneLines(tune, stage.melody!.part));
+        expect(q.notes).toEqual(q.lines.flat());
+      }
+    }
+  });
+
+  it('plays the whole tune on the whole-tune stages, and only the phrase on the phrase stage', () => {
+    const ode = tuneById('ode');
+    const whole = makeQuestion(stageById('mel-tune'), deckWithOnly(stageById('mel-tune'), 'mel:mel-tune:ode', T0), T0, () => 0);
+    if (whole.kind !== 'melody') throw new Error('unreachable');
+    expect(whole.lines).toEqual(ode.lines);
+    expect(whole.notes.length).toBeGreaterThan(ode.lines.slice(0, ode.phraseLines).flat().length);
+  });
+
+  it('scales the tempo by the stage pace, rounded', () => {
+    const frere = 'mel:mel-tune:frere';
+    const stage = stageById('mel-tune');
+    const q = makeQuestion(stage, deckWithOnly(stage, frere, T0), T0, () => 0);
+    if (q.kind !== 'melody') throw new Error('unreachable');
+    expect(q.tempo).toBe(110);
+    const phrase = stageById('mel-phrase');
+    const p = makeQuestion(phrase, deckWithOnly(phrase, 'mel:mel-phrase:frere', T0), T0, () => 0);
+    if (p.kind !== 'melody') throw new Error('unreachable');
+    expect(p.tempo).toBe(Math.round(110 * 0.75));
+  });
+
+  it('is recall only on the from-memory stage', () => {
+    for (const id of ['mel-phrase', 'mel-tune', 'mel-neck', 'mel-recall']) {
+      const stage = stageById(id);
+      const q = makeQuestion(stage, {}, T0, () => 0);
+      if (q.kind !== 'melody') throw new Error('unreachable');
+      expect(q.recall).toBe(id === 'mel-recall');
     }
   });
 });

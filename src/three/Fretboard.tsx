@@ -823,7 +823,7 @@ function Highlights({ m, thick }: { m: Materials; thick: number }) {
   const asking = usePalace((s) => s.screen === 'play');
 
   const out: React.ReactNode[] = [];
-  if (asking && question.kind !== 'find') {
+  if (asking && (question.kind === 'name' || question.kind === 'octave')) {
     // Name-it lights the place to name; octaves light the note whose octave is wanted, and keep it lit.
     const named = question.kind === 'name';
     const tone: CueTone = !named ? 'ask' : feedback?.kind === 'correct' ? 'correct' : feedback?.kind === 'miss' ? 'miss' : 'ask';

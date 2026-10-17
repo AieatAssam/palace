@@ -26,7 +26,8 @@ export function SessionSheet() {
     ['To revisit', String(session.slipped.length)],
   ];
   const figure = session.answered ? `${pct}%` : '—';
-  const caption = session.answered ? `${session.correct} of ${session.answered} named` : 'Nothing answered';
+  const verb = stage.drill === 'melody' ? 'played clean' : 'named';
+  const caption = session.answered ? `${session.correct} of ${session.answered} ${verb}` : 'Nothing answered';
   // The stage in play; if this sitting carried it over the bar, it says so, with its gilt mark.
   const masteredNow = session.mastered.includes(stage.id);
   const roomLabel = masteredNow ? 'Mastered' : prog.mastered ? 'Stage \u00b7 mastered' : 'Stage';

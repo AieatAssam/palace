@@ -5,6 +5,7 @@ import { ComboMeter } from '../rewards/ComboMeter';
 import { usePalace } from '../store';
 import { useNeckWindow, useView } from '../three/view';
 import { flatOf, positionLabel, pretty, spelled } from './format';
+import { MelodyCard } from './MelodyCard';
 import { NeckKeys } from './NeckKeys';
 
 export function useInsetReporter() {
@@ -78,6 +79,7 @@ function Prompt() {
   const feedback = usePalace((s) => s.feedback);
   const accidentals = usePalace((s) => s.stage().book === 'accidentals');
   const win = useNeckWindow();
+  if (q.kind === 'melody') return <MelodyCard />;
   if (q.kind === 'name') {
     let line = 'Name this note.';
     // Sharps and flats: the answer in both spellings.
@@ -130,6 +132,9 @@ function Meta() {
   const stage = usePalace((s) => s.stage)();
   const finding = usePalace((s) => s.question.kind !== 'name');
   const next = usePalace((s) => s.nextQuestion);
+  // A melody can be heard through before playing (except on the from-memory stage).
+  const listen = usePalace((s) => (s.question.kind === 'melody' && !s.question.recall ? s.melody.phase : null));
+  const hear = usePalace((s) => s.hearMelody);
   const end = usePalace((s) => s.endSession);
   const prog = stageProgress(stage, deck);
   return (
@@ -137,7 +142,7 @@ function Meta() {
       <span className="meta-stage" data-testid="meta-stage" aria-label={stageLabel(stage)}>
         {stage.title}
         <span className="meta-book" aria-hidden>
-          {stage.book === 'naturals' ? '\u266e' : '\u266f\u266d'}
+          {stage.book === 'naturals' ? '\u266e' : stage.book === 'melodies' ? '\u266a' : '\u266f\u266d'}
         </span>
         {prog.mastered && <span className="gilt-mark" role="img" aria-label="mastered" />}
       </span>
@@ -151,6 +156,11 @@ function Meta() {
         </span>
         <ComboMeter />
       </span>
+      {listen && (
+        <button className="meta-action" onClick={hear} disabled={listen !== 'play'} data-testid="melody-listen">
+          Listen
+        </button>
+      )}
       {finding && (
         <button className="meta-action" onClick={next} data-testid="find-skip">
           Skip

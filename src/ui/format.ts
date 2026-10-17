@@ -1,3 +1,4 @@
+import { letterOf } from '../game/melodies';
 import type { NoteName, Position } from '../game/notes';
 
 /** Display a note with a proper sharp glyph. */
@@ -31,4 +32,10 @@ export function ordinal(n: number): string {
   const s = ['th', 'st', 'nd', 'rd'];
   const v = n % 100;
   return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]!);
+}
+
+/** A melody note as a screen reader should say it: "F sharp". */
+export function spokenNote(midi: number): string {
+  const n = letterOf(midi);
+  return n.length > 1 ? `${n[0]} sharp` : n;
 }

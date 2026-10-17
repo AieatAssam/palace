@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { haptic, knock, pluck, setSoundEnabled, unlockAudio } from './audio/engine';
 import { type Question, makeQuestion } from './game/drills';
+import { type MelodyNote, fingering, soundsNote } from './game/melodies';
 import { type NoteName, type Position, samePosition } from './game/notes';
 import { type Deck, ensureCards, gradeFromResponse, review } from './game/srs';
 import { type SavedState, type Settings, emptyState, loadState, saveState } from './game/storage';
@@ -47,6 +48,35 @@ export type Screen = 'attract' | 'primer' | 'hub' | 'play' | 'session';
 
 /** Answers per sitting before the session sheet closes the page. */
 export const SESSION_LENGTH = 10;
+/** Tunes per sitting in the Melodies book. */
+export const MELODY_SESSION_LENGTH = 3;
+
+/**
+ * A melody under way. `preview`: the room plays it through first (from memory stages);
+ * `play`: the player's turn, note `at` is wanted next; `playback`: the finished tune
+ * played back on the places the player chose; `done`: graded, the next tune is coming.
+ */
+export type MelodyPhase = 'preview' | 'play' | 'playback' | 'done';
+export interface MelodyRun {
+  phase: MelodyPhase;
+  /** Notes played so far (the index of the one wanted next). */
+  at: number;
+  /** Wrong notes so far. */
+  misses: number;
+  /** Where each note was played. */
+  played: Position[];
+  /** The note sounding in a preview or playback (index into the notes), or -1. */
+  sounding: number;
+}
+
+/** Wrong notes a tune can take and still count as played clean: one in eight. */
+export function melodyAllowance(length: number): number {
+  return Math.floor(length / 8);
+}
+
+function freshRun(q: Question): MelodyRun {
+  return { phase: q.kind === 'melody' && q.recall ? 'preview' : 'play', at: 0, misses: 0, played: [], sounding: -1 };
+}
 
 function emptySession(): SessionStats {
   return { answered: 0, correct: 0, streak: 0, best: 0, strengthened: [], slipped: [], mastered: [] };
@@ -74,6 +104,8 @@ interface PalaceState {
   session: SessionStats;
   /** True while waiting to advance to the next question. */
   locked: boolean;
+  /** The melody under way (meaningful while the question is a melody). */
+  melody: MelodyRun;
 
   stage(): Stage;
   /** Put a stage on the desk. Every stage is open. */
@@ -90,6 +122,12 @@ interface PalaceState {
   answerName(note: NoteName): void;
   tapPosition(p: Position): void;
   nextQuestion(): void;
+  /** A melody: hear it played through (not on a from-memory stage once the preview is over). */
+  hearMelody(): void;
+  /** A melody: cut the preview short and start playing. */
+  endMelodyPreview(): void;
+  /** A melody: cut the playback short; the tune is graded at once. */
+  endMelodyPlayback(): void;
   /** Attract → primer (first visit) or the hub. */
   begin(): void;
   /** Primer finished or skipped: remember it, then the hub. */
@@ -118,6 +156,9 @@ export function onResetProgress(fn: () => void) {
   resetHooks.push(fn);
 }
 let advanceTimer: ReturnType<typeof setTimeout> | undefined;
+/** A tune being played by the room (preview or playback): its pending notes, and what to do at the end. */
+let tuneTimers: ReturnType<typeof setTimeout>[] = [];
+let tuneDone: (() => void) | null = null;
 
 function now() {
   return Date.now();
@@ -136,7 +177,8 @@ export const usePalace = create<PalaceState>()((set, get) => {
   const scheduleNext = (ms: number) => {
     clearTimeout(advanceTimer);
     advanceTimer = setTimeout(() => {
-      if (get().session.answered >= SESSION_LENGTH) get().endSession();
+      const length = get().stage().drill === 'melody' ? MELODY_SESSION_LENGTH : SESSION_LENGTH;
+      if (get().session.answered >= length) get().endSession();
       else get().nextQuestion();
     }, ms);
   };
@@ -177,12 +219,93 @@ export const usePalace = create<PalaceState>()((set, get) => {
     });
   };
 
+  /**
+   * Stop the tune the room is playing. A playback cut short still counts: its grading runs now.
+   */
+  const stopTune = () => {
+    for (const t of tuneTimers) clearTimeout(t);
+    tuneTimers = [];
+    const done = tuneDone;
+    tuneDone = null;
+    if (get().melody.sounding !== -1) set({ melody: { ...get().melody, sounding: -1 } });
+    done?.();
+  };
+
+  /**
+   * The room plays `notes` on `places` at `tempo`, lighting each as it sounds, then calls `then`.
+   * Notes shorter than a beat are still given room to speak (a quaver is never under 180 ms).
+   */
+  const playTune = (notes: readonly MelodyNote[], places: readonly Position[], tempo: number, lead: number, then: () => void) => {
+    stopTune();
+    const beat = 60000 / tempo;
+    let t = lead;
+    notes.forEach((n, i) => {
+      const at = t;
+      tuneTimers.push(
+        setTimeout(() => {
+          set({ melody: { ...get().melody, sounding: i }, lastPluck: { id: ++eventId, position: places[i]!, at: performance.now() } });
+          pluck(places[i]!, 0.7);
+        }, at),
+      );
+      t += Math.max(180, n.beats * beat);
+    });
+    tuneDone = () => {
+      set({ melody: { ...get().melody, sounding: -1 } });
+      then();
+    };
+    tuneTimers.push(setTimeout(() => stopTune(), t + 250));
+  };
+
+  /** A from-memory tune: the room plays it once with the card showing, then the player's turn. */
+  const startPreview = () => {
+    const q = get().question;
+    if (q.kind !== 'melody') return;
+    const places = fingering(q.notes, stageById(get().saved.stageId));
+    set({ melody: { ...freshRun(q), phase: 'preview' } });
+    playTune(q.notes, places, q.tempo, 400, () => {
+      set({ melody: { ...get().melody, phase: 'play', sounding: -1 }, askedAt: now() });
+    });
+  };
+
+  /** A melody note played: the right note anywhere in reach moves on; any other is a soft miss, try again. */
+  const playMelodyNote = (p: Position) => {
+    const { question: q, melody: run, locked, askedAt } = get();
+    if (q.kind !== 'melody' || locked || run.phase !== 'play') return;
+    const want = q.notes[run.at];
+    if (!want) return;
+    if (!soundsNote(p, want.midi)) {
+      emitMiss(p);
+      set({ melody: { ...run, misses: run.misses + 1 }, feedback: { kind: 'miss', at: now(), position: p } });
+      return;
+    }
+    emitPluck(p);
+    buzz(8);
+    const played = [...run.played, p];
+    const at = run.at + 1;
+    if (at < q.notes.length) {
+      set({ melody: { ...run, at, played }, found: [p], feedback: null });
+      return;
+    }
+    // The tune is whole: hear it back on the player's own places, then grade it.
+    const clean = run.misses <= melodyAllowance(q.notes.length);
+    const ms = (now() - askedAt) / q.notes.length;
+    set({ melody: { ...run, at, played, phase: 'playback' }, found: [], feedback: null, locked: true });
+    playTune(q.notes, played, q.tempo, 600, () => {
+      grade(q.itemId, clean, ms);
+      if (clean) buzz(10);
+      set({ melody: { ...get().melody, phase: 'done' }, feedback: { kind: clean ? 'correct' : 'miss', at: now() } });
+      // With the stage card open, closing it moves on (as for any answered question).
+      if (!get().stagesOpen) scheduleNext(FIND_DONE_DELAY);
+    });
+  };
+
   /** Enter play: keep a question nobody has touched yet (restarting its clock), otherwise draw the next. */
   const startPlay = () => {
-    const { locked, feedback, found } = get();
+    const { locked, feedback, found, question } = get();
     useRewards.getState().startRun();
     set({ screen: 'play', stagesOpen: false, workshop: null, session: emptySession() });
-    if (locked || feedback || found.length) get().nextQuestion();
+    // A melody always starts afresh (a from-memory tune needs its hearing).
+    if (locked || feedback || found.length || question.kind === 'melody') get().nextQuestion();
     else set({ askedAt: now() });
   };
 
@@ -209,6 +332,7 @@ export const usePalace = create<PalaceState>()((set, get) => {
     lastMiss: null,
     session: emptySession(),
     locked: false,
+    melody: freshRun(firstQuestion),
 
     stage: () => stageById(get().saved.stageId),
 
@@ -234,7 +358,8 @@ export const usePalace = create<PalaceState>()((set, get) => {
     closeStages() {
       set({ stagesOpen: false });
       // A question answered just before the card opened still needs its successor.
-      if (get().screen === 'play' && get().locked && get().saved.modeId === 'fretboard') scheduleNext(200);
+      // A tune still playing back moves on by itself when it ends.
+      if (get().screen === 'play' && get().locked && get().saved.modeId === 'fretboard' && get().melody.phase !== 'playback') scheduleNext(200);
     },
 
     openRoom(id) {
@@ -251,12 +376,15 @@ export const usePalace = create<PalaceState>()((set, get) => {
     },
 
     toHub() {
+      // A playback cut short is graded first; then nothing pending may advance.
+      stopTune();
       clearTimeout(advanceTimer);
       useRewards.getState().refreshDay();
       set({ screen: 'hub', stagesOpen: false, workshop: null, session: emptySession(), feedback: null, found: [], locked: false });
     },
 
     enterRoom(id) {
+      stopTune();
       clearTimeout(advanceTimer);
       const saved = { ...get().saved, modeId: id };
       persist(saved);
@@ -265,18 +393,40 @@ export const usePalace = create<PalaceState>()((set, get) => {
     },
 
     nextQuestion() {
+      stopTune();
       clearTimeout(advanceTimer);
       const { saved, question } = get();
       const stage = stageById(saved.stageId);
       const avoid = question.kind === stage.drill ? question.itemId : undefined;
+      const next = makeQuestion(stage, saved.deck, now(), Math.random, avoid);
       set({
-        question: makeQuestion(stage, saved.deck, now(), Math.random, avoid),
+        question: next,
         askedAt: now(),
         feedback: null,
         found: [],
         findMisses: 0,
         locked: false,
+        melody: freshRun(next),
       });
+      if (next.kind === 'melody' && next.recall && get().screen === 'play') startPreview();
+    },
+
+    hearMelody() {
+      const { question: q, melody: run, screen, locked } = get();
+      if (q.kind !== 'melody' || screen !== 'play' || locked || q.recall || run.phase !== 'play') return;
+      unlockAudio();
+      // From the next note wanted to the end, on the usual places; then back to the player.
+      const places = fingering(q.notes, stageById(get().saved.stageId));
+      set({ melody: { ...run, phase: 'preview' } });
+      playTune(q.notes, places, q.tempo, 150, () => set({ melody: { ...get().melody, phase: 'play', sounding: -1 } }));
+    },
+
+    endMelodyPreview() {
+      if (get().melody.phase === 'preview') stopTune();
+    },
+
+    endMelodyPlayback() {
+      if (get().melody.phase === 'playback') stopTune();
     },
 
     answerName(note) {
@@ -302,6 +452,7 @@ export const usePalace = create<PalaceState>()((set, get) => {
       unlockAudio();
       const { question, locked, found, saved, screen, stagesOpen } = get();
       if (!inRegion(stageById(saved.stageId), p) || stagesOpen) return;
+      if (question.kind === 'melody' && screen === 'play') return playMelodyNote(p);
       // Octaves: the lit note itself only rings.
       const isSource = question.kind === 'octave' && samePosition(question.position, p);
       if (screen !== 'play' || question.kind === 'name' || isSource) {
@@ -351,6 +502,7 @@ export const usePalace = create<PalaceState>()((set, get) => {
     },
 
     endSession() {
+      stopTune();
       clearTimeout(advanceTimer);
       set({ screen: 'session', locked: true });
     },
