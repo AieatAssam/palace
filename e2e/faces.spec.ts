@@ -39,10 +39,15 @@ async function meetAll(page: Page) {
   throw new Error('still meeting the cast');
 }
 
-/** Answer the current question right or wrong, by the control its kind shows. Returns once the phase has moved on from 'ask'. */
+/**
+ * Answer the current question right or wrong, by the control its kind shows. Returns once the
+ * answer is recorded: the asked count, not the phase, since on a slow runner the brief right/wrong
+ * pause can be over (and the next question up) before the click call even returns.
+ */
 async function answerOne(page: Page, right: boolean) {
   await expect.poll(() => phaseOf(page)).toBe('ask');
-  const q = (await facesState(page)).question!;
+  const { question, sitting } = await facesState(page);
+  const q = question!;
   const n = right ? q.answer : [1, 2, 3, 4].find((c) => c !== q.answer)!;
   if (q.kind === 'face') {
     const portrait = page.getByTestId(`faces-portrait-${n}`);
@@ -51,7 +56,7 @@ async function answerOne(page: Page, right: boolean) {
   } else {
     await page.getByTestId(`faces-choice-${n}`).click();
   }
-  await expect.poll(() => phaseOf(page)).not.toBe('ask');
+  await expect.poll(async () => (await facesState(page)).sitting.asked).toBe(sitting.asked + 1);
 }
 
 test.describe('Faces', () => {

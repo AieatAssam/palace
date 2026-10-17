@@ -12,9 +12,9 @@ Six rooms, six kinds of memory, one walnut desk.</p>
 
 ---
 
-You sit at a walnut desk with a gilt-framed card of rooms in front of you. Pick a room, pick a stage, and play a short sitting. Five right in a row and the room writes *Bravo* over the desk in copperplate and throws up gold leaf. Master a stage and an oxblood wax seal lands beside your work.
+You sit at a walnut desk with the palace's ground floor in front of you, inked on laid paper: six rooms off a long gallery. Pick a room, pick a stage, and play a short sitting. Five right in a row and the room writes *Bravo* over the desk in copperplate and throws up gold leaf. Master a stage and an oxblood wax seal lands beside your work. Each sitting ends on a ledger page, its figures written by hand on blue ruling, and one warm key light from the window side lights the room.
 
-<p align="center"><img src="docs/screenshots/hub.webp" alt="The hub: a cream card in a gilt frame with six room plates and today's record" width="100%"></p>
+<p align="center"><img src="docs/screenshots/hub.webp" alt="The hub: the palace's ground floor inked on laid paper, six rooms off a gallery, with today's record in a ledger line beneath" width="100%"></p>
 
 ## The rooms
 
@@ -39,7 +39,7 @@ Meet a cast of sitters, each an oil portrait in a gilt frame with a name and som
 <p align="center">
   <img src="docs/screenshots/phone-fretboard.webp" alt="Fretboard on a phone, the neck running top to bottom" width="32%">
   <img src="docs/screenshots/phone-faces.webp" alt="Faces on a phone, meeting the first sitter" width="32%">
-  <img src="docs/screenshots/phone-hub.webp" alt="The hub on a phone, two plates a row" width="32%">
+  <img src="docs/screenshots/phone-hub.webp" alt="The hub on a phone: two ranges of three rooms either side of a narrow gallery" width="32%">
 </p>
 
 ### V · Ledger
@@ -55,7 +55,7 @@ Nine tiles sit in brass bezels on a walnut tray. One turns over each beat to sho
 - **Chime.** A brass chime strikes at each milestone, a step higher on a pentatonic scale each time the run goes on.
 - **Combo meter.** A slim brass bar beside your run fills toward the next milestone.
 - **Wax seal.** Cross a stage's mastery bar and an oxblood seal drops onto a bare patch of desk and squashes under the press. A rolled chord sounds and a *Mastered* caption appears.
-- **Daily record.** The foot of the card keeps today's answers, your best run and your days at the desk. Skip a day and the numeral cools to stone. The count stays.
+- **Daily record.** The ledger line under the floor plan keeps today's answers, your best run and your days at the desk. Skip a day and the numeral cools to stone. The count stays.
 
 Every stage in every room is open from your first visit. Choose where to start.
 
@@ -79,9 +79,9 @@ npm run build      # type-check, then build to dist/
 npm run e2e        # Playwright: desktop 960×600 and phone 412×915
 ```
 
-**Render paths.** The full path has physical materials, an HDRI reading room, bloom, vignette and (on desktop) depth of field. The lite path runs at DPR 1 with standard materials, small textures and no post-processing. The app picks lite under automation (`navigator.webdriver`) or with `?lite`. `?quality=full` forces the full path; add `?capture` to hold it at its top tier and slow the animations for stills.
+**Render paths.** The full path has physical materials, an HDRI reading room, bloom, vignette and (on desktop) depth of field. The lite path runs at DPR 1 with standard materials, small textures and no post-processing. Both paths light the room with one warm key spot from the window side that follows the camera, with a steep falloff into shadow. The app picks lite under automation (`navigator.webdriver`) or with `?lite`. `?quality=full` forces the full path; add `?capture` to hold it at its top tier and slow the animations for stills.
 
-**Tests.** Playwright builds the app and serves it with `vite preview`. Headless WebGL renders on the CPU, so e2e runs the lite path. To use a local Chrome: `CHROME_PATH=/usr/bin/google-chrome npm run e2e`. `window.__palace` exposes hooks for tests and devtools, among them `hub()` and `enter(stageId)` on `fretboard`, `melody`, `echo`, `blocks` and `faces`.
+**Tests.** Playwright builds the app and serves it with `vite preview`. Headless WebGL renders on the CPU, so e2e runs the lite path. To use a local Chrome: `CHROME_PATH=/usr/bin/google-chrome npm run e2e`. `window.__palace` exposes hooks for tests and devtools, among them `hub()` and `enter(stageId)` on `fretboard`, `melody`, `echo`, `blocks`, `faces`, `ledger` and `nback`.
 
 **CI.** `.github/workflows/ci.yml` runs typecheck, lint, unit tests and build in one job and splits e2e across four sharded runners, one worker each. `deploy.yml` publishes `dist/` to GitHub Pages on each push to `main`.
 

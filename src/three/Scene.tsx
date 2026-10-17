@@ -620,41 +620,66 @@ function NeckRig({ children }: { children: React.ReactNode }) {
         portrait and left-handed layouts: it rakes across the board's edge and
         the rounded neck back that the window key (behind) leaves dark.
       */}
-      <directionalLight position={[-3, 1.4, 6]} intensity={LITE ? 0.5 : 0.55} color="#ffd9b0" />
+      <directionalLight position={[-3, 1.4, 6]} intensity={LITE ? 0.42 : 0.36} color="#ffd9b0" />
       {children}
     </group>
   );
 }
 
 /**
- * Study light. Full: the reading-room HDRI for reflections, a soft window key
- * from the upper left and a weak cool fill opposite. Lite: the same key and
- * fill over a cheap Lightformer room (no file load).
+ * Study light: one warm key from the window at the upper left, a spot that follows whatever the
+ * camera frames, so each room's furniture sits in a pool of light that gives way to the desk's
+ * shadow. Its small source leaves hard, tight highlights on brass and lacquer. Only a trace of
+ * sky and a faint cool bounce lift the shadow side.
+ * Full: the reading-room HDRI, turned down so its broad reflections do not wash out the key.
+ * Lite: the same key and bounce over a cheap Lightformer room (no file load).
  */
 function Studio({ mirrored }: { mirrored: boolean }) {
   const sx = mirrored ? -1 : 1;
   return (
     <>
-      <hemisphereLight args={['#f6ead8', '#2a2018', LITE ? 0.45 : 0.18]} />
-      {/* World −X is screen left, −Z screen top (mirrored for left-handers). */}
-      <directionalLight position={[-5 * sx, 9, -4]} intensity={LITE ? 1.5 : 1.7} color="#fff0dc" />
-      <directionalLight position={[6 * sx, 3, 5]} intensity={0.22} color="#dfe6ee" />
+      <hemisphereLight args={['#f6ead8', '#1a120c', LITE ? 0.42 : 0.12]} />
+      <KeyLight sx={sx} />
+      <directionalLight position={[6 * sx, 3, 5]} intensity={LITE ? 0.12 : 0.08} color="#dfe6ee" />
       {LITE ? (
         <Environment resolution={64} frames={1}>
-          <Lightformer form="rect" intensity={2} color="#fff0dc" position={[-4 * sx, 6, -3]} rotation={[Math.PI / 2, 0, 0]} scale={[8, 4, 1]} />
-          <Lightformer form="rect" intensity={0.8} color="#e8eef2" position={[6 * sx, 2, 2]} rotation={[0, (-sx * Math.PI) / 2, 0]} scale={[6, 2, 1]} />
+          {/* A small, bright window and a dim bounce: reflections read as one window in a dark room. */}
+          <Lightformer form="rect" intensity={2.4} color="#ffe6c4" position={[-4 * sx, 6, -3]} rotation={[Math.PI / 2, 0, 0]} scale={[3, 1.6, 1]} />
+          <Lightformer form="rect" intensity={0.35} color="#e8eef2" position={[6 * sx, 2, 2]} rotation={[0, (-sx * Math.PI) / 2, 0]} scale={[6, 2, 1]} />
           <mesh scale={30}>
             <sphereGeometry args={[1, 16, 16]} />
-            <meshBasicMaterial color="#3a2e24" side={THREE.BackSide} />
+            <meshBasicMaterial color="#2a2018" side={THREE.BackSide} />
           </mesh>
         </Environment>
       ) : (
         <Suspense fallback={null}>
-          <Environment files={HDRI} environmentIntensity={0.75} environmentRotation={mirrored ? HDRI_ROTATION_MIRRORED : HDRI_ROTATION} />
+          <Environment files={HDRI} environmentIntensity={0.5} environmentRotation={mirrored ? HDRI_ROTATION_MIRRORED : HDRI_ROTATION} />
         </Suspense>
       )}
     </>
   );
+}
+
+/** Where the key sits relative to its target: high, on the window side and behind the desk. */
+const KEY_OFFSET = new THREE.Vector3(-7, 8.5, -6);
+/**
+ * The key: a warm spot aimed at the framed region, easing after it as the camera moves between
+ * rooms and cards. Its cone is wide enough for the longest furniture (the neck) and its penumbra
+ * long, so light pools on the subject and fades towards the desk's edges.
+ */
+function KeyLight({ sx }: { sx: number }) {
+  const light = useRef<THREE.SpotLight>(null);
+  const aim = useRef<THREE.Vector3 | null>(null);
+  useFrame((_, dt) => {
+    const l = light.current;
+    if (!l) return;
+    if (!aim.current) aim.current = focusPoint.clone();
+    aim.current.lerp(focusPoint, isCalm() ? 1 : 1 - Math.exp(-dt * 3));
+    l.target.position.copy(aim.current);
+    l.position.set(aim.current.x + KEY_OFFSET.x * sx, aim.current.y + KEY_OFFSET.y, aim.current.z + KEY_OFFSET.z);
+    l.target.updateMatrixWorld();
+  });
+  return <spotLight ref={light} color="#ffdcb0" intensity={LITE ? 74 : 60} angle={0.66} penumbra={0.55} decay={1.3} distance={0} />;
 }
 
 /** Keeps the lens on the framed region and the in-focus band proportional to the viewing distance. */

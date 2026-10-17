@@ -65,7 +65,7 @@ function useCardMaterials() {
     if (LITE) {
       return {
         leather: new THREE.MeshStandardMaterial({ color: '#4a2218', roughness: 0.7 }),
-        brass: new THREE.MeshStandardMaterial({ color: BRASS, roughness: 0.4, metalness: 0.6 }),
+        brass: new THREE.MeshStandardMaterial({ color: BRASS, roughness: 0.24, metalness: 0.8 }),
         paper: new THREE.MeshStandardMaterial({ color: '#e9dcc0', roughness: 0.86, emissive: '#2e281e' }),
         deckle: new THREE.MeshStandardMaterial({ color: '#c9a45a', roughness: 0.5, metalness: 0.4 }),
         wax: new THREE.MeshStandardMaterial({ color: OXBLOOD, roughness: 0.5 }),
@@ -134,14 +134,22 @@ const brassLine = new THREE.MeshBasicMaterial({ color: RULE });
 const paperDot = new THREE.MeshBasicMaterial({ color: '#efe3c6' });
 const rosette = { ring: new THREE.RingGeometry(0.058, 0.07, 32), boss: new THREE.CircleGeometry(0.014, 16) };
 const rings = { outer: new THREE.RingGeometry(0.255, 0.265, 48), inner: new THREE.RingGeometry(0.225, 0.2295, 48) };
-/** Hub plates: a faint umber wash over the page (its fibre still shows), framed in brass or a hairline. */
-const plateWash = new THREE.MeshBasicMaterial({ color: '#6b4f22', transparent: true, opacity: 0.075, depthWrite: false });
-const plateWashQuiet = new THREE.MeshBasicMaterial({ color: '#6b4f22', transparent: true, opacity: 0.035, depthWrite: false });
 /** A workshop room's emblem: the same gilt, worn back towards the page. */
 const goldQuiet = new THREE.MeshBasicMaterial({ color: '#a8946c' });
 const circle = new THREE.CircleGeometry(1, 24);
 const ringThin = new THREE.RingGeometry(0.86, 1, 40);
 const arcThin = new THREE.RingGeometry(0.88, 1, 32, 1, 0, Math.PI);
+/** Floor-plan walls in iron-gall ink; a gilt wash and cornice for each chamber. */
+const wallInk = new THREE.MeshBasicMaterial({ color: '#2a1d14' });
+const doorInk = new THREE.MeshBasicMaterial({ color: '#4a3a2a' });
+const chamberWash = new THREE.MeshBasicMaterial({ color: '#9a7638', transparent: true, opacity: 0.1, depthWrite: false });
+const chamberWashQuiet = new THREE.MeshBasicMaterial({ color: '#5a544a', transparent: true, opacity: 0.05, depthWrite: false });
+/** Account-book ruling: faint blue lines, oxblood money columns. */
+const ledgerBlue = new THREE.MeshBasicMaterial({ color: '#7f97ad', transparent: true, opacity: 0.55, depthWrite: false });
+const ledgerRed = new THREE.MeshBasicMaterial({ color: '#9a3b34', transparent: true, opacity: 0.75, depthWrite: false });
+const WALL_T = { outer: 0.07, inner: 0.04 };
+/** A door's swing: a hairline quarter circle (radius 1, scaled to the leaf). */
+const swingArc = new THREE.RingGeometry(0.985, 1, 24, 1, 0, Math.PI / 2);
 const capsule = new THREE.MeshBasicMaterial({ color: RULE, map: makeCapsule(), transparent: true, depthWrite: false, opacity: 0 });
 const impression = new THREE.MeshBasicMaterial({ color: '#2e2414', map: makeImpression(), transparent: true, depthWrite: false, opacity: 0 });
 
@@ -248,7 +256,55 @@ function Item({ item, foil, onBounds }: { item: SheetItem; foil: THREE.Material 
           <Flat x={cx} y={item.y - 0.05} w={w} h={0.007} material={gold} />
         </>
       ) : (
-        <Flat x={cx} y={item.y} w={w} h={0.006} material={hair} />
+        item.weight === 'ledger' ? (
+          <Flat x={cx} y={item.y} w={w} h={LITE ? 0.014 : 0.009} material={ledgerBlue} />
+        ) : (
+          <Flat x={cx} y={item.y} w={w} h={0.006} material={hair} />
+        )
+      );
+    }
+    case 'column': {
+      const h = item.y0 - item.y1;
+      const cy = (item.y0 + item.y1) / 2;
+      return item.double ? (
+        <>
+          <Flat x={item.x - 0.018} y={cy} w={LITE ? 0.011 : 0.007} h={h} material={ledgerRed} />
+          <Flat x={item.x + 0.018} y={cy} w={LITE ? 0.011 : 0.007} h={h} material={ledgerRed} />
+        </>
+      ) : (
+        <Flat x={item.x} y={cy} w={LITE ? 0.012 : 0.008} h={h} material={ledgerRed} />
+      );
+    }
+    case 'wall': {
+      const t = item.outer ? WALL_T.outer : WALL_T.inner;
+      return (
+        <Flat
+          x={(item.x0 + item.x1) / 2}
+          y={(item.y0 + item.y1) / 2}
+          w={Math.abs(item.x1 - item.x0) + t}
+          h={Math.abs(item.y1 - item.y0) + t}
+          material={wallInk}
+          z={TEXT_Z - 0.0025}
+        />
+      );
+    }
+    case 'door':
+      return <Door item={item} />;
+    case 'chamber': {
+      const { x, y, w, h, quiet } = item;
+      const z = PAPER_Z + 0.0015;
+      const i = 0.07;
+      const line = quiet ? hair : gold;
+      const t = quiet ? 0.005 : 0.006;
+      return (
+        <>
+          <Flat x={x} y={y} w={w} h={h} material={quiet ? chamberWashQuiet : chamberWash} z={z} />
+          {/* A gilt cornice a hand's breadth inside the walls. */}
+          <Flat x={x} y={y + h / 2 - i} w={w - 2 * i} h={t} material={line} />
+          <Flat x={x} y={y - h / 2 + i} w={w - 2 * i} h={t} material={line} />
+          <Flat x={x - w / 2 + i} y={y} w={t} h={h - 2 * i} material={line} />
+          <Flat x={x + w / 2 - i} y={y} w={t} h={h - 2 * i} material={line} />
+        </>
       );
     }
     case 'bar': {
@@ -273,30 +329,6 @@ function Item({ item, foil, onBounds }: { item: SheetItem; foil: THREE.Material 
           <mesh geometry={unit} material={foil ?? gold} scale={[0.064, 0.064, 1]} rotation={[0, 0, Math.PI / 4]} />
           <mesh geometry={rosette.boss} material={paperDot} position={[0, 0, 0.001]} />
         </group>
-      );
-    }
-    case 'plate': {
-      const { x, y, w, h, quiet } = item;
-      const t = quiet ? 0.006 : 0.011;
-      const line = quiet ? hair : brassLine;
-      const z = PAPER_Z + 0.0015;
-      return (
-        <>
-          <Flat x={x} y={y} w={w} h={h} material={quiet ? plateWashQuiet : plateWash} z={z} />
-          <Flat x={x} y={y + h / 2} w={w} h={t} material={line} />
-          <Flat x={x} y={y - h / 2} w={w} h={t} material={line} />
-          <Flat x={x - w / 2} y={y} w={t} h={h} material={line} />
-          <Flat x={x + w / 2} y={y} w={t} h={h} material={line} />
-          {!quiet && (
-            // A second, finer frame inside the first: the catalogue's double rule.
-            <>
-              <Flat x={x} y={y + h / 2 - 0.04} w={w - 0.08} h={0.005} material={brassLine} />
-              <Flat x={x} y={y - h / 2 + 0.04} w={w - 0.08} h={0.005} material={brassLine} />
-              <Flat x={x - w / 2 + 0.04} y={y} w={0.005} h={h - 0.08} material={brassLine} />
-              <Flat x={x + w / 2 - 0.04} y={y} w={0.005} h={h - 0.08} material={brassLine} />
-            </>
-          )}
-        </>
       );
     }
     case 'emblem':
@@ -632,6 +664,40 @@ function Emblem({ item }: { item: Extract<SheetItem, { kind: 'emblem' }> }) {
       break;
   }
   return <group position={[item.x, item.y, z]}>{parts}</group>;
+}
+
+/**
+ * A doorway as an architect inks it: the leaf standing open at right angles from its hinge with a
+ * hairline arc for its swing, or (still in the workshop) shut across the gap with a keyhole.
+ */
+function Door({ item }: { item: Extract<SheetItem, { kind: 'door' }> }) {
+  const { x, y, w, axis, hinge, swing, locked } = item;
+  const z = TEXT_Z - 0.002;
+  const t = 0.022;
+  // Work in the wall's frame (u along the wall, v across it), then map to the page.
+  const at = (u: number, v: number): [number, number, number] => (axis === 'h' ? [x + u, y + v, z] : [x + v, y + u, z]);
+  const size = (du: number, dv: number): [number, number, number] => (axis === 'h' ? [du, dv, 1] : [dv, du, 1]);
+  const hu = (hinge * w) / 2;
+  if (locked) {
+    return (
+      <>
+        <mesh geometry={unit} material={wallInk} position={at(0, 0)} scale={size(w, t * 1.4)} />
+        <mesh geometry={circle} material={paperDot} position={at(-hinge * w * 0.28, 0)} scale={[0.016, 0.016, 1]} />
+        <mesh geometry={circle} material={gold} position={at(-hinge * w * 0.28, swing * 0.05)} scale={[0.022, 0.022, 1]} />
+      </>
+    );
+  }
+  // The arc runs from the leaf's tip to the far jamb: a quarter turn about the hinge.
+  const su = -hinge;
+  const sv = swing;
+  const sx = axis === 'h' ? su : sv;
+  const sy = axis === 'h' ? sv : su;
+  return (
+    <>
+      <mesh geometry={unit} material={doorInk} position={at(hu, (sv * w) / 2)} scale={size(t, w)} />
+      <mesh geometry={swingArc} material={doorInk} position={at(hu, 0)} scale={[sx * w, sy * w, 1]} />
+    </>
+  );
 }
 
 /** A gilt "P" cypher inside a double ring, engraved at the head of the page. */

@@ -216,7 +216,7 @@ function useMaterials() {
         edge: new THREE.MeshStandardMaterial({ color: '#c9a35e', metalness: 0.5, roughness: 0.35 }),
         blue: new THREE.MeshBasicMaterial({ color: BLUE_RULE, transparent: true, opacity: 0.5 }),
         red: new THREE.MeshBasicMaterial({ color: RED_RULE, transparent: true, opacity: 0.75 }),
-        brass: new THREE.MeshStandardMaterial({ color: COLORS.brass, metalness: 0.7, roughness: 0.3 }),
+        brass: new THREE.MeshStandardMaterial({ color: COLORS.brass, metalness: 0.85, roughness: 0.22 }),
       };
     }
     const hide = makeLeather(512, 91);
