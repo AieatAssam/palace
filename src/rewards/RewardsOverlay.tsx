@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { usePalace } from '../store';
-import { SEAL_LIFE, sealNdc, sealRadiusPx } from './placement';
+import { CAPTURE } from '../three/quality';
+import { SEAL_LIFE, sealNdc, sealRadiusPx, sealSpot } from './placement';
 import { type Flourish, type Seal, useRewards } from './store';
 
 /** How long a flourish stays on the room (ms); the fade lives in the CSS. */
@@ -31,7 +32,7 @@ export function RewardsOverlay() {
     if (!sealEvent) return;
     setSeal(sealEvent);
     setSaid(`Mastered: ${sealEvent.title}.`);
-    const id = setTimeout(() => setSeal((s) => (s?.id === sealEvent.id ? null : s)), SEAL_LIFE * 1000);
+    const id = setTimeout(() => setSeal((s) => (s?.id === sealEvent.id ? null : s)), SEAL_LIFE * 1000 * (CAPTURE ? 24 : 1));
     return () => clearTimeout(id);
   }, [sealEvent]);
 
@@ -44,7 +45,7 @@ export function RewardsOverlay() {
           <span className="flourish-run">{flourish.streak} in a row</span>
         </div>
       )}
-      {live && seal && <SealCaption key={seal.id} title={seal.title} />}
+      {live && seal && <SealCaption key={seal.id} id={seal.id} title={seal.title} />}
       <p className="sr-only" aria-live="polite" data-testid="reward-announce">
         {said}
       </p>
@@ -52,12 +53,29 @@ export function RewardsOverlay() {
   );
 }
 
-/** "Mastered" and the stage's name, set under the wax seal the scene presses at the same place. */
-function SealCaption({ title }: { title: string }) {
+/** "Mastered" and the stage's name, set under the wax seal where the scene pressed it on the desk. */
+function SealCaption({ id, title }: { id: number; title: string }) {
   const [vw, vh] = [window.innerWidth, window.innerHeight];
-  const ndc = sealNdc(vw, vh);
-  const left = ((ndc.x + 1) / 2) * vw;
-  const top = ((1 - ndc.y) / 2) * vh + sealRadiusPx(vw, vh) * 1.12;
+  const fallback = () => {
+    const ndc = sealNdc(vw, vh);
+    return { x: ((ndc.x + 1) / 2) * vw, y: ((1 - ndc.y) / 2) * vh, r: sealRadiusPx(vw, vh) };
+  };
+  const [at, setAt] = useState(fallback);
+  useEffect(() => {
+    // The stamp finds its patch of desk on its first frame; follow it there.
+    let raf = 0;
+    let tries = 0;
+    const look = () => {
+      const s = sealSpot.current;
+      if (s && s.id === id) setAt({ x: s.x, y: s.y, r: s.r });
+      else if (tries++ < 30) raf = requestAnimationFrame(look);
+    };
+    raf = requestAnimationFrame(look);
+    return () => cancelAnimationFrame(raf);
+  }, [id]);
+  // Keep the words on screen whatever patch of desk the seal found.
+  const left = Math.max(110, Math.min(vw - 110, at.x));
+  const top = Math.min(vh - 90, at.y + at.r * 1.12);
   return (
     <div className="seal-caption" data-testid="seal-caption" style={{ left, top }} aria-hidden>
       <span className="seal-word">Mastered</span>

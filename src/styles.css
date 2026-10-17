@@ -821,6 +821,17 @@ button:focus-visible {
 
 /* ------------------------------------------------------------- Rewards */
 
+.neck-keys {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  outline: none;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1080,6 +1091,36 @@ button:focus-visible {
 
 /* Keyboard focus: a brass hairline round the bell, nothing more. */
 .bell-hit:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px rgba(176, 141, 87, 0.85), 0 0 0 4px rgba(176, 141, 87, 0.16);
+}
+
+/* The blocks' real buttons: the scene keeps each over its block; the block draws every state. */
+.block-hit {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 6px;
+  color: transparent;
+  font-size: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  touch-action: none;
+}
+
+.block-hit.placed {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.block-hit[aria-disabled='true'] {
+  cursor: default;
+}
+
+.block-hit:focus-visible {
   outline: none;
   box-shadow: 0 0 0 1px rgba(176, 141, 87, 0.85), 0 0 0 4px rgba(176, 141, 87, 0.16);
 }

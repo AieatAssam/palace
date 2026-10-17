@@ -53,3 +53,25 @@ Scope: the Echo room's strings only (prompt titles and subs, bell and slip label
 | Session figure when no line was rung (EchoSession) | — (em dash) | – (en dash) | Em dash removed. The en dash is the house glyph for ranges ("frets 0–4"); it stands in for an empty figure. |
 
 Reviewed and kept: the prompt titles (Listen., Ring it back., Ring it back, last first. at 25 characters, Rung true., Not that bell.) and their subs (Line of N, N of N, It ran ...), the bell and slip aria labels, the meta labels (Run, End, Clean lines in a row), the stage card kicker, Stages, nowLine and tally, the session rows and captions (Lines rung, Best on this stage, Slips, Longest line, Longest line, a new best, No line rung back, Mastered, Stage, Stage · mastered), the stage `short` and `note` fields (all `short` values 12 characters or fewer; notes read as plain description), the Echo trains label (Order and sequence, 18 characters), and the Attract kicker "Six rooms / Two open" (matches the open flag, as the hub pass kept it).
+
+## Blocks pass (night/blocks)
+
+Scope: the Blocks room's strings only (the catalog pitch, stage titles, short labels and notes, prompts, caller, block aria labels, meta, the stage card, the session sheet, and the keyboard neck messages). Each string was read against the stop-slop rules and the Echo voice. Three strings changed; the rest were already terse.
+
+| Where | Before | After | Why |
+|---|---|---|---|
+| Room III pitch (catalog) | Watch blocks light up on the blotter, then tap them back in order. | Watch a line of blocks light on the blotter, then tap it back. | Names the unit the room plays, a line, and matches the Echo pitch form. "In order" is carried by "back" and the stage names. |
+| Stage note, long lines (logic) | Nine blocks, from five | Lines start at five | "From five" was unclear; the note now says what the stage changes. |
+| Stage note, moving board (logic) | Nine blocks, laid out afresh | Nine blocks, a new layout | "Afresh" is an adverb. |
+
+Final strings, for review:
+
+- Pitch: Watch a line of blocks light on the blotter, then tap it back.
+- Trains: Where things were (17 characters, under the 24-character label limit).
+- Stage notes (each under 28 characters): Tap them back in order, Lines start at five, Nine blocks, back to front, A fuller board, A crowded board, Nine blocks, a new layout, Twelve blocks, back to front.
+- Stage shorts (each under 18 characters): Nine blocks, Long lines, Last first, Twelve blocks, Sixteen blocks, Moving board, Moving, last first.
+- Prompts: Watch. / Line of N / Tap them back. / Tap them back, last first. / Every one. / Not that block. / The green block was next. Kept, as the Echo prompts are.
+- Caller and block labels: Block N, Block N, back left (placeWords: back, front, left, right, middle).
+- Stages sheet: Watch the line, then tap it back. / Best span N in order, M last first / N of 7 mastered. Kept.
+- Session sheet: Clean lines, Best on this stage, Slips, Longest line, Longest line, a new best, No clean line yet. Kept.
+- Keyboard neck (NeckKeys): aria-label "Guitar neck. Arrow keys move between strings and frets; Enter picks the place." Live text: That is the lit note. Find its octave. / Found, all N. / Found, n of N. / Not there. / , the lit note / , found. Kept. Every successful pick starts with "Found".

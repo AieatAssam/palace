@@ -5,6 +5,7 @@ import { ComboMeter } from '../rewards/ComboMeter';
 import { usePalace } from '../store';
 import { useNeckWindow, useView } from '../three/view';
 import { flatOf, positionLabel, pretty, spelled } from './format';
+import { NeckKeys } from './NeckKeys';
 
 export function useInsetReporter() {
   const top = useRef<HTMLElement>(null);
@@ -206,8 +207,10 @@ function NamePad() {
  */
 export function Hud({ onSettings, hidden = false }: { onSettings: () => void; hidden?: boolean }) {
   const { top, bottom } = useInsetReporter();
+  const onNeck = usePalace((s) => s.question.kind !== 'name');
   return (
     <>
+      {onNeck && <NeckKeys live={!hidden} />}
       <header ref={top} className={`hud-top ${hidden ? 'hud-hidden' : ''}`} id="hud-top" inert={hidden}>
         <div className="bar">
           <span className="bar-left">
