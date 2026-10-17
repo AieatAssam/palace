@@ -75,3 +75,29 @@ Final strings, for review:
 - Stages sheet: Watch the line, then tap it back. / Best span N in order, M last first / N of 7 mastered. Kept.
 - Session sheet: Clean lines, Best on this stage, Slips, Longest line, Longest line, a new best, No clean line yet. Kept.
 - Keyboard neck (NeckKeys): aria-label "Guitar neck. Arrow keys move between strings and frets; Enter picks the place." Live text: That is the lit note. Find its octave. / Found, all N. / Found, n of N. / Not there. / , the lit note / , found. Kept. Every successful pick starts with "Found".
+
+## Faces pass (night/faces)
+
+Scope: the Faces room's strings only (the catalog pitch, stage titles, short labels and notes, prompts, portrait labels, the stage card, the session sheet). Each string was read against the stop-slop rules and the Blocks and Echo voice. Four strings changed. Sitters keep their names and trades; the sitter description (`describe`) reads cleanly and stays as it was.
+
+| Where | Before | After | Why |
+|---|---|---|---|
+| Ask by name prompt (FacesHud) | Who sat for this? | Name the sitter. | A Wh- question; the imperative matches "Name this note." |
+| Ask by trade prompt (FacesHud) | What was their trade? | Name their trade. | Same fix. "Their" is the they/them form for sitters. |
+| Ask by face prompt (FacesHud) | Which is NAME? | Find NAME. | A question with the answer in the portraits; the instruction says what to do. |
+| Stage note, eight sitters (logic) | A fuller gallery | Eight portraits, eight names | Vague. The new note says what is counted, and matches the four-sitter note. |
+| Stage note, trades (logic) | Four sitters, each with a trade | Four sitters, their trades | Shorter, 26 characters, under the 28-character note limit. |
+| Room IV pitch (catalog) | Meet sitters in oils, then name them from their portraits. | Meet the sitters in their frames, then name them. | "Their portraits" repeats the sitter. "Each ... its portrait" names the unit. |
+
+Final strings, for review:
+
+- Pitch: Meet the sitters in their frames, then name them. (56 characters)
+- Trains: Names to faces (unchanged).
+- Stage titles: Four sitters / Eight sitters / Sitters and trades / Sitters, asked later.
+- Stage shorts (under 18 characters): Four sitters / Eight sitters / Names and trades / Asked later.
+- Stage notes (under 28 characters): Four portraits, four names / Eight portraits, eight names / Four sitters, their trades / Six sitters, then a pause.
+- Prompts: Name the sitter. / Name their trade. / Find NAME. (27 characters for the longest sitter name). Kept: Question N of M / Questions in M:SS / The drape stays down. / That was NAME. / This is NAME. / NAME, trade.
+- Meet and session buttons: Back / Next sitter / To the questions / Cover the frame / Again / Leave. Kept.
+- Stages sheet: Meet the sitters, then name them. Kept.
+- Session sheet: Today, Named right, No questions yet, Stage · mastered, Mastered. Kept.
+- Portrait buttons: Portrait N: followed by the `describe` sentence (for example, "A woman with pinned-up auburn hair, fair skin, in a plum gown with pearls, on an umber ground."). Kept.

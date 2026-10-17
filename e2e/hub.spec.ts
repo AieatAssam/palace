@@ -1,7 +1,7 @@
 import { type Page, expect, test } from '@playwright/test';
 
 const ROOMS = ['fretboard', 'echo', 'blocks', 'faces', 'ledger', 'nback'] as const;
-const WORKSHOP_ROOMS = ['faces', 'ledger', 'nback'] as const;
+const WORKSHOP_ROOMS = ['ledger', 'nback'] as const;
 const DAY = 86_400_000;
 
 /** Seed the fretboard save before the app loads, once per tab (a reload keeps the player's own data). */
@@ -79,21 +79,22 @@ test('the hub loads with every room', async ({ page }) => {
   await expect(page.getByTestId('room-fretboard')).toHaveAccessibleName(/Fretboard/);
   await expect(page.getByTestId('room-echo')).toHaveAccessibleName(/Echo/);
   await expect(page.getByTestId('room-blocks')).toHaveAccessibleName(/Blocks/);
-  await expect(page.getByTestId('room-faces')).toHaveAccessibleName(/workshop/);
+  await expect(page.getByTestId('room-faces')).toHaveAccessibleName(/Faces/);
+  await expect(page.getByTestId('room-ledger')).toHaveAccessibleName(/workshop/);
 
   const modes = await page.evaluate(() => window.__palace!.modes());
   expect(modes).toHaveLength(6);
-  expect(modes.filter((m) => m.open).map((m) => m.id)).toEqual(['fretboard', 'echo', 'blocks']);
+  expect(modes.filter((m) => m.open).map((m) => m.id)).toEqual(['fretboard', 'echo', 'blocks', 'faces']);
 });
 
 test('workshop rooms open a placeholder and come back', async ({ page }) => {
   await page.goto('./');
   await toHub(page);
 
-  await expect(page.getByTestId('room-faces')).toHaveClass(/placed/);
-  await page.getByTestId('room-faces').click();
+  await expect(page.getByTestId('room-ledger')).toHaveClass(/placed/);
+  await page.getByTestId('room-ledger').click();
   await expect(page.getByTestId('workshop')).toBeVisible();
-  expect(await page.evaluate(() => window.__palace!.hubCard())).toBe('workshop:faces');
+  expect(await page.evaluate(() => window.__palace!.hubCard())).toBe('workshop:ledger');
   await expect(page.getByTestId('workshop-back')).toHaveClass(/placed/);
   await page.getByTestId('workshop-back').click();
   await expect(page.getByTestId('workshop')).toBeHidden();
