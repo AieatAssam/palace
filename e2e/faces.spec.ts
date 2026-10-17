@@ -191,6 +191,16 @@ test.describe('Faces', () => {
 
     await expect.poll(() => page.evaluate(() => window.__palace!.cameraSettled()), { timeout: 15_000 }).toBe(true);
     await expect.poll(() => page.evaluate(() => window.__palace!.faces.rects().length), { timeout: 15_000 }).toBe(4);
+    // The frames ease from the single portrait's place into the row: wait until they stand still.
+    let last = '';
+    const settled = async () => {
+      const rects = await page.evaluate(() => window.__palace!.faces.rects());
+      const now = JSON.stringify(rects.map((r) => [Math.round(r.x), Math.round(r.y), Math.round(r.w), Math.round(r.h)]));
+      const still = now === last;
+      last = now;
+      return still;
+    };
+    await expect.poll(settled, { timeout: 15_000, intervals: [250] }).toBe(true);
     const viewport = page.viewportSize()!;
     const rects = await page.evaluate(() => window.__palace!.faces.rects());
 
