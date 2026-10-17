@@ -107,14 +107,21 @@ function BellButtons({ live }: { live: boolean }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [live, n, press]);
 
+  useEffect(() => {
+    for (const i of [...bellDom.keys()]) if (i >= n) bellDom.delete(i);
+    for (const i of [...bellRects.keys()]) if (i >= n) bellRects.delete(i);
+  }, [n]);
+
   return (
     <div className="echo-bells" role="group" aria-label="Bells">
       {scale.map((note, i) => (
         <button
           key={`${n}-${i}`}
           ref={(el) => {
+            // A re-render hands the same button back: keep its place on screen (as Blocks does).
+            // Bells beyond the current count are dropped by the effect above when the count changes.
             if (el) bellDom.set(i, el);
-            else {
+            else if (bellDom.get(i)?.isConnected === false) {
               bellDom.delete(i);
               bellRects.delete(i);
             }
