@@ -15,7 +15,8 @@ export interface NBackStage {
   /** Full name, e.g. "Two back". */
   title: string;
   short: string;
-  note: string;
+  /** How to play, for the stage card: two or three short lines, the last a worked example. */
+  how: readonly string[];
   n: 1 | 2 | 3;
   channels: readonly Channel[];
   /** Milliseconds from one trial to the next, and how long the tile shows its face. */
@@ -28,10 +29,22 @@ export interface NBackStage {
 }
 
 export const NBACK_STAGES: readonly NBackStage[] = [
-  { id: 'one', title: 'One back', short: 'One back', note: 'Same tile as the last turn?', n: 1, channels: ['place'], tempo: 2400, show: 900, trials: 16, mastery: 85 },
-  { id: 'two', title: 'Two back', short: 'Two back', note: 'Same tile as two back?', n: 2, channels: ['place'], tempo: 2500, show: 900, trials: 18, mastery: 80 },
-  { id: 'three', title: 'Three back', short: 'Three back', note: 'Same tile as three back?', n: 3, channels: ['place'], tempo: 2600, show: 900, trials: 20, mastery: 75 },
-  { id: 'dual', title: 'Dual two back, tile and tone', short: 'Dual two back', note: 'Watch the tile, hear the bell', n: 2, channels: ['place', 'tone'], tempo: 2800, show: 900, trials: 20, mastery: 75 },
+  {
+    id: 'one', title: 'One back', short: 'One back', n: 1, channels: ['place'], tempo: 2400, show: 900, trials: 16, mastery: 85,
+    how: ['Press Tile if this square lit up last turn.', 'Turns: centre, centre.', 'Press on the second: it matches turn one.'],
+  },
+  {
+    id: 'two', title: 'Two back', short: 'Two back', n: 2, channels: ['place'], tempo: 2500, show: 900, trials: 18, mastery: 80,
+    how: ['Press Tile if this square lit up 2 turns ago.', 'Turns: top-left, centre, top-left.', 'Press on the third: it matches turn one.'],
+  },
+  {
+    id: 'three', title: 'Three back', short: 'Three back', n: 3, channels: ['place'], tempo: 2600, show: 900, trials: 20, mastery: 75,
+    how: ['Press Tile if this square lit up 3 turns ago.', 'Turns: top-left, centre, top-right, top-left.', 'Press on the fourth: it matches turn one.'],
+  },
+  {
+    id: 'dual', title: 'Dual two back, square and bell', short: 'Dual two back', n: 2, channels: ['place', 'tone'], tempo: 2800, show: 900, trials: 20, mastery: 75,
+    how: ['Press Tile if this square lit up 2 turns ago,', 'and Bell if this note rang 2 turns ago.', 'Notes: low, high, low. Press Bell on the third.'],
+  },
 ];
 
 export const FIRST_NBACK_STAGE = NBACK_STAGES[0]!;
@@ -82,6 +95,11 @@ export function makeRun(stage: Pick<NBackStage, 'n' | 'trials' | 'channels'>, rn
   const places = fill(TILES, plant());
   const tones = stage.channels.includes('tone') ? fill(TONES, plant()) : Array.from({ length: total }, () => 0);
   return places.map((place, i) => ({ place, tone: tones[i]! }));
+}
+
+/** The first n trials have nothing n turns back to match: the player only remembers them. */
+export function isWarmup(n: number, i: number): boolean {
+  return i >= 0 && i < n;
 }
 
 /** Is trial `i` a match on `channel`? */
@@ -179,4 +197,47 @@ export function parseRecord(raw: unknown): NBackRecord {
     }
   }
   return rec;
+}
+
+// ---------------------------------------------------------------- the words on screen
+
+/** The nine squares by name, in the order they are numbered. */
+export const SQUARE_NAMES: readonly string[] = ['top-left', 'top-middle', 'top-right', 'middle-left', 'centre', 'middle-right', 'bottom-left', 'bottom-middle', 'bottom-right'];
+
+/** "the turn before" for one back, "2 turns ago" otherwise. */
+export const turnsAgo = (n: number) => (n === 1 ? 'the turn before' : `${n} turns ago`);
+
+/** The question on a channel, for the trial showing now. */
+export function promptFor(n: number, ch: Channel): string {
+  return ch === 'place' ? `Press Tile if this square also lit up ${turnsAgo(n)}.` : `Press Bell if this note also rang ${turnsAgo(n)}.`;
+}
+
+/** The line under the question: the turn, and during the warm-up when matching starts. */
+export function turnLine(n: number, at: number, total: number): string {
+  if (at < 0) return 'The first square lights up in a moment.';
+  const turn = `Turn ${at + 1} of ${total}.`;
+  return isWarmup(n, at) ? `${turn} Nothing can match yet: matching starts on turn ${n + 1}.` : turn;
+}
+
+/** What the player's call (or a match let slip) was, on which trial. */
+export interface Said {
+  kind: Exclude<Call, 'pass'>;
+  at: number;
+}
+
+/**
+ * The feedback line for a call, naming what matched or what was there instead. Hits and wrong
+ * presses are told on the trial they were made; a miss is told as the next trial starts, so it
+ * speaks of the previous square or note.
+ */
+export function feedbackFor(run: readonly Trial[], n: number, ch: Channel, said: Said): string {
+  const thing = ch === 'place' ? 'square' : 'note';
+  if (said.kind === 'hit') return `Right: the ${thing} matched ${turnsAgo(n)}.`;
+  if (said.kind === 'miss') return `Missed: the previous ${thing} matched the one ${n === 1 ? 'before it' : `${n} turns before it`}.`;
+  const now = run[said.at];
+  const back = run[said.at - n];
+  if (!now || !back) return '';
+  const which = n === 1 ? `the last ${thing}` : `the ${thing} ${n} turns ago`;
+  if (ch === 'place') return `No match: ${which} was the ${SQUARE_NAMES[back.place]}.`;
+  return `No match: ${which} was ${back.tone < now.tone ? 'lower' : 'higher'}.`;
 }

@@ -2,46 +2,74 @@ import { useEffect } from 'react';
 import { ComboMeter } from '../rewards/ComboMeter';
 import { useRewards } from '../rewards/store';
 import { RoomsMark, StagesMark, useInsetReporter } from '../ui/Hud';
-import { type Channel, nbackProgress } from './logic';
+import { type Channel, SQUARE_NAMES, feedbackFor, isWarmup, nbackProgress, promptFor, turnLine, turnsAgo } from './logic';
 import { useNBack } from './store';
 
-const BACK = ['', 'the last turn', 'two turns back', 'three turns back'];
-
+/**
+ * The question and the turn, in plain words: "Remember this one." for the first n turns (nothing
+ * can match yet), then what each key is for. Under it, the feedback on the latest call.
+ */
 function Prompt() {
   const st = useNBack((s) => s.stage)();
   const phase = useNBack((s) => s.phase);
   const at = useNBack((s) => s.at);
   const total = useNBack((s) => s.run.length);
-  const pct = useNBack((s) => s.sitting.score);
-  const dual = st.channels.includes('tone');
-  let title = dual ? `Same tile or bell, ${BACK[st.n]}?` : `Same tile as ${BACK[st.n]}?`;
-  let sub = at < 0 ? 'The first tile turns in a moment' : `Turn ${at + 1} of ${total}`;
+  const sitting = useNBack((s) => s.sitting);
+  let lines = st.channels.map((ch) => promptFor(st.n, ch));
+  let sub = turnLine(st.n, at, total);
   let tone = '';
-  if (phase === 'run' && at >= 0 && at < st.n) sub = `Turn ${at + 1} of ${total}, nothing to match yet`;
+  if (phase === 'run' && isWarmup(st.n, at)) lines = ['Remember this one.'];
   if (phase === 'done') {
-    title = `${pct} in a hundred.`;
-    sub = 'Right calls, of those that counted';
-    tone = pct >= st.mastery ? 'correct' : '';
+    const sum = (k: 'hits' | 'misses' | 'false') => st.channels.reduce((n, ch) => n + sitting.tallies[ch][k], 0);
+    lines = [`Score: ${sitting.score} out of 100.`];
+    sub = `You caught ${sum('hits')} of ${sum('hits') + sum('misses')} matches and pressed ${sum('false')} wrong.`;
+    tone = sitting.score >= st.mastery ? 'correct' : '';
   }
   return (
     <div className="prompt scrimmed" aria-live="polite">
-      <h1 className={`prompt-title ${tone}`} data-testid="prompt">
-        {title}
+      <h1 className={`prompt-title nback-question ${tone}`} data-testid="prompt">
+        {lines.map((l, i) => (
+          <span key={i} className="nback-line">
+            {l}
+          </span>
+        ))}
       </h1>
       <p className="prompt-sub" data-testid="prompt-where">
         {sub}
       </p>
+      {phase === 'run' && <Feedback />}
     </div>
   );
 }
 
-/** For a screen reader: the tile turned (by number and place) and, in the dual stage, the bell. */
+/** What the latest call got right or wrong, per channel, naming the square or note. */
+function Feedback() {
+  const st = useNBack((s) => s.stage)();
+  const run = useNBack((s) => s.run);
+  const said = useNBack((s) => s.said);
+  const told = st.channels.flatMap((ch) => {
+    const x = said[ch];
+    return x ? [{ ch, kind: x.kind, text: feedbackFor(run, st.n, ch, x) }] : [];
+  });
+  const tone = told.length === 0 ? '' : told.every((t) => t.kind === 'hit') ? 'correct' : 'miss';
+  return (
+    <p className={`prompt-sub nback-feedback ${tone}`} data-testid="nback-feedback">
+      {told.map((t) => (
+        <span key={t.ch} className="nback-line" data-testid={`nback-feedback-${t.ch}`}>
+          {t.text}
+        </span>
+      ))}
+    </p>
+  );
+}
+
+/** For a screen reader: the square that lit up and, in the dual stage, the note (1 lowest, 8 highest). */
 function Caller() {
   const st = useNBack((s) => s.stage)();
   const at = useNBack((s) => s.at);
   const run = useNBack((s) => s.run);
   const t = at >= 0 ? run[at] : undefined;
-  const said = t ? `Tile ${t.place + 1}${st.channels.includes('tone') ? `, bell ${t.tone + 1}` : ''}` : '';
+  const said = t ? `Square: ${SQUARE_NAMES[t.place]}${st.channels.includes('tone') ? `, note ${t.tone + 1} of 8` : ''}` : '';
   return (
     <p className="sr-only" aria-live="assertive" data-testid="nback-caller">
       {said}
@@ -49,20 +77,22 @@ function Caller() {
   );
 }
 
-const LABEL: Record<Channel, { word: string; key: string; hint: string }> = {
-  place: { word: 'Tile', key: 'A', hint: 'Same tile' },
-  tone: { word: 'Bell', key: 'L', hint: 'Same bell' },
+const LABEL: Record<Channel, { word: string; key: string; thing: string }> = {
+  place: { word: 'Tile', key: 'A', thing: 'square' },
+  tone: { word: 'Bell', key: 'L', thing: 'note' },
 };
 
-/** The call keys: Tile (A) and, in the dual stage, Bell (L). Each flashes as it is graded. */
+/** The call keys: Tile (A) and, in the dual stage, Bell (L). Each flashes as it is graded; both are off for the first n turns. */
 function Calls() {
   const st = useNBack((s) => s.stage)();
   const phase = useNBack((s) => s.phase);
+  const at = useNBack((s) => s.at);
   const called = useNBack((s) => s.called);
   const flash = useNBack((s) => s.flash);
   const call = useNBack((s) => s.call);
+  const open = phase === 'run' && at >= 0 && !isWarmup(st.n, at);
   return (
-    <div className="nback-calls" role="group" aria-label="Call a match">
+    <div className="nback-calls" role="group" aria-label="Press on a match">
       {st.channels.map((ch) => {
         const f = flash[ch];
         const cls = f ? (f.kind === 'hit' ? 'correct' : 'miss') : '';
@@ -72,8 +102,8 @@ function Calls() {
             className={`note nback-call ${cls} ${called[ch] ? 'called' : ''}`}
             data-testid={`nback-call-${ch}`}
             aria-keyshortcuts={LABEL[ch].key}
-            aria-disabled={phase !== 'run'}
-            aria-label={`${LABEL[ch].hint}, key ${LABEL[ch].key}`}
+            aria-disabled={!open}
+            aria-label={`${LABEL[ch].word}: press if this ${LABEL[ch].thing} matches ${turnsAgo(st.n)}, key ${LABEL[ch].key}`}
             onPointerDown={(e) => {
               if (e.button !== 0) return;
               e.preventDefault();

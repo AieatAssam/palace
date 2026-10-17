@@ -5,21 +5,28 @@ import {
   FIRST_NBACK_STAGE,
   TILES,
   TONES,
+  SQUARE_NAMES,
   addCall,
   emptyRecord,
   emptyTally,
+  feedbackFor,
   grade,
   isMatch,
+  isWarmup,
   makeRun,
   nbackMastered,
   nbackProgress,
   nbackStageById,
   parseRecord,
+  promptFor,
   recordRun,
   score,
+  turnLine,
+  turnsAgo,
   type NBackRecord,
   type NBackStage,
   type Tally,
+  type Trial,
 } from './logic';
 
 /** A small seeded random source (mulberry32), so every line in a test is repeatable. */
@@ -291,6 +298,123 @@ describe('nbackProgress and nbackMastered', () => {
       rounds: {},
     };
     expect(nbackMastered(rec)).toBe(2);
+  });
+});
+
+describe('NBACK_STAGES how-to lines', () => {
+  it('gives every stage two or three how-to lines', () => {
+    for (const s of NBACK_STAGES) {
+      expect(s.how.length, s.id).toBeGreaterThanOrEqual(2);
+      expect(s.how.length, s.id).toBeLessThanOrEqual(3);
+      for (const line of s.how) expect(line.trim().length, s.id).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('isWarmup', () => {
+  it('is true for the first n trials only', () => {
+    expect(isWarmup(2, 0)).toBe(true);
+    expect(isWarmup(2, 1)).toBe(true);
+    expect(isWarmup(2, 2)).toBe(false);
+    expect(isWarmup(1, 0)).toBe(true);
+    expect(isWarmup(1, 1)).toBe(false);
+  });
+
+  it('is false before the first trial (index -1)', () => {
+    expect(isWarmup(2, -1)).toBe(false);
+  });
+});
+
+describe('turnsAgo', () => {
+  it('says the turn before for one back, and a count otherwise', () => {
+    expect(turnsAgo(1)).toBe('the turn before');
+    expect(turnsAgo(2)).toBe('2 turns ago');
+    expect(turnsAgo(3)).toBe('3 turns ago');
+  });
+});
+
+describe('promptFor', () => {
+  it('asks about the square for two back', () => {
+    expect(promptFor(2, 'place')).toBe('Press Tile if this square also lit up 2 turns ago.');
+  });
+
+  it('asks about the note for two back', () => {
+    expect(promptFor(2, 'tone')).toBe('Press Bell if this note also rang 2 turns ago.');
+  });
+
+  it('says the turn before for one back, on both channels', () => {
+    expect(promptFor(1, 'place')).toBe('Press Tile if this square also lit up the turn before.');
+    expect(promptFor(1, 'tone')).toBe('Press Bell if this note also rang the turn before.');
+  });
+});
+
+describe('turnLine', () => {
+  it('says the first square is coming before the run starts', () => {
+    expect(turnLine(2, -1, 20)).toBe('The first square lights up in a moment.');
+  });
+
+  it('marks the warm-up turns as nothing-can-match-yet', () => {
+    expect(turnLine(2, 0, 20)).toBe('Turn 1 of 20. Nothing can match yet: matching starts on turn 3.');
+    expect(turnLine(2, 1, 20)).toBe('Turn 2 of 20. Nothing can match yet: matching starts on turn 3.');
+  });
+
+  it('gives just the turn once matching has started', () => {
+    expect(turnLine(2, 2, 20)).toBe('Turn 3 of 20.');
+    expect(turnLine(1, 0, 16)).toBe('Turn 1 of 16. Nothing can match yet: matching starts on turn 2.');
+    expect(turnLine(1, 1, 16)).toBe('Turn 2 of 16.');
+  });
+});
+
+describe('feedbackFor', () => {
+  // Two back: trial 2 matches trial 0 on place (0) and not on tone; trial 3 is a false place
+  // (square 8 two back is bottom-right, now square 7) and a false tone (now 0, two back 3).
+  const run: Trial[] = [
+    { place: 0, tone: 1 },
+    { place: 8, tone: 3 },
+    { place: 0, tone: 5 },
+    { place: 7, tone: 0 },
+  ];
+
+  it('names the square that matched on a hit', () => {
+    expect(feedbackFor(run, 2, 'place', { kind: 'hit', at: 2 })).toBe('Right: the square matched 2 turns ago.');
+  });
+
+  it('names the note that matched on a hit', () => {
+    expect(feedbackFor(run, 2, 'tone', { kind: 'hit', at: 2 })).toBe('Right: the note matched 2 turns ago.');
+  });
+
+  it('says the previous square was a miss, for two back', () => {
+    expect(feedbackFor(run, 2, 'place', { kind: 'miss', at: 2 })).toBe('Missed: the previous square matched the one 2 turns before it.');
+  });
+
+  it('says the previous note was a miss, for two back', () => {
+    expect(feedbackFor(run, 2, 'tone', { kind: 'miss', at: 2 })).toBe('Missed: the previous note matched the one 2 turns before it.');
+  });
+
+  it('names the square two back on a false place call', () => {
+    expect(SQUARE_NAMES[8]).toBe('bottom-right');
+    expect(feedbackFor(run, 2, 'place', { kind: 'false', at: 3 })).toBe('No match: the square 2 turns ago was the bottom-right.');
+  });
+
+  it('says lower when the note two back was lower than now', () => {
+    // Trial 2 is tone 5, two back trial 0 was tone 1.
+    expect(feedbackFor(run, 2, 'tone', { kind: 'false', at: 2 })).toBe('No match: the note 2 turns ago was lower.');
+  });
+
+  it('says higher when the note two back was higher than now', () => {
+    // Trial 3 is tone 0, two back trial 1 was tone 3.
+    expect(feedbackFor(run, 2, 'tone', { kind: 'false', at: 3 })).toBe('No match: the note 2 turns ago was higher.');
+  });
+
+  it('uses the last square wording for one back', () => {
+    const one: Trial[] = [
+      { place: 0, tone: 1 },
+      { place: 8, tone: 3 },
+    ];
+    expect(feedbackFor(one, 1, 'place', { kind: 'false', at: 1 })).toBe('No match: the last square was the top-left.');
+    expect(feedbackFor(one, 1, 'tone', { kind: 'false', at: 1 })).toBe('No match: the last note was lower.');
+    expect(feedbackFor(one, 1, 'place', { kind: 'hit', at: 1 })).toBe('Right: the square matched the turn before.');
+    expect(feedbackFor(one, 1, 'place', { kind: 'miss', at: 1 })).toBe('Missed: the previous square matched the one before it.');
   });
 });
 

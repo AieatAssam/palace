@@ -157,14 +157,93 @@ test.describe('N-Back', () => {
     expect(n).toBe(2);
 
     const before = (await nbackState(page)).tallies;
+    // The keyboard, not a click: a click waits on actionability, and the trial clock (2.5s) can turn the warm-up over meanwhile.
     for (let t = 0; t < n; t++) {
       await expect.poll(() => nbackAt(page)).toBe(t);
-      await page.getByTestId('nback-call-place').click();
+      await page.keyboard.press('a');
       await page.evaluate(() => window.__palace!.nback.step());
     }
     await expect.poll(() => nbackAt(page)).toBe(n);
     const after = await nbackState(page);
     expect(after.tallies).toEqual(before);
     expect(after.sitting.score).toBe(0);
+  });
+
+  test('two back: the first n trials say to remember and lock the calls, then the prompt names the rule', async ({ page }) => {
+    test.setTimeout(45_000);
+    await enterNBack(page, 'two');
+    await waitForRun(page);
+    const n = (await nbackState(page)).stage.n;
+    expect(n).toBe(2);
+
+    const prompt = page.getByTestId('prompt');
+    await expect(page.locator('[aria-live="polite"]', { has: prompt })).toHaveCount(1);
+    const tile = page.getByTestId('nback-call-place');
+
+    for (let t = 0; t < n; t++) {
+      await expect.poll(() => nbackAt(page)).toBe(t);
+      await expect(prompt).toContainText('Remember this one.');
+      await expect(tile).toHaveAttribute('aria-disabled', 'true');
+      await page.evaluate(() => window.__palace!.nback.step());
+    }
+
+    await expect.poll(() => nbackAt(page)).toBe(n);
+    await expect(prompt).toContainText('Press Tile if this square also lit up 2 turns ago.');
+    await expect(prompt).not.toContainText('Remember this one.');
+    await expect(tile).toHaveAttribute('aria-disabled', 'false');
+  });
+
+  test('two back: a call on a real match is right, and a wrong press names the square two back', async ({ page }) => {
+    test.setTimeout(45_000);
+    await enterNBack(page, 'two');
+    await waitForRun(page);
+    const n = 2;
+    const total = (await nbackState(page)).run.length;
+    const names = ['top-left', 'top-middle', 'top-right', 'middle-left', 'centre', 'middle-right', 'bottom-left', 'bottom-middle', 'bottom-right'];
+    const tile = page.getByTestId('nback-call-place');
+    let hitDone = false;
+    let falseDone = false;
+
+    for (let t = 0; t < total && !(hitDone && falseDone); t++) {
+      await expect.poll(() => nbackAt(page)).toBe(t);
+      const matches = await nbackMatches(page);
+      if (t >= n && matches.includes('place') && !hitDone) {
+        await tile.click();
+        await expect(page.getByTestId('nback-feedback-place')).toHaveText('Right: the square matched 2 turns ago.');
+        hitDone = true;
+      } else if (t >= n && !matches.includes('place') && !falseDone) {
+        const s = await nbackState(page);
+        const back = s.run[t - n]!.place - 1;
+        await tile.click();
+        await expect(page.getByTestId('nback-feedback-place')).toHaveText(`No match: the square 2 turns ago was the ${names[back]}.`);
+        falseDone = true;
+      }
+      await page.evaluate(() => window.__palace!.nback.step());
+    }
+
+    expect(hitDone).toBe(true);
+    expect(falseDone).toBe(true);
+  });
+
+  test('two back: a match let pass is a miss, and the next trial says so', async ({ page }) => {
+    test.setTimeout(45_000);
+    await enterNBack(page, 'two');
+    await waitForRun(page);
+    const total = (await nbackState(page)).run.length;
+    let missed = false;
+
+    for (let t = 0; t < total - 1 && !missed; t++) {
+      await expect.poll(() => nbackAt(page)).toBe(t);
+      const matches = await nbackMatches(page);
+      await page.evaluate(() => window.__palace!.nback.step());
+      if (t >= 2 && matches.includes('place')) {
+        await expect.poll(() => nbackAt(page)).toBe(t + 1);
+        await expect(page.getByTestId('nback-feedback-place')).toHaveText('Missed: the previous square matched the one 2 turns before it.');
+        missed = true;
+      }
+    }
+
+    expect(missed).toBe(true);
+    expect((await nbackState(page)).tallies.place.misses).toBe(1);
   });
 });

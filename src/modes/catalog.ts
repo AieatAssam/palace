@@ -29,8 +29,8 @@ export const MODES: readonly ModeInfo[] = [
   { id: 'echo', numeral: 'II', title: 'Echo', pitch: 'Hear a line of brass bells, then ring it back.', trains: 'Order and sequence', emblem: 'echo', open: true },
   { id: 'blocks', numeral: 'III', title: 'Blocks', pitch: 'Watch a line of blocks light on the blotter, then tap it back.', trains: 'Where things were', emblem: 'blocks', open: true },
   { id: 'faces', numeral: 'IV', title: 'Faces', pitch: 'Meet the sitters in their frames, then name them.', trains: 'Names to faces', emblem: 'faces', open: true },
-  { id: 'ledger', numeral: 'V', title: 'Ledger', pitch: 'Turn figures into words with the Major system, then hold long numbers.', trains: 'Long numbers', emblem: 'ledger', open: true },
-  { id: 'nback', numeral: 'VI', title: 'N-Back', pitch: 'Call each tile that repeats n turns back on the brass tray.', trains: 'Working memory', emblem: 'nback', open: true },
+  { id: 'ledger', numeral: 'V', title: 'Ledger', pitch: 'Learn a word for each number from 00 to 99, then recall long numbers.', trains: 'Long numbers', emblem: 'ledger', open: true },
+  { id: 'nback', numeral: 'VI', title: 'N-Back', pitch: 'Press Tile when a square on the tray repeats from 1, 2 or 3 turns back.', trains: 'Working memory', emblem: 'nback', open: true },
 ];
 
 export const DEFAULT_MODE: ModeId = 'fretboard';

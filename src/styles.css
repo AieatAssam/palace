@@ -1271,6 +1271,29 @@ button:focus-visible {
 
 /* ---------------------------------------------------------------- N-Back */
 
+/* The question runs to a sentence (two in the dual stage), so it sits smaller than a note name. */
+.prompt-title.nback-question {
+  font-size: calc(var(--fs-question) * 0.62);
+  line-height: 1.2;
+}
+
+.nback-line {
+  display: block;
+}
+
+/* Feedback on the latest press: green when right, rust when missed or wrong. A fixed height keeps the tray still as it comes and goes. */
+.nback-feedback {
+  min-height: 1.3em;
+}
+
+.nback-feedback.correct {
+  color: var(--correct-lit);
+}
+
+.nback-feedback.miss {
+  color: var(--miss-lit);
+}
+
 /* Two broad ivory keys: Tile on the left, Bell on the right, each with its letter engraved small. */
 .nback-calls {
   display: flex;
@@ -1310,6 +1333,9 @@ button:focus-visible {
     width: 100%;
     max-width: 420px;
     margin: 0 auto;
+  }
+  .prompt-title.nback-question {
+    font-size: 20px;
   }
   .nback-call {
     flex: 1;
