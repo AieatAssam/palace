@@ -3,7 +3,7 @@ import { BLOCKS_STAGES, type BlocksProgress, bestSpan, blocksProgress, expectedO
 import { type BlocksPhase, type BlocksSitting, useBlocks } from './blocks/store';
 import { bellRects } from './echo/fx';
 import { type EchoProgress, expectedOrder, echoProgress, ECHO_STAGES, wantedNow } from './echo/logic';
-import { type EchoPhase, type EchoSitting, useEcho } from './echo/store';
+import { type EchoPhase, type EchoSitting, lineRng, useEcho } from './echo/store';
 import { type Position, noteAt } from './game/notes';
 import { STAGES, regionPositions, stageProgress } from './game/stages';
 import { MODES } from './modes/catalog';
@@ -95,6 +95,8 @@ export interface BlocksHooks {
 }
 
 export interface EchoHooks {
+  /** Seed the randomness used for new lines (deterministic tests). */
+  seed(n: number): void;
   state(): {
     phase: EchoPhase;
     stage: { id: string; title: string; bells: number; order: 'forward' | 'reverse'; chords: boolean };
@@ -190,6 +192,17 @@ export function installTestHooks() {
       },
     },
     echo: {
+      seed: (n: number) => {
+        // mulberry32
+        let a = n >>> 0;
+        lineRng.current = () => {
+          a = (a + 0x6d2b79f5) >>> 0;
+          let t = a;
+          t = Math.imul(t ^ (t >>> 15), t | 1);
+          t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      },
       state: () => {
         const e = useEcho.getState();
         const st = e.stage();
