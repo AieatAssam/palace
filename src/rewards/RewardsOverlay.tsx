@@ -22,11 +22,11 @@ export function RewardsOverlay() {
 
   useEffect(() => {
     if (!flourishEvent) return;
+    // Like the seal caption, the word's life starts when it is first drawn (FlourishWord), not at the event.
     setFlourish(flourishEvent);
     setSaid(`${flourishEvent.word}. ${flourishEvent.streak} in a row.`);
-    const id = setTimeout(() => setFlourish((f) => (f?.id === flourishEvent.id ? null : f)), FLOURISH_MS);
-    return () => clearTimeout(id);
   }, [flourishEvent]);
+  const flourishDone = useCallback((id: number) => setFlourish((f) => (f?.id === id ? null : f)), []);
 
   useEffect(() => {
     if (!sealEvent) return;
@@ -39,18 +39,27 @@ export function RewardsOverlay() {
 
   return (
     <>
-      {live && flourish && (
-        <div className="flourish" key={flourish.id} data-testid="flourish" data-tier={flourish.tier} aria-hidden>
-          <span className="flourish-word">{flourish.word}</span>
-          <span className="flourish-rule" />
-          <span className="flourish-run">{flourish.streak} in a row</span>
-        </div>
-      )}
+      {live && flourish && <FlourishWord key={flourish.id} flourish={flourish} onDone={flourishDone} />}
       {live && seal && <SealCaption key={seal.id} id={seal.id} title={seal.title} onDone={sealDone} />}
       <p className="sr-only" aria-live="polite" data-testid="reward-announce">
         {said}
       </p>
     </>
+  );
+}
+
+/** The script word for a run; leaves FLOURISH_MS after it is first drawn. */
+function FlourishWord({ flourish, onDone }: { flourish: Flourish; onDone: (id: number) => void }) {
+  useEffect(() => {
+    const t = setTimeout(() => onDone(flourish.id), FLOURISH_MS);
+    return () => clearTimeout(t);
+  }, [flourish.id, onDone]);
+  return (
+    <div className="flourish" data-testid="flourish" data-tier={flourish.tier} aria-hidden>
+      <span className="flourish-word">{flourish.word}</span>
+      <span className="flourish-rule" />
+      <span className="flourish-run">{flourish.streak} in a row</span>
+    </div>
   );
 }
 
