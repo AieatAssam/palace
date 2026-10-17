@@ -202,6 +202,12 @@ export function Gallery() {
       p.x += (foot.x - p.x) * k;
       p.z += (foot.z - p.z) * k;
       p.s += (item.slot.scale - p.s) * k;
+      // Arrive exactly once within a hair, so the button over the frame stops moving too.
+      if (Math.abs(foot.x - p.x) + Math.abs(foot.z - p.z) < 1e-3 && Math.abs(item.slot.scale - p.s) < 1e-4) {
+        p.x = foot.x;
+        p.z = foot.z;
+        p.s = item.slot.scale;
+      }
       g.visible = true;
       g.position.set(p.x, 0, p.z);
       g.scale.setScalar(p.s);

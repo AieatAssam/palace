@@ -483,11 +483,17 @@ function NeckRig({ children }: { children: React.ReactNode }) {
       camera.position.lerp(goal, k);
       lookNow.current.lerp(aim.look, k);
     }
-    camera.up.set(0, 1, 0);
-    camera.lookAt(lookNow.current);
-    // At rest once both the eye and the look point are within a hair of their goals.
+    // At rest once both the eye and the look point are within a hair of their goals. Arrive there
+    // exactly: an easing that only tends to its goal would creep by sub-pixels for seconds more at
+    // a low frame rate, and every button laid over the scene would creep with it.
     const eps = Math.max(1, aim.pos.distanceTo(aim.look)) * 2e-4;
     cameraState.settled = camera.position.distanceTo(goal) < eps && lookNow.current.distanceTo(aim.look) < eps;
+    if (cameraState.settled) {
+      camera.position.copy(goal);
+      lookNow.current.copy(aim.look);
+    }
+    camera.up.set(0, 1, 0);
+    camera.lookAt(lookNow.current);
     focusPoint.copy(aim.focus);
   });
 

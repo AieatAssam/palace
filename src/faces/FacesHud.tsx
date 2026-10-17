@@ -88,7 +88,19 @@ function Choices() {
   const chosen = useFaces((s) => s.chosen);
   const answer = useFaces((s) => s.answer);
   const cast = useCast();
-  if (!q || q.kind === 'face' || phase === 'meet' || phase === 'pause') return null;
+  if (!q || phase === 'meet' || phase === 'pause') return null;
+  // A face question is answered on the portraits; the row keeps its room, unseen, so the
+  // footer (and the camera framed against it) holds still from question to question.
+  if (q.kind === 'face')
+    return (
+      <div className="faces-choices held" aria-hidden inert>
+        {q.choices.map((c, i) => (
+          <button key={`${c}-${i}`} className="note face-choice" tabIndex={-1}>
+            {cast[c]!.name}
+          </button>
+        ))}
+      </div>
+    );
   const right = answerIndex(q);
   const stateOf = (i: number) => {
     if (phase === 'ask') return '';
