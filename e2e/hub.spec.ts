@@ -1,7 +1,7 @@
 import { type Page, expect, test } from '@playwright/test';
 
 const ROOMS = ['fretboard', 'echo', 'blocks', 'faces', 'ledger', 'nback'] as const;
-const WORKSHOP_ROOMS = ['echo', 'blocks', 'faces', 'ledger', 'nback'] as const;
+const WORKSHOP_ROOMS = ['blocks', 'faces', 'ledger', 'nback'] as const;
 const DAY = 86_400_000;
 
 /** Seed the fretboard save before the app loads, once per tab (a reload keeps the player's own data). */
@@ -82,21 +82,22 @@ test('the hub loads with every room', async ({ page }) => {
     expect(box.height).toBeGreaterThanOrEqual(44);
   }
   await expect(page.getByTestId('room-fretboard')).toHaveAccessibleName(/Fretboard/);
-  await expect(page.getByTestId('room-echo')).toHaveAccessibleName(/workshop/);
+  await expect(page.getByTestId('room-echo')).toHaveAccessibleName(/Echo/);
+  await expect(page.getByTestId('room-blocks')).toHaveAccessibleName(/workshop/);
 
   const modes = await page.evaluate(() => window.__palace!.modes());
   expect(modes).toHaveLength(6);
-  expect(modes.filter((m) => m.open).map((m) => m.id)).toEqual(['fretboard']);
+  expect(modes.filter((m) => m.open).map((m) => m.id)).toEqual(['fretboard', 'echo']);
 });
 
 test('workshop rooms open a placeholder and come back', async ({ page }) => {
   await page.goto('./');
   await enterHub(page);
 
-  await expect(page.getByTestId('room-echo')).toHaveClass(/placed/);
-  await page.getByTestId('room-echo').click();
+  await expect(page.getByTestId('room-blocks')).toHaveClass(/placed/);
+  await page.getByTestId('room-blocks').click();
   await expect(page.getByTestId('workshop')).toBeVisible();
-  expect(await page.evaluate(() => window.__palace!.hubCard())).toBe('workshop:echo');
+  expect(await page.evaluate(() => window.__palace!.hubCard())).toBe('workshop:blocks');
   await expect(page.getByTestId('workshop-back')).toHaveClass(/placed/);
   await page.getByTestId('workshop-back').click();
   await expect(page.getByTestId('workshop')).toBeHidden();
@@ -110,7 +111,7 @@ test('workshop rooms open a placeholder and come back', async ({ page }) => {
   await expect(page.getByTestId('hub')).toBeVisible();
 });
 
-test('no room is gated: every one of the six opens', async ({ page }) => {
+test('no room is gated: every workshop placeholder and the stage cards open', async ({ page }) => {
   // Six cards slide in and out, each on a CPU rasteriser: more than the default budget.
   test.setTimeout(120_000);
   await page.goto('./');

@@ -7,7 +7,6 @@ import { Scene } from './three/Scene';
 import { Attract } from './ui/Attract';
 import { Hub } from './ui/Hub';
 import { Primer } from './ui/Primer';
-import { SessionSheet } from './ui/SessionSheet';
 import { Settings } from './ui/Settings';
 import { Workshop } from './ui/Workshop';
 
@@ -21,7 +20,7 @@ export function App() {
   const calm = useCalm();
   const [settings, setSettings] = useState(false);
   const room = activeRoom(modeId);
-  const { Overlay, StageCard } = room;
+  const { Overlay, StageCard, Session } = room;
   const hubCard = screen === 'hub' && !stagesOpen && !workshop && !settings;
 
   return (
@@ -34,7 +33,7 @@ export function App() {
       {screen === 'primer' && <Primer />}
       {hubCard && <Hub onSettings={() => setSettings(true)} />}
       {workshop && !settings && <Workshop id={workshop} />}
-      {screen === 'session' && <SessionSheet />}
+      {screen === 'session' && <Session />}
       {stagesOpen && !settings && <StageCard />}
       {settings && (
         <Settings

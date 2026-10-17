@@ -32,7 +32,7 @@ export function Attract() {
     >
       <div className="attract-block">
         <p className="attract-kicker">
-          <span>Six rooms</span> One open
+          <span>Six rooms</span> Two open
         </p>
         <h1 id="attract-title" className="wordmark-large">
           Palace

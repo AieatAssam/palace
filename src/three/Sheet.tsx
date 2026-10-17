@@ -553,7 +553,7 @@ export function Sheet() {
 
 /**
  * A room's emblem, drawn in gilt line like an engraver's vignette: strings and frets for the
- * Fretboard, three orbs for Echo, a grid for Blocks, a cameo for Faces, ledger lines for
+ * Fretboard, three hand bells for Echo, a grid for Blocks, a cameo for Faces, ledger lines for
  * Ledger, a receding corridor of lozenges for N-Back.
  */
 function Emblem({ item }: { item: Extract<SheetItem, { kind: 'emblem' }> }) {
@@ -579,10 +579,21 @@ function Emblem({ item }: { item: Extract<SheetItem, { kind: 'emblem' }> }) {
       dot('inlay', -0.17, 0, 0.09);
       break;
     case 'echo':
-      ring('a', -0.66, -0.12, 0.26);
-      ring('b', 0, 0.12, 0.34);
-      ring('c', 0.66, -0.12, 0.26);
-      dot('lit', 0, 0.12, 0.17);
+      // Three hand bells, graduated: a dome over a flared rim, a handle and its knob; the middle one rings.
+      [
+        [-0.64, 0.34],
+        [0, 0.44],
+        [0.6, 0.28],
+      ].forEach(([cx, r], i) => {
+        const base = -0.5;
+        ring(`d${i}`, cx!, base, r!, 1, arcThin);
+        line(`m${i}`, cx!, base, r! * 2.3, th * 1.3);
+        line(`h${i}`, cx!, base + r! + 0.13, th * 1.6, 0.26);
+        dot(`k${i}`, cx!, base + r! + 0.3, 0.06);
+      });
+      dot('lit', 0, -0.62, 0.09);
+      line('ra', -0.33, 0.12, th, 0.22, 0.5);
+      line('rb', 0.33, 0.12, th, 0.22, -0.5);
       break;
     case 'blocks':
       for (let r = 0; r < 3; r++)

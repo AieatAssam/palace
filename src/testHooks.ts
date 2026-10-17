@@ -1,3 +1,6 @@
+import { bellRects } from './echo/fx';
+import { type EchoProgress, expectedOrder, echoProgress, ECHO_STAGES, wantedNow } from './echo/logic';
+import { type EchoPhase, type EchoSitting, useEcho } from './echo/store';
 import { type Position, noteAt } from './game/notes';
 import { STAGES, regionPositions, stageProgress } from './game/stages';
 import { MODES } from './modes/catalog';
@@ -51,6 +54,32 @@ export interface PalaceTestHooks {
    * string, nut and fret meshes on screen (null before first frame / in Find-all).
    */
   highlight(): HighlightReport | null;
+  /** Echo: the bells, the line and the player's place in it. Bells are numbered from 1 here, as on the plinth. */
+  echo: EchoHooks;
+}
+
+export interface EchoHooks {
+  state(): {
+    phase: EchoPhase;
+    stage: { id: string; title: string; bells: number; order: 'forward' | 'reverse'; chords: boolean };
+    /** The line as the room plays it, and as the player must ring it back. */
+    line: number[][];
+    expected: number[][];
+    /** Steps rung back so far, and bells struck in the current pair. */
+    done: number;
+    partial: number[];
+    /** The step the room is sounding as it plays the line (0-based), or -1. */
+    sounding: number;
+    sitting: EchoSitting;
+    active: boolean;
+  };
+  /** The bells the current step still wants (empty unless it is the player's turn). */
+  next(): number[];
+  stages(): ({ id: string; title: string; bells: number } & EchoProgress)[];
+  /** Page rectangles of the bell buttons, by bell number. */
+  bells(): { bell: number; x: number; y: number; w: number; h: number }[];
+  /** Walk straight into Echo on a stage, from any screen, through the actions the hub uses (for fast tests). */
+  enter(stageId: string): void;
 }
 
 declare global {
@@ -108,5 +137,34 @@ export function installTestHooks() {
     render: () => ({ ...renderInfo }),
     cameraSettled: () => cameraState.settled,
     highlight: () => inspectHighlight(),
+    echo: {
+      state: () => {
+        const e = useEcho.getState();
+        const st = e.stage();
+        const one = (steps: readonly (readonly number[])[]) => steps.map((x) => x.map((b) => b + 1));
+        return {
+          phase: e.phase,
+          stage: { id: st.id, title: st.title, bells: st.bells, order: st.order, chords: st.chords },
+          line: one(e.line),
+          expected: one(expectedOrder(e.line, st.order)),
+          done: e.recall.done,
+          partial: e.recall.partial.map((b) => b + 1),
+          sounding: e.sounding,
+          sitting: { ...e.sitting },
+          active: e.active,
+        };
+      },
+      next: () => {
+        const e = useEcho.getState();
+        if (e.phase !== 'repeat') return [];
+        return wantedNow(expectedOrder(e.line, e.stage().order), e.recall).map((b) => b + 1);
+      },
+      stages: () => ECHO_STAGES.map((st) => ({ id: st.id, title: st.title, bells: st.bells, ...echoProgress(st, useEcho.getState().record) })),
+      enter: (stageId) => {
+        if (s().screen !== 'hub') s().toHub();
+        useEcho.getState().chooseStage(stageId);
+      },
+      bells: () => [...bellRects.entries()].sort((a, b) => a[0] - b[0]).map(([i, r]) => ({ bell: i + 1, ...r })),
+    },
   };
 }

@@ -14,7 +14,7 @@ import { COLORS } from './palette';
 import { BOARD_THICKNESS, followWindow, fretX, markerPoint, markerX, neckMatrix, stringPoint, neckToWorld, positionsSpan, regionBounds, regionSpan } from './layout';
 import { COARSE, LITE, CAPTURE } from './quality';
 import { Sheet } from './Sheet';
-import { cameraState, focusPoint, renderInfo, setInspector, setProjector, setRewardAnchor, sheetPose, useNeckWindow, useView } from './view';
+import { cameraState, focusPoint, renderInfo, setInspector, setProjector, setRewardAnchor, sheetPose, useNeckWindow, useRoomFrame, useView } from './view';
 
 const FOV = 30;
 
@@ -168,6 +168,9 @@ function NeckRig({ children }: { children: React.ReactNode }) {
   const leftHanded = usePalace((s) => s.saved.settings.leftHanded);
   const stageId = usePalace((s) => s.saved.stageId);
   const attract = usePalace((s) => s.screen === 'attract');
+  const modeId = usePalace((s) => s.saved.modeId);
+  // Another room on the desk frames its own furniture.
+  const roomFrame = useRoomFrame((s) => (modeId === 'fretboard' ? null : s.frame));
   const insets = useView((s) => s.insets);
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const gl = useThree((s) => s.gl);
@@ -212,6 +215,12 @@ function NeckRig({ children }: { children: React.ReactNode }) {
       box = portrait
         ? { x0: -0.97, x1: 0.97, y0: bottom, y1: Math.max(bottom + 0.3, top) }
         : { x0: -0.92, x1: 0.92, y0: bottom * 0.96, y1: Math.max(bottom + 0.3, top) * 0.96 };
+    }
+
+    if (roomFrame) {
+      const el = THREE.MathUtils.degToRad(roomFrame.elevation);
+      const full = fitCamera(roomFrame.points, new THREE.Vector3(0, Math.sin(el), Math.cos(el)), aspect, box);
+      return { full, windowed: false, len: 0, lo: 0, hi: 0, frame: () => full };
     }
 
     const frame = (x0: number, x1: number): Framing => {
@@ -286,7 +295,7 @@ function NeckRig({ children }: { children: React.ReactNode }) {
     }
     return { full, windowed: true, len: lo, lo: span.x0, hi: span.x1, frame };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, portrait, attract, size.width, size.height, insets.top, insets.bottom, stageId]);
+  }, [view, portrait, attract, size.width, size.height, insets.top, insets.bottom, stageId, roomFrame]);
 
   /** Where the window sits (its near end, neck-local x), and the framing last built for it. */
   const pan = useRef({ x0: rig.lo, built: NaN, framing: rig.full, question: '', dragging: false });
@@ -672,7 +681,10 @@ function Effects({ tier }: { tier: Quality['tier'] }) {
 export function Scene() {
   const [quality, setQuality] = useState<Quality>(initialQuality);
   const leftHanded = usePalace((s) => s.saved.settings.leftHanded);
-  const RoomScene = activeRoom(usePalace((s) => s.saved.modeId)).Scene;
+  const modeId = usePalace((s) => s.saved.modeId);
+  const RoomScene = activeRoom(modeId).Scene;
+  // The contact shadow is drawn once; a room that moves its furniture asks for a fresh one.
+  const roomKey = useRoomFrame((s) => s.frame?.key ?? '');
   const maxDpr = quality.dpr;
 
   return (
@@ -707,7 +719,7 @@ export function Scene() {
       </NeckRig>
       <Rewards3D />
       {/* A single soft contact shadow on the desk (no realtime shadow maps). */}
-      <ContactShadowsForNeck key={String(leftHanded)} />
+      <ContactShadowsForNeck key={`${leftHanded}-${modeId}-${roomKey}`} />
       <Effects tier={quality.tier} />
     </Canvas>
   );

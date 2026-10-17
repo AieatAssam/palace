@@ -1043,3 +1043,68 @@ button:focus-visible {
     display: none;
   }
 }
+
+/* ---------------------------------------------------------------- Echo */
+
+/* The bells' real buttons: the scene keeps each over its bell; the bell itself draws every state. */
+.echo-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transition: opacity var(--fade) var(--ease);
+}
+
+.bell-hit {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 50%;
+  color: transparent;
+  font-size: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  touch-action: none;
+}
+
+.bell-hit.placed {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.bell-hit[aria-disabled='true'] {
+  cursor: default;
+}
+
+/* Keyboard focus: a brass hairline round the bell, nothing more. */
+.bell-hit:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px rgba(176, 141, 87, 0.85), 0 0 0 4px rgba(176, 141, 87, 0.16);
+}
+
+/* Slips this sitting: three brass lozenges; a spent one turns clay. */
+.echo-slips {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+}
+
+.echo-slip {
+  width: 7px;
+  height: 7px;
+  transform: rotate(45deg);
+  border: 1px solid rgba(176, 141, 87, 0.8);
+  transition: background-color var(--fade) var(--ease), border-color var(--fade) var(--ease);
+}
+
+.echo-slip.spent {
+  background: var(--miss);
+  border-color: var(--miss-lit);
+}
+
+.echo-meta {
+  grid-template-columns: auto 1fr auto auto auto;
+}

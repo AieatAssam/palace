@@ -26,7 +26,7 @@ export interface ModeInfo {
 
 export const MODES: readonly ModeInfo[] = [
   { id: 'fretboard', numeral: 'I', title: 'Fretboard', pitch: 'Name every note on a guitar neck.', trains: 'Facts on sight', emblem: 'fretboard', open: true },
-  { id: 'echo', numeral: 'II', title: 'Echo', pitch: 'Glass orbs light in turn; play the sequence back.', trains: 'Order and sequence', emblem: 'echo', open: false },
+  { id: 'echo', numeral: 'II', title: 'Echo', pitch: 'Hear a line of brass bells, then ring it back.', trains: 'Order and sequence', emblem: 'echo', open: true },
   { id: 'blocks', numeral: 'III', title: 'Blocks', pitch: 'Tap the blocks in the order they lit, then in reverse.', trains: 'Where things were', emblem: 'blocks', open: false },
   { id: 'faces', numeral: 'IV', title: 'Faces', pitch: 'Meet a bust, then name it a minute later.', trains: 'Names to faces', emblem: 'faces', open: false },
   { id: 'ledger', numeral: 'V', title: 'Ledger', pitch: 'Turn digits into images and walk them through a room.', trains: 'Long numbers', emblem: 'ledger', open: false },

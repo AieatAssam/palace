@@ -116,5 +116,30 @@ export function setRewardAnchor(fn: ((out: Vector3) => boolean) | null) {
 }
 /** Writes the anchor into `out`; false when no room has registered one. */
 export function rewardAnchorPoint(out: Vector3): boolean {
+  if (roomAnchor && roomAnchor(out)) return true;
   return rewardAnchor ? rewardAnchor(out) : false;
+}
+
+/**
+ * A room other than the Fretboard frames its own furniture: it publishes the world-space
+ * points the camera must fit, the angle to view them from, and a key that changes when
+ * they move. `null` while the Fretboard (or nothing) is on the desk.
+ */
+export interface RoomFrame {
+  key: string;
+  points: Vector3[];
+  /** Degrees above the desk. */
+  elevation: number;
+}
+export const useRoomFrame = create<{ frame: RoomFrame | null; set(f: RoomFrame | null): void }>()((set, get) => ({
+  frame: null,
+  set(f) {
+    if ((get().frame?.key ?? null) !== (f?.key ?? null)) set({ frame: f });
+  },
+}));
+
+/** A room's own reward anchor (e.g. the bell struck last); takes precedence over the neck's. */
+let roomAnchor: ((out: Vector3) => boolean) | null = null;
+export function setRoomAnchor(fn: ((out: Vector3) => boolean) | null) {
+  roomAnchor = fn;
 }
