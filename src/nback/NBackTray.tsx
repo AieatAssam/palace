@@ -42,7 +42,7 @@ function useMaterials() {
         tray: new THREE.MeshStandardMaterial({ color: '#4a2e1c', roughness: 0.5 }),
         back: new THREE.MeshStandardMaterial({ color: '#2c1a10', roughness: 0.25, metalness: 0.05 }),
         face: new THREE.MeshStandardMaterial({ color: '#efe8dc', roughness: 0.3, emissive: '#000000' }),
-        bezel: new THREE.MeshStandardMaterial({ color: '#c9a25e', metalness: 0.7, roughness: 0.3 }),
+        bezel: new THREE.MeshStandardMaterial({ color: '#c9a25e', metalness: 0.85, roughness: 0.2 }),
         gilt: new THREE.MeshStandardMaterial({ color: '#b08d57', metalness: 0.6, roughness: 0.35 }),
         well: new THREE.MeshStandardMaterial({ color: '#160d08', roughness: 0.9 }),
       };

@@ -83,7 +83,7 @@ function useMaterials(n: number, finishes: Finish[]) {
   const shared = useMemo(() => {
     const brass = Array.from({ length: n }, () =>
       LITE
-        ? new THREE.MeshStandardMaterial({ color: '#c9a25e', metalness: 0.7, roughness: 0.3, emissive: '#000000' })
+        ? new THREE.MeshStandardMaterial({ color: '#c9a25e', metalness: 0.85, roughness: 0.2, emissive: '#000000' })
         : new THREE.MeshPhysicalMaterial({ color: '#d4ae6a', metalness: 1, roughness: 0.22, envMapIntensity: 1.3, emissive: '#000000' }),
     );
     let blotter: THREE.Material;
@@ -104,7 +104,7 @@ function useMaterials(n: number, finishes: Finish[]) {
       });
     }
     const fitting = LITE
-      ? new THREE.MeshStandardMaterial({ color: COLORS.brass, metalness: 0.7, roughness: 0.35 })
+      ? new THREE.MeshStandardMaterial({ color: COLORS.brass, metalness: 0.85, roughness: 0.22 })
       : new THREE.MeshPhysicalMaterial({ color: COLORS.brass, metalness: 1, roughness: 0.3, envMapIntensity: 1.1 });
     const gilt = new THREE.MeshStandardMaterial({ color: '#c9a35e', metalness: LITE ? 0.5 : 1, roughness: 0.34 });
     const sheen = Array.from(

@@ -109,7 +109,7 @@ function useMaterials(n: number) {
           }),
     );
     const fitting = LITE
-      ? new THREE.MeshStandardMaterial({ color: COLORS.brass, metalness: 0.7, roughness: 0.35 })
+      ? new THREE.MeshStandardMaterial({ color: COLORS.brass, metalness: 0.85, roughness: 0.22 })
       : new THREE.MeshPhysicalMaterial({ color: COLORS.brass, metalness: 1, roughness: 0.3, envMapIntensity: 1.1 });
     const grip = LITE
       ? new THREE.MeshStandardMaterial({ color: '#5a2e1c', roughness: 0.4 })

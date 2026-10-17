@@ -59,7 +59,7 @@ function drapeTexture() {
 
 const gold = () =>
   LITE
-    ? new THREE.MeshStandardMaterial({ color: '#c9a35e', metalness: 0.6, roughness: 0.32, emissive: '#000000' })
+    ? new THREE.MeshStandardMaterial({ color: '#c9a35e', metalness: 0.8, roughness: 0.22, emissive: '#000000' })
     : new THREE.MeshPhysicalMaterial({ color: '#d8b46a', metalness: 1, roughness: 0.26, clearcoat: 0.3, envMapIntensity: 1.25, emissive: '#000000' });
 
 const SLOTS = 4;
@@ -95,7 +95,7 @@ export function Gallery() {
       ? new THREE.MeshStandardMaterial({ color: '#8a6a37', metalness: 0.5, roughness: 0.4 })
       : new THREE.MeshPhysicalMaterial({ color: '#9c7a40', metalness: 1, roughness: 0.38, envMapIntensity: 1 });
     const brass = LITE
-      ? new THREE.MeshStandardMaterial({ color: COLORS.brass, metalness: 0.7, roughness: 0.35 })
+      ? new THREE.MeshStandardMaterial({ color: COLORS.brass, metalness: 0.85, roughness: 0.22 })
       : new THREE.MeshPhysicalMaterial({ color: COLORS.brass, metalness: 1, roughness: 0.3, envMapIntensity: 1.1 });
     const canvases = Array.from({ length: SLOTS }, () =>
       LITE ? new THREE.MeshBasicMaterial({ color: '#ffffff' }) : new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.42, metalness: 0, envMapIntensity: 0.35 }),

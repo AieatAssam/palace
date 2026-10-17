@@ -28,30 +28,35 @@ export function FacesSession() {
   const gained = prog.known - sitting.knownBefore;
   const caption = sitting.asked === 0 ? 'No questions yet' : gained > 0 ? `Named right, ${gained} more ${gained === 1 ? 'face' : 'faces'} known` : 'Named right';
   const roomLabel = sitting.mastered ? 'Mastered' : prog.mastered ? 'Stage · mastered' : 'Stage';
-  const height = 6.0 + LINE * cast.length;
+  // The monogram takes the head of the page; the running head starts below it, as on the other rooms' pages.
+  const height = 6.6 + LINE * cast.length;
   const top = height / 2;
+  const head = top - 0.6;
   const seal = { x: -0.45, y: -top + 0.6 };
 
   const geom = useMemo(() => {
     const items: SheetItem[] = [
-      { kind: 'text', text: 'Palace · Faces', x: 0, y: top - 0.45, size: 0.17, font: 'smcp', ink: 'soft', align: 'center' },
-      { kind: 'text', text: 'Today', x: 0, y: top - 1.0, size: 0.54, font: 'italic', ink: 'gilt', align: 'center' },
-      { kind: 'text', text: today, x: 0, y: top - 1.48, size: 0.27, font: 'script', ink: 'iron', align: 'center' },
-      { kind: 'rule', y: top - 1.78, x0: -X, x1: X, weight: 'double' },
-      { kind: 'text', text: figure, x: 0, y: top - 2.42, size: 0.6, font: 'figures', align: 'center' },
-      { kind: 'text', text: caption, x: 0, y: top - 2.82, size: 0.18, font: 'italic', ink: 'soft', align: 'center' },
-      { kind: 'rule', y: top - 3.06, x0: -X, x1: X },
+      { kind: 'text', text: 'Palace · Faces', x: 0, y: head - 0.45, size: 0.17, font: 'smcp', ink: 'soft', align: 'center' },
+      { kind: 'text', text: 'Today', x: 0, y: head - 1.0, size: 0.54, font: 'italic', ink: 'gilt', align: 'center' },
+      { kind: 'text', text: today, x: 0, y: head - 1.48, size: 0.27, font: 'script', ink: 'iron', align: 'center' },
+      { kind: 'rule', y: head - 1.78, x0: -X, x1: X, weight: 'double' },
+      { kind: 'text', text: figure, x: 0, y: head - 2.42, size: 0.62, font: 'script', ink: 'iron', align: 'center', tilt: 2 },
+      { kind: 'text', text: caption, x: 0, y: head - 2.82, size: 0.18, font: 'italic', ink: 'soft', align: 'center' },
+      { kind: 'rule', y: head - 3.06, x0: -X, x1: X, weight: 'ledger' },
+      // The tick column, ruled off in oxblood as in an account book (see ui/ledgerPage.ts).
+      { kind: 'column', x: X - 0.23, y0: head - 2.94, y1: head - 3.4 - LINE * (cast.length - 1) - 0.14, double: true },
     ];
-    // The ledger: each sitter in a clerk's hand, a tick for a face you know.
+    // The ledger: each sitter in a clerk's hand on blue ruling, a tick for a face you know.
     ledger.forEach((l, i) => {
-      const y = top - 3.4 - LINE * i;
+      const y = head - 3.4 - LINE * i;
       items.push({ kind: 'text', text: l.name, x: -X + 0.04, y, size: 0.24, font: 'script', ink: l.known ? 'iron' : 'soft' });
       if (trades) items.push({ kind: 'text', text: l.trade, x: X - 0.36, y, size: 0.15, font: 'italic', ink: 'soft', align: 'right' });
       if (l.known) items.push({ kind: 'mark', x: X - 0.1, y: y + 0.06, r: 0.045 });
+      if (i < ledger.length - 1) items.push({ kind: 'rule', y: y - 0.12, x0: -X, x1: X, weight: 'ledger' });
     });
-    const after = top - 3.4 - LINE * cast.length;
+    const after = head - 3.4 - LINE * cast.length;
     items.push(
-      { kind: 'rule', y: after + 0.1, x0: -X, x1: X },
+      { kind: 'rule', y: after + 0.22, x0: -X, x1: X, weight: 'ledger' },
       { kind: 'text', text: roomLabel, x: -X, y: after - 0.22, size: 0.18, font: 'smcp', ink: 'soft' },
       { kind: 'text', text: `${stage.title} · ${prog.known} of ${prog.total} known`, x: -X, y: after - 0.48, size: 0.2, font: 'italic' },
       { kind: 'bar', y: after - 0.64, x0: -X, x1: X, fill: Math.round(prog.toward * 100) / 100 },

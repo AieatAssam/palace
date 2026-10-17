@@ -33,8 +33,54 @@ export interface SheetRule {
   y: number;
   x0: number;
   x1: number;
-  /** `double` is the ledger's heading rule: a heavy line over a hairline. */
-  weight?: 'hair' | 'double';
+  /** `double` is the ledger's heading rule: a heavy line over a hairline; `ledger` the faint blue ruling of an account book. */
+  weight?: 'hair' | 'double' | 'ledger';
+}
+
+/** A vertical rule from `y0` down to `y1`: the oxblood money columns of a ledger page (`double`: two close lines). */
+export interface SheetColumn {
+  kind: 'column';
+  x: number;
+  y0: number;
+  y1: number;
+  double?: boolean;
+}
+
+/** A wall on the floor plan, in iron-gall ink: an axis-aligned stroke from (x0, y0) to (x1, y1). */
+export interface SheetWall {
+  kind: 'wall';
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  /** Outer walls are drawn heavier. */
+  outer?: boolean;
+}
+
+/**
+ * A doorway on the floor plan, set in a gap of width `w` centred at (x, y) on a wall along `axis`.
+ * The leaf hangs from the `hinge` end (−1: left or bottom, 1: right or top) and swings to `swing`
+ * (−1: down or left, 1: up or right), drawn open with its arc; a `locked` door is drawn shut with a keyhole.
+ */
+export interface SheetDoor {
+  kind: 'door';
+  x: number;
+  y: number;
+  w: number;
+  axis: 'h' | 'v';
+  hinge: 1 | -1;
+  swing: 1 | -1;
+  locked?: boolean;
+}
+
+/** A chamber on the floor plan: a gilt wash over the floor and a gilt hairline cornice inside its walls. */
+export interface SheetChamber {
+  kind: 'chamber';
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  quiet?: boolean;
 }
 
 export interface SheetBar {
@@ -70,16 +116,6 @@ export interface SheetBox {
   h: number;
 }
 
-/** A room's plate on the hub: a panel set into the page under a brass frame (a hairline when `quiet`). */
-export interface SheetPlate {
-  kind: 'plate';
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  quiet?: boolean;
-}
-
 /** A small gilt drawing for a room, centred at (x, y), `size` card units across. */
 export interface SheetEmblem {
   kind: 'emblem';
@@ -90,7 +126,18 @@ export interface SheetEmblem {
   quiet?: boolean;
 }
 
-export type SheetItem = SheetText | SheetRule | SheetBar | SheetLozenge | SheetMark | SheetBox | SheetPlate | SheetEmblem;
+export type SheetItem =
+  | SheetText
+  | SheetRule
+  | SheetColumn
+  | SheetBar
+  | SheetLozenge
+  | SheetMark
+  | SheetBox
+  | SheetEmblem
+  | SheetWall
+  | SheetDoor
+  | SheetChamber;
 
 /** A real control, centred at (x, y) in card units, drawn over its 3D label. */
 export interface SheetRect {
