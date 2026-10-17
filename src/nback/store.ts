@@ -8,6 +8,7 @@ import {
   type Channel,
   type NBackRecord,
   type NBackStage,
+  type Said,
   type Tally,
   type Trial,
   FIRST_NBACK_STAGE,
@@ -17,6 +18,7 @@ import {
   emptyTally,
   grade,
   isMatch,
+  isWarmup,
   makeRun,
   nbackStageById,
   parseRecord,
@@ -64,6 +66,8 @@ interface NBackState extends NBackSave {
   called: Record<Channel, boolean>;
   tallies: Record<Channel, Tally>;
   flash: Record<Channel, Flash | null>;
+  /** The latest graded call per channel, for the feedback line: cleared as each trial starts, unless it is a miss on the trial just ended. */
+  said: Record<Channel, Said | null>;
   sitting: NBackSitting;
   active: boolean;
   stage(): NBackStage;
@@ -140,7 +144,7 @@ export const useNBack = create<NBackState>()((set, get) => {
   const buzz = (ms: number) => {
     if (usePalace.getState().saved.settings.haptics) haptic(ms);
   };
-  const flash = (ch: Channel, kind: Flash['kind']) => set({ flash: { ...get().flash, [ch]: { kind, id: ++flashId } } });
+  const flash = (ch: Channel, kind: Flash['kind']) => set({ flash: { ...get().flash, [ch]: { kind, id: ++flashId } }, said: { ...get().said, [ch]: { kind, at: get().at } } });
 
   /** Turn trial `i` face up, and set its end. */
   const show = (i: number) => {
@@ -151,7 +155,10 @@ export const useNBack = create<NBackState>()((set, get) => {
     nbackFx.shownAt = now;
     nbackFx.hideAt = now + st.show * PACE;
     nbackFx.place = t.place;
-    set({ at: i, showing: true, called: { place: false, tone: false } });
+    // A miss on the trial just ended stays on the feedback line; anything older goes.
+    const keep = (x: Said | null) => (x && x.kind === 'miss' && x.at === i - 1 ? x : null);
+    const said = get().said;
+    set({ at: i, showing: true, called: { place: false, tone: false }, said: { place: keep(said.place), tone: keep(said.tone) } });
     if (st.channels.includes('tone')) ringBell(TONE_FREQS[t.tone]!, 0.8);
     else tapBlock(0, 0.45);
     later(st.show, () => set({ showing: false }));
@@ -165,7 +172,7 @@ export const useNBack = create<NBackState>()((set, get) => {
     const { run, at, called } = get();
     if (at < 0 || get().phase !== 'run') return;
     nbackFx.hideAt = Math.min(nbackFx.hideAt, performance.now());
-    if (at >= st.n) {
+    if (!isWarmup(st.n, at)) {
       let tallies = get().tallies;
       for (const ch of st.channels) {
         const c = grade(isMatch(run, st.n, at, ch), called[ch]);
@@ -193,7 +200,7 @@ export const useNBack = create<NBackState>()((set, get) => {
     clearTimers();
     nbackFx.shownAt = -Infinity;
     nbackFx.place = -1;
-    set({ phase: 'rest', run: makeRun(stage(), Math.random), at: -1, showing: false, called: { place: false, tone: false }, tallies: emptyTallies(), flash: { place: null, tone: null }, sitting: emptySitting() });
+    set({ phase: 'rest', run: makeRun(stage(), Math.random), at: -1, showing: false, called: { place: false, tone: false }, tallies: emptyTallies(), flash: { place: null, tone: null }, said: { place: null, tone: null }, sitting: emptySitting() });
   };
 
   return {
@@ -205,6 +212,7 @@ export const useNBack = create<NBackState>()((set, get) => {
     called: { place: false, tone: false },
     tallies: emptyTallies(),
     flash: { place: null, tone: null },
+    said: { place: null, tone: null },
     sitting: emptySitting(),
     active: false,
 
@@ -241,10 +249,9 @@ export const useNBack = create<NBackState>()((set, get) => {
       unlockAudio();
       const st = stage();
       const { phase, at, called, run, active } = get();
-      if (!active || phase !== 'run' || at < 0 || !st.channels.includes(ch) || called[ch]) return;
+      // The first n trials have nothing n back to match: a call there is ignored.
+      if (!active || phase !== 'run' || at < 0 || isWarmup(st.n, at) || !st.channels.includes(ch) || called[ch]) return;
       set({ called: { ...called, [ch]: true } });
-      // The first n trials have nothing n back: a call there is ignored.
-      if (at < st.n) return;
       const rewards = useRewards.getState();
       if (isMatch(run, st.n, at, ch)) {
         flash(ch, 'hit');

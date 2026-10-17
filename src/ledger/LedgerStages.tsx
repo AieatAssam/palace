@@ -13,7 +13,7 @@ const TOP = HEIGHT / 2;
 const X = 1.2;
 
 /** A stage's standing in words: figures held for a span stage, pegs known for a drill. */
-const standing = (kind: string, have: number, need: number) => (kind === 'span' ? `best ${have} of ${need} figures` : `${have} of ${need} known`);
+const standing = (kind: string, have: number, need: number) => (kind === 'span' ? `best ${have} of ${need} digits` : `${have} of ${need} learned`);
 
 /**
  * Ledger's stage card: every stage on one page, the span stages with the longest number keyed
@@ -30,14 +30,14 @@ export function LedgerStages() {
   const now = progress.get(current)!;
   const nowLine = `${currentStage.title} · ${standing(currentStage.kind, now.have, now.need)}`;
   const tally = `${ledgerMastered(record)} of ${LEDGER_STAGES.length} mastered`;
-  const spans = `Longest number held: ${longestHeld(record)} figures`;
+  const spans = `Longest number recalled: ${longestHeld(record)} digits`;
   const marks = LEDGER_STAGES.map((s) => `${progress.get(s.id)!.have}`).join(',');
 
   const geom = useMemo(() => {
     const items: SheetItem[] = [
       { kind: 'text', text: 'Palace · Ledger', x: 0, y: TOP - 0.55, size: 0.17, font: 'smcp', ink: 'soft', align: 'center' },
       { kind: 'text', text: 'Stages', x: 0, y: TOP - 1.08, size: 0.5, font: 'italic', ink: 'gilt', align: 'center' },
-      { kind: 'text', text: 'Hold the figures, then key them back.', x: 0, y: TOP - 1.5, size: 0.17, font: 'italic', ink: 'soft', align: 'center' },
+      { kind: 'text', text: 'Learn the peg words, then recall long numbers.', x: 0, y: TOP - 1.5, size: 0.17, font: 'italic', ink: 'soft', align: 'center' },
       { kind: 'rule', y: TOP - 1.76, x0: -X, x1: X, weight: 'double' },
     ];
     const rects: SheetRect[] = [];
@@ -86,7 +86,7 @@ export function LedgerStages() {
   return (
     <SheetLayer geom={geom} controls={controls} testId="stages" label="Ledger stages" onEscape={close} onBackdrop={close}>
       <h2>Ledger stages</h2>
-      <p>Hold the figures, then key them back.</p>
+      <p>Learn the peg words, then recall long numbers.</p>
       <p>{nowLine}</p>
       <p>{spans}</p>
       <p>{tally}</p>

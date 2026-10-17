@@ -9,7 +9,7 @@ const HEIGHT = 7.6;
 const X = 1.2;
 const SEAL = { x: -0.45, y: -3.2 };
 
-/** End of a run in N-Back: the score, matches caught, missed and wrongly called, and the stage's best against its bar. */
+/** End of a run in N-Back: the score, matches caught, wrong presses, and the stage's best against its bar. */
 export function NBackSession() {
   const sitting = useNBack((s) => s.sitting);
   const record = useNBack((s) => s.record);
@@ -22,11 +22,11 @@ export function NBackSession() {
   const sum = (k: 'hits' | 'misses' | 'false') => stage.channels.reduce((n, ch) => n + sitting.tallies[ch][k], 0);
   const rows: [string, string][] = [
     ['Matches caught', `${sum('hits')} of ${sum('hits') + sum('misses')}`],
-    ['Wrong calls', String(sum('false'))],
+    ['Wrong presses', String(sum('false'))],
     ['Best on this stage', String(prog.best)],
   ];
   const figure = sitting.finished ? String(sitting.score) : '–';
-  const caption = sitting.finished ? (sitting.newBest ? 'Score in a hundred, a new best' : 'Score in a hundred') : 'Run broken off';
+  const caption = sitting.finished ? (sitting.newBest ? 'Score out of 100, a new best' : 'Score out of 100') : 'Run ended early';
   const roomLabel = sitting.mastered ? 'Mastered' : prog.mastered ? 'Stage · mastered' : 'Stage';
   const toward = Math.round(prog.toward * 100) / 100;
 

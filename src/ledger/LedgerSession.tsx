@@ -22,23 +22,23 @@ export function LedgerSession() {
   const span = stage.kind === 'span';
   const rows: [string, string][] = span
     ? [
-        ['Clean numbers', `${sitting.clean} of ${sitting.lines}`],
+        ['Numbers fully right', `${sitting.clean} of ${sitting.lines}`],
         ['Best on this stage', String(prog.have)],
-        ['Slips', String(sitting.slips)],
+        ['Mistakes', String(sitting.slips)],
       ]
     : [
         ['Right', `${sitting.right} of ${sitting.asked}`],
-        ['Known now', `${prog.have} of ${prog.need}`],
-        ['New this sitting', String(Math.max(0, prog.have - sitting.knownBefore))],
+        ['Learned so far', `${prog.have} of ${prog.need}`],
+        ['New this time', String(Math.max(0, prog.have - sitting.knownBefore))],
       ];
   const figure = span ? (sitting.longest ? String(sitting.longest) : '–') : String(sitting.right);
   const caption = span
     ? sitting.longest
       ? sitting.newBest
-        ? 'Figures held, a new best'
-        : 'Figures held'
-      : 'No clean number yet'
-    : `Right of ${sitting.asked}`;
+        ? 'Longest number recalled, a new best'
+        : 'Longest number recalled, in digits'
+      : 'No number recalled in full yet'
+    : `Right answers out of ${sitting.asked}`;
   const roomLabel = sitting.mastered ? 'Mastered' : prog.mastered ? 'Stage · mastered' : 'Stage';
   const toward = Math.round(prog.toward * 100) / 100;
 

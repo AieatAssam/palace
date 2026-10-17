@@ -103,11 +103,14 @@ test.describe('Ledger', () => {
     const a = await ledgerAnswer(page);
     const figure = (a as { figure: number }).figure;
     const wrong = (figure + 1) % 10;
+    const before = await ledgerState(page);
+    // Nothing keyed yet on this line, so the slip is on digit done + 1, which is digit 1.
+    expect(before.done).toBe(0);
     await page.getByTestId(`ledger-key-${wrong}`).click();
 
     await expect.poll(() => page.evaluate(() => window.__palace!.ledger.state().phase)).toBe('slip');
     expect((await ledgerState(page)).sitting.slips).toBe(1);
-    await expect(page.getByTestId('prompt')).toHaveText('Not that figure.');
+    await expect(page.getByTestId('prompt')).toHaveText(`Wrong: digit ${before.done + 1} was ${figure}, not ${wrong}.`);
     expect((await page.evaluate(() => window.__palace!.rewards())).streak).toBe(0);
   });
 

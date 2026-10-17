@@ -38,12 +38,12 @@ const span = (o: Pick<LedgerStage, 'id' | 'title' | 'short' | 'note' | 'start' |
 const drill = (o: Pick<LedgerStage, 'id' | 'title' | 'short' | 'note' | 'kind' | 'from' | 'to'>): LedgerStage => ({ ...o, start: 0, step: 0, most: 0, mastery: 0, tempo: 0, glosses: false });
 
 export const LEDGER_STAGES: readonly LedgerStage[] = [
-  span({ id: 'span', title: 'Digit span', short: 'Digit span', note: 'One figure at a time, then key them back', start: 4, step: 1, most: 14, mastery: 8, tempo: 1000, glosses: false }),
-  drill({ id: 'sounds', title: 'The ten sounds', short: 'The ten sounds', note: 'Each figure has a consonant', kind: 'sounds', from: 0, to: 9 }),
-  drill({ id: 'pegs-low', title: 'Peg words, 00 to 49', short: 'Pegs 00 to 49', note: 'A word for every pair', kind: 'pegs', from: 0, to: 49 }),
-  drill({ id: 'pegs-high', title: 'Peg words, 50 to 99', short: 'Pegs 50 to 99', note: 'The second half of the hundred', kind: 'pegs', from: 50, to: 99 }),
-  span({ id: 'long', title: 'Long numbers, pegs pencilled', short: 'Long numbers', note: 'The pegs pencilled under each pair', start: 8, step: 2, most: 30, mastery: 16, tempo: 0, glosses: true }),
-  span({ id: 'long-bare', title: 'Long numbers, bare', short: 'Long, bare', note: 'Find the pegs yourself', start: 8, step: 2, most: 30, mastery: 14, tempo: 0, glosses: false }),
+  span({ id: 'span', title: 'Digit span', short: 'Digit span', note: 'Digits appear one by one. Type them back.', start: 4, step: 1, most: 14, mastery: 8, tempo: 1000, glosses: false }),
+  drill({ id: 'sounds', title: 'The ten sounds', short: 'The ten sounds', note: 'Learn the consonant sound for each digit', kind: 'sounds', from: 0, to: 9 }),
+  drill({ id: 'pegs-low', title: 'Peg words, 00 to 49', short: 'Pegs 00 to 49', note: 'Learn a word for each number 00 to 49', kind: 'pegs', from: 0, to: 49 }),
+  drill({ id: 'pegs-high', title: 'Peg words, 50 to 99', short: 'Pegs 50 to 99', note: 'Learn a word for each number 50 to 99', kind: 'pegs', from: 50, to: 99 }),
+  span({ id: 'long', title: 'Long numbers, pegs pencilled', short: 'Long numbers', note: 'Hints: a peg word under each pair', start: 8, step: 2, most: 30, mastery: 16, tempo: 0, glosses: true }),
+  span({ id: 'long-bare', title: 'Long numbers, bare', short: 'Long, bare', note: 'No hints: make the peg words yourself', start: 8, step: 2, most: 30, mastery: 14, tempo: 0, glosses: false }),
 ];
 
 export const FIRST_LEDGER_STAGE = LEDGER_STAGES[0]!;
