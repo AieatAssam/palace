@@ -1,0 +1,8 @@
+<!doctype html><html><body style="background:#222;margin:0;display:flex;flex-wrap:wrap;gap:8px;padding:8px">
+<script type="module">
+import { paintPortrait } from '/src/faces/paint.ts';
+import { makeCast, castSeed, describe } from '/src/faces/sitters.ts';
+const cast = [...makeCast(castSeed('four'), 4), ...makeCast(castSeed('eight'), 8)];
+for (const s of cast) { const c = document.createElement('canvas'); c.width = 320; c.height = 400; paintPortrait(c, s.look); c.title = s.name + ' — ' + describe(s.look); document.body.appendChild(c); }
+window.done = true;
+</script></body></html>
