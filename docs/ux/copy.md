@@ -17,3 +17,14 @@ Every user-facing string was read against the stop-slop rules (`docs/ux/stop-slo
 | Settings, destructive confirm (drawn, aria) | Clear everything | Clear all | Drops the dramatic intensifier. |
 | Play prompt (name drill) | What note is this? | Name this note. | Drops the rhetorical question. |
 | Meta description | Palace — learn every note on the guitar fretboard, one quiet room at a time. | Palace. Learn every note on the guitar fretboard. | Em dash and flourish. |
+
+## Stages pass (night/fretboard-depth)
+
+Unlock gating is gone. Every stage is open from the Stages card, so the primer and card copy now say so. Strings not listed were already clean and stay as they were (One string, Two strings, Naturals, Sharps & flats, Low E string, Full neck, Find all, Done, Stages, Mastered, Stage, the cell labels, nowLine, tally, Find its octave, Find both octaves, Name this note, C♯ or D♭, frets 0–4 · drag for more).
+
+| Where | Before | After | Why |
+|---|---|---|---|
+| Primer II title | Name it, or find it. | Name it, find it, reach its octave. | Adds the Octave drill to the three drills named. |
+| Primer II body | Name: pick one of twelve keys. Find: touch every place the note lives. | Name it from twelve keys, find every place it lives, or tap its octave two strings over. | One sentence covers the octave drill; states the rule. |
+| Primer III body | Sure answers rest. Slow ones return sooner. Strings and frets open as you advance. | Sure answers rest. Every stage is open on the Stages card; gilt marks the ones you know. | Nothing unlocks now. Says where stages open and what the gilt mark means. |
+| Stages row 4 title | Across the neck | Whole neck | Both stages in the row (Octaves, Find all) range over the whole neck; the cells already name them. |

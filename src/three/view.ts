@@ -54,6 +54,9 @@ export function inspectHighlight() {
 /** Render statistics for tests: frames drawn, meshes and triangles in the scene. */
 export const renderInfo = { frames: 0, meshes: 0, triangles: 0 };
 
+/** Whether the camera has arrived where it is heading (written every frame by the rig). */
+export const cameraState = { settled: false };
+
 /** World-space point the camera frames (centre of the unlocked board): depth-of-field focus. */
 export const focusPoint = new Vector3();
 
@@ -81,3 +84,24 @@ export const sheetPose: { current: SheetPose | null } = { current: null };
  * the focus rule on the card itself.
  */
 export const sheetUi: { press: string | null; focus: string | null; hover: string | null } = { press: null, focus: null, hover: null };
+
+/**
+ * The stretch of neck on screen. On a phone a long reach does not fit at a fingertip's
+ * string spacing, so the camera frames a window of frets that follows the question
+ * (and can be dragged along the neck). `windowed` is false when the whole reach fits.
+ */
+export interface NeckWindow {
+  windowed: boolean;
+  /** Frets fully or partly on screen. */
+  from: number;
+  to: number;
+}
+export const useNeckWindow = create<NeckWindow & { set(w: NeckWindow): void }>()((set, get) => ({
+  windowed: false,
+  from: 0,
+  to: 12,
+  set(w) {
+    const cur = get();
+    if (cur.windowed !== w.windowed || cur.from !== w.from || cur.to !== w.to) set(w);
+  },
+}));

@@ -7,10 +7,13 @@ import {
   OPEN_HALO,
   cellRect,
   fretX,
+  followWindow,
   markerPoint,
   markerX,
   neckMatrix,
   neckToWorld,
+  regionBounds,
+  regionSpan,
   resolveTap,
   stringPoint,
   stringSpacing,
@@ -166,5 +169,53 @@ describe('highlight ↔ string mapping', () => {
         expect(steps[0]).not.toBe(0);
       }
     }
+  });
+});
+
+describe('follow window and region spans', () => {
+  it('leaves x0 alone when the span is already covered', () => {
+    expect(followWindow(5, 10, 0, 100, 6, 8)).toBe(5);
+  });
+
+  it('slides the least distance when the span runs past the window end', () => {
+    // [0, 10] must cover [5, 14]: the minimal slide is to x0 = 4.
+    expect(followWindow(0, 10, 0, 100, 5, 14)).toBe(4);
+  });
+
+  it('slides back when the span starts before the window', () => {
+    expect(followWindow(20, 10, 0, 100, 12, 15)).toBe(12);
+  });
+
+  it('clamps the result into [lo, hi - len]', () => {
+    // Would slide to -4 without the clamp; lo = 5 wins.
+    expect(followWindow(30, 10, 5, 50, -20, -18)).toBe(5);
+    // Span beyond hi forces x = 45, clamped to hi - len = 40.
+    expect(followWindow(0, 10, 0, 50, 55, 55)).toBe(40);
+  });
+
+  it('centres a span wider than the window', () => {
+    // Span [20, 40] has centre 30; a window of 10 centred there starts at 25.
+    expect(followWindow(0, 10, 0, 100, 20, 40)).toBe(25);
+  });
+
+  it('regionSpan grows with the fret limit and keeps the same start', () => {
+    expect(regionSpan(5).x0).toBe(regionSpan(12).x0);
+    expect(regionSpan(5).x1).toBeLessThan(regionSpan(12).x1);
+  });
+
+  it('regionBounds echoes a span override in x0/x1', () => {
+    const span = { x0: -1, x1: 20 };
+    const b = regionBounds(12, undefined, span);
+    expect(b.x0).toBe(-1);
+    expect(b.x1).toBe(20);
+    const banded = regionBounds(12, [0, 1], span);
+    expect(banded.x0).toBe(-1);
+    expect(banded.x1).toBe(20);
+  });
+
+  it('regionBounds without an override uses regionSpan', () => {
+    const b = regionBounds(9);
+    expect(b.x0).toBe(regionSpan(9).x0);
+    expect(b.x1).toBe(regionSpan(9).x1);
   });
 });

@@ -3,8 +3,10 @@ import { type ThreeEvent } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { MAX_FRET, type Position, STRING_COUNT, samePosition } from '../game/notes';
-import { isUnlocked } from '../game/unlocks';
+import { inRegion } from '../game/stages';
+import { isCalm } from '../motion';
 import { usePalace } from '../store';
+import { useNeckWindow } from './view';
 import {
   BOARD_END,
   BOARD_TAPER,
@@ -60,25 +62,28 @@ function physical(params: THREE.MeshPhysicalMaterialParameters): THREE.MeshStand
 }
 
 /**
- * Locked region, shared by every neck material: past the last unlocked fret,
- * and (while some strings are locked) across the higher strings. Locked parts
- * are dimmed and desaturated in the shader rather than veiled.
+ * Resting region, shared by every neck material: past the stage's last fret, and
+ * across the strings outside it. Resting parts are dimmed and desaturated in the
+ * shader rather than veiled.
  */
 export interface LockUniforms {
   /** Inverse of the neck group's world matrix (world → neck-local). */
   uNeckInv: { value: THREE.Matrix4 };
   uLockX: { value: number };
-  /** Locked-strings edge as z = a + b·x (higher strings sit at -Z). */
-  uLockEdge: { value: THREE.Vector2 };
-  uLockStrings: { value: number };
+  /**
+   * Edges of the band of strings in play, each as z = a + b·x with a weight w (0 = no edge).
+   * Higher strings sit at -Z: `uLockHi` rests everything below it in z, `uLockLo` everything above.
+   */
+  uLockHi: { value: THREE.Vector3 };
+  uLockLo: { value: THREE.Vector3 };
 }
 
 function makeLockUniforms(): LockUniforms {
   return {
     uNeckInv: { value: new THREE.Matrix4() },
     uLockX: { value: 1e3 },
-    uLockEdge: { value: new THREE.Vector2() },
-    uLockStrings: { value: 0 },
+    uLockHi: { value: new THREE.Vector3() },
+    uLockLo: { value: new THREE.Vector3() },
   };
 }
 
@@ -93,14 +98,17 @@ function injectLock(shader: THREE.WebGLProgramParametersWithUniforms, lock: Lock
   shader.fragmentShader = shader.fragmentShader
     .replace(
       '#include <common>',
-      '#include <common>\nuniform float uLockX; uniform vec2 uLockEdge; uniform float uLockStrings; varying vec3 vNeck;',
+      '#include <common>\nuniform float uLockX; uniform vec3 uLockHi; uniform vec3 uLockLo; varying vec3 vNeck;',
     )
     .replace(
       '#include <opaque_fragment>',
       `{
   float beyond = smoothstep(uLockX - 0.06, uLockX + 0.3, vNeck.x);
-  float edge = uLockEdge.x + uLockEdge.y * max(vNeck.x, 0.0);
-  float across = uLockStrings * (1.0 - smoothstep(edge - 0.12, edge + 0.04, vNeck.z));
+  float hi = uLockHi.x + uLockHi.y * max(vNeck.x, 0.0);
+  float lo = uLockLo.x + uLockLo.y * max(vNeck.x, 0.0);
+  float across = max(
+    uLockHi.z * (1.0 - smoothstep(hi - 0.12, hi + 0.04, vNeck.z)),
+    uLockLo.z * smoothstep(lo - 0.04, lo + 0.12, vNeck.z));
   float locked = max(beyond, across);
   float luma = dot(outgoingLight, vec3(0.2126, 0.7152, 0.0722));
   // Darken and soften the colour, but keep it warm: locked wood stays wood, not grey.
@@ -814,8 +822,10 @@ function Highlights({ m, thick }: { m: Materials; thick: number }) {
   const asking = usePalace((s) => s.screen === 'play');
 
   const out: React.ReactNode[] = [];
-  if (asking && question.kind === 'name') {
-    const tone: CueTone = feedback?.kind === 'correct' ? 'correct' : feedback?.kind === 'miss' ? 'miss' : 'ask';
+  if (asking && question.kind !== 'find') {
+    // Name-it lights the place to name; octaves light the note whose octave is wanted, and keep it lit.
+    const named = question.kind === 'name';
+    const tone: CueTone = !named ? 'ask' : feedback?.kind === 'correct' ? 'correct' : feedback?.kind === 'miss' ? 'miss' : 'ask';
     out.push(
       <Cue
         key={`q-${question.itemId}-${tone}`}
@@ -827,14 +837,15 @@ function Highlights({ m, thick }: { m: Materials; thick: number }) {
         question
       />,
     );
-  } else if (asking) {
+  }
+  if (asking && question.kind !== 'name') {
     for (const p of found) out.push(<Cue key={`f-s${p.string}f${p.fret}`} position={p} tone="correct" m={m} thick={thick} />);
   }
   if (lastMiss && !(question.kind === 'name' && samePosition(lastMiss.position, question.position))) {
     out.push(<Cue key={`m-${lastMiss.id}`} position={lastMiss.position} tone="miss" m={m} thick={thick} fadeFrom={lastMiss.at} />);
   }
   // A pluck on a cell that's already framed (the answer, a found target) only shimmers its string.
-  const framed = !asking ? [] : question.kind === 'name' ? [question.position] : found;
+  const framed = !asking ? [] : question.kind === 'name' ? [question.position] : question.kind === 'octave' ? [question.position, ...found] : found;
   if (lastPluck && !lastPluck.quiet && !framed.some((p) => samePosition(p, lastPluck.position))) {
     out.push(<Cue key={`p-${lastPluck.id}`} position={lastPluck.position} tone="spark" m={m} thick={thick} fadeFrom={lastPluck.at} />);
   }
@@ -845,29 +856,64 @@ function Highlights({ m, thick }: { m: Materials; thick: number }) {
 /* Locked veil + tap targets                                          */
 /* ------------------------------------------------------------------ */
 
-/** Feeds the current stage's locked region (and the neck's world transform) to the lock shader. */
+/** The edge between string k and k + 1, as z = a + b·x: (2 − k) · stringSpacing(x), linear in x. */
+function bandEdge(k: number, weight: number, out: THREE.Vector3) {
+  const c = (2 - k) / (STRING_COUNT - 1);
+  return out.set(c * (NUT_WIDTH - 2 * EDGE_MARGIN), (c * BOARD_TAPER) / fretX(12), weight);
+}
+
+const lockGoal = { x: 1e3, hi: new THREE.Vector3(), lo: new THREE.Vector3() };
+
+/**
+ * Feeds the current stage's region (and the neck's world transform) to the lock shader.
+ * The edges ease to a new stage rather than jump, so a widening reach opens out along the neck.
+ */
 function LockRegion({ m, root }: { m: Materials; root: React.RefObject<THREE.Group | null> }) {
-  const stageIdx = usePalace((s) => s.saved.stage);
+  const stageId = usePalace((s) => s.saved.stageId);
+  const first = useRef(true);
   useEffect(() => {
     const stage = usePalace.getState().stage();
-    const maxString = Math.max(...stage.strings);
-    const { lock } = m;
-    lock.uLockX.value = stage.maxFret >= RENDERED_FRETS ? 1e3 : fretX(stage.maxFret);
-    lock.uLockStrings.value = maxString < STRING_COUNT - 1 ? 1 : 0;
-    // Midway between the last unlocked string and the next: (2 - maxString) · stringSpacing(x), linear in x.
-    const k = (2 - maxString) / (STRING_COUNT - 1);
-    lock.uLockEdge.value.set(k * (NUT_WIDTH - 2 * EDGE_MARGIN), (k * BOARD_TAPER) / fretX(12));
-  }, [m, stageIdx]);
-  useFrame(() => {
+    const hi = Math.max(...stage.strings);
+    const lo = Math.min(...stage.strings);
+    // Past the board's end means nothing rests (kept finite so the edge can travel there).
+    lockGoal.x = stage.maxFret >= RENDERED_FRETS ? BOARD_END + 1 : fretX(stage.maxFret);
+    // A missing edge keeps its place and fades out, so a band only ever slides or fades.
+    if (hi < STRING_COUNT - 1) bandEdge(hi, 1, lockGoal.hi);
+    else lockGoal.hi.z = 0;
+    if (lo > 0) bandEdge(lo - 1, 1, lockGoal.lo);
+    else lockGoal.lo.z = 0;
+    if (first.current || isCalm()) {
+      first.current = false;
+      m.lock.uLockX.value = lockGoal.x;
+      m.lock.uLockHi.value.copy(lockGoal.hi);
+      m.lock.uLockLo.value.copy(lockGoal.lo);
+    }
+  }, [m, stageId]);
+  useFrame((_, dt) => {
     if (root.current) m.lock.uNeckInv.value.copy(root.current.matrixWorld).invert();
+    const { lock } = m;
+    const k = isCalm() ? 1 : 1 - Math.exp(-dt * 2.6);
+    lock.uLockX.value += (lockGoal.x - lock.uLockX.value) * k;
+    for (const [u, goal] of [
+      [lock.uLockHi.value, lockGoal.hi],
+      [lock.uLockLo.value, lockGoal.lo],
+    ] as const) {
+      // An edge that appears starts where it stands; one that leaves fades in place.
+      if (u.z < 0.01 && goal.z > 0) u.set(goal.x, goal.y, u.z);
+      if (goal.z > 0) u.set(u.x + (goal.x - u.x) * k, u.y + (goal.y - u.y) * k, u.z);
+      u.z += (goal.z - u.z) * k;
+    }
   });
   return null;
 }
 
 const hitMaterial = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false });
 
+/** A finger that travels this far (CSS px) before lifting was dragging the neck, not tapping it. */
+const TAP_SLOP = 10;
+
 function HitCells() {
-  const stageIdx = usePalace((s) => s.saved.stage);
+  const stageId = usePalace((s) => s.saved.stageId);
   const tap = usePalace((s) => s.tapPosition);
   const cells = useMemo(() => {
     const stage = usePalace.getState().stage();
@@ -875,24 +921,38 @@ function HitCells() {
     for (let s = 0; s < STRING_COUNT; s++)
       for (let f = 0; f <= MAX_FRET; f++) {
         const p = { string: s, fret: f };
-        if (isUnlocked(stage, p)) out.push({ p, rect: tapRect(p, stage.strings) });
+        if (inRegion(stage, p)) out.push({ p, rect: tapRect(p, stage.strings) });
       }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stageIdx]);
+  }, [stageId]);
   const local = useMemo(() => new THREE.Vector3(), []);
 
   const onDown = (p: Position) => (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
     const { question, found } = usePalace.getState();
     let target = p;
-    if (question.kind === 'find' && e.object.parent) {
+    if (question.kind !== 'name' && e.object.parent) {
       // Forgive near-misses toward an unfound target on the adjacent string.
       e.object.parent.worldToLocal(local.copy(e.point));
       const open = question.targets.filter((t) => !found.some((f) => samePosition(f, t)));
       target = resolveTap(p, local.x, local.z, open);
     }
-    tap(target);
+    // A mouse answers on press. A finger (or any pointer, while the neck can be dragged) answers on
+    // lift, unless it slid: then it was moving the neck.
+    if (e.nativeEvent.pointerType !== 'touch' && !useNeckWindow.getState().windowed) {
+      tap(target);
+      return;
+    }
+    const { clientX: x, clientY: y, pointerId } = e.nativeEvent;
+    const up = (u: PointerEvent) => {
+      if (u.pointerId !== pointerId) return;
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      if (u.type === 'pointerup' && Math.hypot(u.clientX - x, u.clientY - y) < TAP_SLOP) tap(target);
+    };
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
   };
 
   return (

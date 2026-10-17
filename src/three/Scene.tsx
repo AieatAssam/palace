@@ -10,10 +10,10 @@ import { useSheet } from '../ui/sheet';
 import { DESK_Y, Desk, SHADOW_Y } from './Desk';
 import { Fretboard } from './Fretboard';
 import { COLORS } from './palette';
-import { BOARD_THICKNESS, markerPoint, neckMatrix, neckToWorld, regionBounds } from './layout';
-import { LITE, CAPTURE } from './quality';
+import { BOARD_THICKNESS, followWindow, fretX, markerPoint, markerX, neckMatrix, stringPoint, neckToWorld, positionsSpan, regionBounds, regionSpan } from './layout';
+import { COARSE, LITE, CAPTURE } from './quality';
 import { Sheet } from './Sheet';
-import { focusPoint, renderInfo, setInspector, setProjector, sheetPose, useView } from './view';
+import { cameraState, focusPoint, renderInfo, setInspector, setProjector, sheetPose, useNeckWindow, useView } from './view';
 
 const FOV = 30;
 
@@ -78,6 +78,11 @@ function useLayout() {
 const HERO = {
   landscape: { elevation: 28, yaw: -22 },
   portrait: { elevation: 42, yaw: -11 },
+  /**
+   * A phone on a long reach: the camera climbs so the far end of the window keeps its
+   * string spacing (at the hero angle the nut end recedes to half the width of the near end).
+   */
+  windowed: { elevation: 58, yaw: -6 },
 } as const;
 
 interface Framing {
@@ -96,6 +101,14 @@ interface Box {
 }
 
 const probe = new THREE.PerspectiveCamera(FOV, 1, 0.5, 120);
+
+/**
+ * On a touch screen, no string spacing or fret cell drawn smaller than this (CSS px):
+ * the 44 px fingertip, with a margin for the window sliding to a part of the neck it was not measured at.
+ */
+const MIN_TARGET_PX = 48;
+/** A window never shrinks below this much neck (a few frets). */
+const MIN_WINDOW = 4;
 
 /**
  * Fits the region's corner points (board top, board edge and neck back) into
@@ -152,7 +165,7 @@ function fitCamera(points: THREE.Vector3[], dir: THREE.Vector3, aspect: number, 
 function NeckRig({ children }: { children: React.ReactNode }) {
   const { portrait, size } = useLayout();
   const leftHanded = usePalace((s) => s.saved.settings.leftHanded);
-  const stageIdx = usePalace((s) => s.saved.stage);
+  const stageId = usePalace((s) => s.saved.stageId);
   const attract = usePalace((s) => s.screen === 'attract');
   const insets = useView((s) => s.insets);
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
@@ -161,28 +174,24 @@ function NeckRig({ children }: { children: React.ReactNode }) {
 
   const view = useMemo(() => ({ portrait, leftHanded }), [portrait, leftHanded]);
 
-  const target = useMemo(() => {
+  /**
+   * The framing for the stage: the whole reach where it fits; on a touch screen where
+   * it would not fit at a fingertip's string spacing, a window of frets (`len` neck
+   * units long) that the camera slides along the neck.
+   */
+  const rig = useMemo(() => {
     const stage = usePalace.getState().stage();
     // Portrait (narrow) frames the strings in play; landscape and the title show the whole neck.
-    const b = regionBounds(stage.maxFret, portrait && !attract ? stage.strings : undefined);
-    // Board top, the board's lower edge and the bottom of the neck back, so the
-    // carved side is framed along with the strings.
-    const points: THREE.Vector3[] = [];
-    for (const x of [b.x0, b.x1])
-      for (const z of [b.z0, b.z1]) {
-        const [wx, wz] = neckToWorld(x, z, view);
-        points.push(new THREE.Vector3(wx, 0.2, wz), new THREE.Vector3(wx, -BOARD_THICKNESS, wz));
-      }
-    for (const x of [b.x0, b.x1]) {
-      const [wx, wz] = neckToWorld(x, 0, view);
-      points.push(new THREE.Vector3(wx, -0.82, wz));
-    }
+    const strings = portrait && !attract ? stage.strings : undefined;
+    const span = regionSpan(stage.maxFret);
 
-    const hero = portrait ? HERO.portrait : HERO.landscape;
-    const el = THREE.MathUtils.degToRad(hero.elevation);
-    // Yaw towards the headstock (and the low-E side in portrait): mirrored for left-handers.
-    const yaw = THREE.MathUtils.degToRad(hero.yaw) * (leftHanded ? -1 : 1);
-    const dir = new THREE.Vector3(Math.sin(yaw) * Math.cos(el), Math.sin(el), Math.cos(yaw) * Math.cos(el));
+    const heroDir = (hero: { elevation: number; yaw: number }) => {
+      const el = THREE.MathUtils.degToRad(hero.elevation);
+      // Yaw towards the headstock (and the low-E side in portrait): mirrored for left-handers.
+      const yaw = THREE.MathUtils.degToRad(hero.yaw) * (leftHanded ? -1 : 1);
+      return new THREE.Vector3(Math.sin(yaw) * Math.cos(el), Math.sin(el), Math.cos(yaw) * Math.cos(el));
+    };
+    let dir = heroDir(portrait ? HERO.portrait : HERO.landscape);
 
     const h = Math.max(1, size.height);
     const aspect = size.width / h;
@@ -203,15 +212,200 @@ function NeckRig({ children }: { children: React.ReactNode }) {
         ? { x0: -0.97, x1: 0.97, y0: bottom, y1: Math.max(bottom + 0.3, top) }
         : { x0: -0.92, x1: 0.92, y0: bottom * 0.96, y1: Math.max(bottom + 0.3, top) * 0.96 };
     }
-    return fitCamera(points, dir, aspect, box);
+
+    const frame = (x0: number, x1: number): Framing => {
+      const b = regionBounds(stage.maxFret, strings, { x0, x1 });
+      // Board top, the board's lower edge and the bottom of the neck back, so the
+      // carved side is framed along with the strings.
+      const points: THREE.Vector3[] = [];
+      for (const x of [b.x0, b.x1])
+        for (const z of [b.z0, b.z1]) {
+          const [wx, wz] = neckToWorld(x, z, view);
+          points.push(new THREE.Vector3(wx, 0.2, wz), new THREE.Vector3(wx, -BOARD_THICKNESS, wz));
+        }
+      for (const x of [b.x0, b.x1]) {
+        const [wx, wz] = neckToWorld(x, 0, view);
+        points.push(new THREE.Vector3(wx, -0.82, wz));
+      }
+      return fitCamera(points, dir, aspect, box);
+    };
+
+    const full = frame(span.x0, span.x1);
+    const fixed = { full, windowed: false, len: span.x1 - span.x0, lo: span.x0, hi: span.x1, frame };
+    if (attract || (!COARSE && !portrait)) return fixed;
+
+    // The smallest target on screen for a window ending at `x1`: the string spacing
+    // there (with more than one string) and the length of the last fret's cell.
+    const pa = new THREE.Vector3();
+    const pb = new THREE.Vector3();
+    const px = (f: Framing, a: [number, number, number], b: [number, number, number]) => {
+      probe.aspect = aspect;
+      probe.updateProjectionMatrix();
+      probe.position.copy(f.pos);
+      probe.up.set(0, 1, 0);
+      probe.lookAt(f.look);
+      probe.updateMatrixWorld();
+      const [ax, az] = neckToWorld(a[0], a[2], view);
+      const [bx, bz] = neckToWorld(b[0], b[2], view);
+      pa.set(ax, a[1], az).project(probe);
+      pb.set(bx, b[1], bz).project(probe);
+      return Math.hypot(((pa.x - pb.x) * size.width) / 2, ((pa.y - pb.y) * h) / 2);
+    };
+    /**
+     * The smallest target a finger meets in a framing of [x0, x1], measured where the
+     * fingers go: between the markers of neighbouring strings in play (open strings at
+     * the nut included), and along each string from one fret wire to the next.
+     */
+    const smallest = (f: Framing, x0: number, x1: number) => {
+      let m = Infinity;
+      const strings = [...stage.strings].sort((a, b) => a - b);
+      for (let fret = 0; fret <= stage.maxFret; fret++) {
+        const x = markerX(fret);
+        if (x < x0 || x > x1) continue;
+        for (let i = 1; i < strings.length; i++) {
+          m = Math.min(m, px(f, markerPoint({ string: strings[i - 1]!, fret }), markerPoint({ string: strings[i]!, fret })));
+        }
+        if (fret > 0)
+          for (const s of [strings[0]!, strings[strings.length - 1]!]) {
+            m = Math.min(m, px(f, stringPoint(s, fretX(fret - 1)), stringPoint(s, fretX(fret))));
+          }
+      }
+      return m;
+    };
+    if (smallest(full, span.x0, span.x1) >= MIN_TARGET_PX) return fixed;
+    dir = heroDir(HERO.windowed);
+    // Longest window that keeps every target a fingertip wide, placed at the nut (where perspective and taper make the strings closest) and at the body end (the shortest frets).
+    let lo = Math.min(MIN_WINDOW, span.x1 - span.x0);
+    let hi = span.x1 - span.x0;
+    for (let i = 0; i < 10; i++) {
+      const mid = (lo + hi) / 2;
+      const ok = smallest(frame(span.x0, span.x0 + mid), span.x0, span.x0 + mid) >= MIN_TARGET_PX && smallest(frame(span.x1 - mid, span.x1), span.x1 - mid, span.x1) >= MIN_TARGET_PX;
+      if (ok) lo = mid;
+      else hi = mid;
+    }
+    return { full, windowed: true, len: lo, lo: span.x0, hi: span.x1, frame };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, portrait, attract, size.width, size.height, insets.top, insets.bottom, stageIdx]);
+  }, [view, portrait, attract, size.width, size.height, insets.top, insets.bottom, stageId]);
+
+  /** Where the window sits (its near end, neck-local x), and the framing last built for it. */
+  const pan = useRef({ x0: rig.lo, built: NaN, framing: rig.full, question: '', dragging: false });
+  useLayoutEffect(() => {
+    // A new stage starts at the nut.
+    pan.current.x0 = rig.lo;
+    pan.current.built = NaN;
+    pan.current.question = '';
+  }, [rig]);
+  const setWindow = useNeckWindow((s) => s.set);
+
+  /** The framing to aim at this frame: the whole reach, or the window where it now sits. */
+  const neckFraming = (): Framing => {
+    const pn = pan.current;
+    if (!rig.windowed) {
+      if (pn.framing !== rig.full) publishWindow();
+      pn.framing = rig.full;
+      return rig.full;
+    }
+    const { question, screen } = usePalace.getState();
+    if (screen === 'play' && question.kind !== 'find' && pn.question !== question.itemId) {
+      // Follow the question: the lit place (and its octaves) slide into view.
+      pn.question = question.itemId;
+      const need = positionsSpan(question.kind === 'name' ? [question.position] : [question.position, ...question.targets]);
+      pn.x0 = followWindow(pn.x0, rig.len, rig.lo, rig.hi, need.a, need.b);
+    }
+    pn.x0 = Math.max(rig.lo, Math.min(rig.hi - rig.len, pn.x0));
+    if (!(Math.abs(pn.built - pn.x0) <= 1e-3)) {
+      pn.built = pn.x0;
+      pn.framing = rig.frame(pn.x0, pn.x0 + rig.len);
+      publishWindow();
+    }
+    return pn.framing;
+  };
+
+  /** Publish the frets on screen (for the HUD and the test hooks). */
+  const publishWindow = () => {
+    const max = usePalace.getState().stage().maxFret;
+    if (!rig.windowed) return setWindow({ windowed: false, from: 0, to: max });
+    // A fret counts as on screen when its marker (where a finger goes) is inside the window.
+    const x0 = pan.current.x0;
+    let from = max;
+    let to = 0;
+    for (let f = 0; f <= max; f++) {
+      const x = markerX(f);
+      if (x >= x0 && x <= x0 + rig.len) {
+        from = Math.min(from, f);
+        to = Math.max(to, f);
+      }
+    }
+    setWindow({ windowed: true, from, to: Math.max(from, to) });
+  };
+
+  // Drag (or scroll) along the neck to move the window.
+  useEffect(() => {
+    if (!rig.windowed) return;
+    const el = gl.domElement;
+    const axis = new THREE.Vector2();
+    const a = new THREE.Vector3();
+    const b = new THREE.Vector3();
+    /** Screen pixels per neck unit along the neck, as a vector (from the camera as it stands). */
+    const measureAxis = () => {
+      const g = group.current;
+      if (!g) return false;
+      const mid = pan.current.x0 + rig.len / 2;
+      g.updateWorldMatrix(true, false);
+      camera.updateMatrixWorld();
+      a.set(mid, 0.15, 0).applyMatrix4(g.matrixWorld).project(camera);
+      b.set(mid + 1, 0.15, 0).applyMatrix4(g.matrixWorld).project(camera);
+      axis.set(((b.x - a.x) * el.clientWidth) / 2, (-(b.y - a.y) * el.clientHeight) / 2);
+      return axis.lengthSq() > 1e-6;
+    };
+    let drag: { id: number; x: number; y: number; x0: number; moved: boolean } | null = null;
+    const live = () => {
+      const st = usePalace.getState();
+      return st.screen === 'play' && !st.stagesOpen && !useSheet.getState().geom;
+    };
+    const down = (e: PointerEvent) => {
+      if (!live() || !measureAxis()) return;
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, x0: pan.current.x0, moved: false };
+    };
+    const move = (e: PointerEvent) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const dx = e.clientX - drag.x;
+      const dy = e.clientY - drag.y;
+      if (!drag.moved && Math.hypot(dx, dy) < 10) return;
+      drag.moved = true;
+      pan.current.dragging = true;
+      // The board follows the finger: moving it towards the body pulls higher frets into view.
+      pan.current.x0 = drag.x0 - (dx * axis.x + dy * axis.y) / axis.lengthSq();
+    };
+    const up = (e: PointerEvent) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      drag = null;
+      pan.current.dragging = false;
+    };
+    const wheel = (e: WheelEvent) => {
+      if (!live()) return;
+      e.preventDefault();
+      pan.current.x0 += (e.deltaY + e.deltaX) * 0.01;
+    };
+    el.addEventListener('pointerdown', down);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    el.addEventListener('wheel', wheel, { passive: false });
+    return () => {
+      el.removeEventListener('pointerdown', down);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      el.removeEventListener('wheel', wheel);
+    };
+  }, [rig, gl, camera]);
 
   // A desk sheet is open: the camera leaves the neck and looks down on the card,
   // which lies on the walnut beside the leather mat (below the player's edge of
   // it in landscape, to the right of it on a phone), clear of the neck either way.
   const sheet = useSheet((s) => s.geom);
-  const sheetKey = sheet ? `${sheet.width}x${sheet.height}` : '';
+  const sheetKey = sheet ? `${sheet.width}x${sheet.height}${sheet.solo ? 's' : ''}` : '';
   const sheetFrame = useMemo(() => {
     if (!sheet) return null;
     const half = SHEET_MAT_HALF + SHEET_GAP;
@@ -230,7 +424,7 @@ function NeckRig({ children }: { children: React.ReactNode }) {
     // Keep the neck and mat in shot beside the card: frame a strip of the mat
     // across the neck (above the card in landscape, to its left on a phone).
     const NECK_REACH = 0.9;
-    for (const s of [-1, 1]) {
+    if (!sheet.solo) for (const s of [-1, 1]) {
       if (portrait) points.push(new THREE.Vector3(0.2, DESK_Y + 0.3, pose.z + s * hh * 0.6));
       else points.push(new THREE.Vector3(pose.x + s * hw * 1.9, DESK_Y + 0.3, -SHEET_MAT_HALF * NECK_REACH));
     }
@@ -244,7 +438,7 @@ function NeckRig({ children }: { children: React.ReactNode }) {
     sheetPose.current = sheetFrame?.pose ?? null;
   }, [sheetFrame]);
 
-  const lookNow = useRef(target.look.clone());
+  const lookNow = useRef(rig.full.look.clone());
   const first = useRef(true);
   /** Attract idle drift: 1 on the title, eases to 0 when play starts (camera settles, no whip-pan). */
   const idle = useRef(0);
@@ -257,7 +451,7 @@ function NeckRig({ children }: { children: React.ReactNode }) {
     idle.current += (wantIdle - idle.current) * (1 - Math.exp(-dt * 1.4));
     if (idle.current < 1e-3 && !wantIdle) idle.current = 0;
     // A slow figure-of-eight over the desk, a few percent of the viewing distance.
-    const aim = sheetFrame?.framing ?? target;
+    const aim = sheetFrame?.framing ?? neckFraming();
     const reach = aim.pos.distanceTo(aim.look) * 0.035 * idle.current;
     const t = state.clock.elapsedTime;
     drift.set(Math.sin(t * 0.16) * reach, 0, Math.sin(t * 0.11) * Math.cos(t * 0.16) * reach * 0.6);
@@ -267,12 +461,16 @@ function NeckRig({ children }: { children: React.ReactNode }) {
       lookNow.current.copy(aim.look);
       first.current = false;
     } else {
-      const k = 1 - Math.exp(-dt * 3.2); // ~1.2 s dolly
+      // ~1.2 s dolly; a finger dragging the neck gets it nearly at once.
+      const k = 1 - Math.exp(-dt * (pan.current.dragging ? 18 : 3.2));
       camera.position.lerp(goal, k);
       lookNow.current.lerp(aim.look, k);
     }
     camera.up.set(0, 1, 0);
     camera.lookAt(lookNow.current);
+    // At rest once both the eye and the look point are within a hair of their goals.
+    const eps = Math.max(1, aim.pos.distanceTo(aim.look)) * 2e-4;
+    cameraState.settled = camera.position.distanceTo(goal) < eps && lookNow.current.distanceTo(aim.look) < eps;
     focusPoint.copy(aim.focus);
   });
 

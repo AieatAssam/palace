@@ -1,4 +1,5 @@
 import { type Deck, isCard } from './srs';
+import { FIRST_STAGE, STAGES } from './stages';
 
 export const STORAGE_KEY = 'palace.fretboard.v1';
 
@@ -12,7 +13,8 @@ export interface Settings {
 
 export interface SavedState {
   deck: Deck;
-  stage: number;
+  /** The stage on the desk (see `stages.ts`); every stage is open, this is only where you left off. */
+  stageId: string;
   settings: Settings;
   onboarded: boolean;
 }
@@ -20,7 +22,7 @@ export interface SavedState {
 export const DEFAULT_SETTINGS: Settings = { leftHanded: false, sound: true, haptics: true, reduceMotion: false };
 
 export function emptyState(): SavedState {
-  return { deck: {}, stage: 0, settings: { ...DEFAULT_SETTINGS }, onboarded: false };
+  return { deck: {}, stageId: FIRST_STAGE.id, settings: { ...DEFAULT_SETTINGS }, onboarded: false };
 }
 
 interface KV {
@@ -58,7 +60,8 @@ export function parseState(raw: string | null): SavedState {
   const settings = s as Record<string, unknown>;
   return {
     deck,
-    stage: typeof d.stage === 'number' && Number.isInteger(d.stage) && d.stage >= 0 ? d.stage : 0,
+    // Older saves kept an unlock index (`stage`); there is nothing to unlock now, so they start at the first stage.
+    stageId: typeof d.stageId === 'string' && STAGES.some((st) => st.id === d.stageId) ? d.stageId : FIRST_STAGE.id,
     settings: {
       leftHanded: typeof settings.leftHanded === 'boolean' ? settings.leftHanded : DEFAULT_SETTINGS.leftHanded,
       sound: typeof settings.sound === 'boolean' ? settings.sound : DEFAULT_SETTINGS.sound,

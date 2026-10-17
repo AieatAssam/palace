@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newCard } from './srs';
-import { STORAGE_KEY, emptyState, loadState, parseState, saveState } from './storage';
+import { STORAGE_KEY, type SavedState, emptyState, loadState, parseState, saveState } from './storage';
 
 function memoryStore() {
   const m = new Map<string, string>();
@@ -18,11 +18,15 @@ describe('storage', () => {
     expect(parseState('42')).toEqual(emptyState());
   });
 
-  it('round-trips state', () => {
+  it('starts on the first stage', () => {
+    expect(emptyState().stageId).toBe('nat-s0');
+  });
+
+  it('round-trips state, including a sharps-and-flats stage id', () => {
     const store = memoryStore();
-    const state = {
+    const state: SavedState = {
       deck: { 'name:s0f0': newCard('name:s0f0', 1) },
-      stage: 2,
+      stageId: 'acc-oct',
       settings: { leftHanded: true, sound: false, haptics: false, reduceMotion: true },
       onboarded: true,
     };
@@ -31,16 +35,28 @@ describe('storage', () => {
     expect(loadState(store)).toEqual(state);
   });
 
+  it('falls back to the first stage for an unknown stage id', () => {
+    expect(parseState(JSON.stringify({ stageId: 'nope' })).stageId).toBe('nat-s0');
+    expect(parseState(JSON.stringify({ stageId: 7 })).stageId).toBe('nat-s0');
+  });
+
+  it('treats a legacy numeric `stage` field as no stage, starting at nat-s0', () => {
+    const s = parseState(JSON.stringify({ stage: 2, deck: {}, onboarded: true }));
+    expect(s.stageId).toBe('nat-s0');
+    expect(s.onboarded).toBe(true);
+    expect(s).not.toHaveProperty('stage');
+  });
+
   it('drops invalid cards and bad fields', () => {
     const raw = JSON.stringify({
       deck: { a: { id: 'a' }, b: newCard('b', 1), c: newCard('mismatch', 1) },
-      stage: -1,
+      stageId: 'nope',
       settings: { leftHanded: 'yes' },
       onboarded: 'true',
     });
     const s = parseState(raw);
     expect(Object.keys(s.deck)).toEqual(['b']);
-    expect(s.stage).toBe(0);
+    expect(s.stageId).toBe('nat-s0');
     expect(s.settings.leftHanded).toBe(false);
     expect(s.settings.haptics).toBe(true);
     expect(s.settings.reduceMotion).toBe(false);

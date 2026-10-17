@@ -1,10 +1,10 @@
 import { create } from 'zustand';
 import { haptic, knock, pluck, setSoundEnabled, unlockAudio } from './audio/engine';
-import { type DrillKind, type Question, makeQuestion } from './game/drills';
+import { type Question, makeQuestion } from './game/drills';
 import { type NoteName, type Position, samePosition } from './game/notes';
 import { type Deck, ensureCards, gradeFromResponse, review } from './game/srs';
 import { type SavedState, type Settings, emptyState, loadState, saveState } from './game/storage';
-import { type UnlockStage, isUnlocked, stageAt, stageProgress, unlockedStageIndex } from './game/unlocks';
+import { type Stage, inRegion, stageById, stageProgress } from './game/stages';
 
 export type Feedback =
   | { kind: 'correct'; at: number; chosen?: NoteName }
@@ -33,8 +33,8 @@ export interface SessionStats {
   /** Distinct items whose review interval grew / fell back this session. */
   strengthened: string[];
   slipped: string[];
-  /** Title of a stage opened during this session, if any. */
-  opened: string | null;
+  /** Stage ids that crossed the mastery bar this session. */
+  mastered: string[];
 }
 
 /**
@@ -47,7 +47,7 @@ export type Screen = 'attract' | 'primer' | 'play' | 'session';
 export const SESSION_LENGTH = 10;
 
 function emptySession(): SessionStats {
-  return { answered: 0, correct: 0, streak: 0, best: 0, strengthened: [], slipped: [], opened: null };
+  return { answered: 0, correct: 0, streak: 0, best: 0, strengthened: [], slipped: [], mastered: [] };
 }
 
 function addOnce(list: string[], id: string) {
@@ -57,11 +57,12 @@ function addOnce(list: string[], id: string) {
 interface PalaceState {
   saved: SavedState;
   screen: Screen;
-  drill: DrillKind;
+  /** The stage card is open on the desk (over play). */
+  stagesOpen: boolean;
   question: Question;
   askedAt: number;
   feedback: Feedback | null;
-  /** Find-all: targets already found; misses this question. */
+  /** Find-all and octaves: targets already found; misses this question. */
   found: Position[];
   findMisses: number;
   lastPluck: PluckEvent | null;
@@ -70,8 +71,11 @@ interface PalaceState {
   /** True while waiting to advance to the next question. */
   locked: boolean;
 
-  stage(): UnlockStage;
-  setDrill(kind: DrillKind): void;
+  stage(): Stage;
+  /** Put a stage on the desk. Every stage is open. */
+  chooseStage(id: string): void;
+  openStages(): void;
+  closeStages(): void;
   answerName(note: NoteName): void;
   tapPosition(p: Position): void;
   nextQuestion(): void;
@@ -110,7 +114,7 @@ function persist(saved: SavedState) {
 export const usePalace = create<PalaceState>()((set, get) => {
   const initial = loadState();
   setSoundEnabled(initial.settings.sound);
-  const firstQuestion = makeQuestion('name', stageAt(initial.stage), initial.deck, now());
+  const firstQuestion = makeQuestion(stageById(initial.stageId), initial.deck, now());
 
   /** After feedback: the next question, or the session sheet once the sitting is full. */
   const scheduleNext = (ms: number) => {
@@ -125,7 +129,7 @@ export const usePalace = create<PalaceState>()((set, get) => {
     if (get().saved.settings.haptics) haptic(ms);
   };
 
-  /** Record a review and handle stage unlocks. */
+  /** Record a review; note the stage if this answer carried it over the mastery bar. */
   const grade = (itemId: string, correct: boolean, ms: number) => {
     const { saved } = get();
     const t = now();
@@ -133,8 +137,9 @@ export const usePalace = create<PalaceState>()((set, get) => {
     const before = deck[itemId]!;
     const after = review(before, gradeFromResponse(correct, ms), t, ms);
     deck = { ...deck, [itemId]: after };
-    const stage = unlockedStageIndex(deck, saved.stage);
-    const next: SavedState = { ...saved, deck, stage };
+    const stage = stageById(saved.stageId);
+    const crossed = !stageProgress(stage, saved.deck).mastered && stageProgress(stage, deck).mastered;
+    const next: SavedState = { ...saved, deck };
     persist(next);
     const s = get().session;
     const streak = correct ? s.streak + 1 : 0;
@@ -147,7 +152,7 @@ export const usePalace = create<PalaceState>()((set, get) => {
         best: Math.max(s.best, streak),
         strengthened: after.interval > before.interval ? addOnce(s.strengthened, itemId) : s.strengthened,
         slipped: !correct ? addOnce(s.slipped, itemId) : s.slipped,
-        opened: stage > saved.stage ? stageAt(stage).title : s.opened,
+        mastered: crossed ? addOnce(s.mastered, stage.id) : s.mastered,
       },
     });
   };
@@ -172,7 +177,7 @@ export const usePalace = create<PalaceState>()((set, get) => {
   return {
     saved: initial,
     screen: 'attract',
-    drill: 'name',
+    stagesOpen: false,
     question: firstQuestion,
     askedAt: now(),
     feedback: null,
@@ -183,21 +188,35 @@ export const usePalace = create<PalaceState>()((set, get) => {
     session: emptySession(),
     locked: false,
 
-    stage: () => stageAt(get().saved.stage),
+    stage: () => stageById(get().saved.stageId),
 
-    setDrill(kind) {
-      if (kind === get().drill) return;
+    chooseStage(id) {
+      const stage = stageById(id);
       clearTimeout(advanceTimer);
-      set({ drill: kind });
+      const saved = { ...get().saved, stageId: stage.id };
+      persist(saved);
+      set({ saved, stagesOpen: false, lastMiss: null });
       get().nextQuestion();
+    },
+
+    openStages() {
+      clearTimeout(advanceTimer);
+      set({ stagesOpen: true });
+    },
+
+    closeStages() {
+      set({ stagesOpen: false });
+      // A question answered just before the card opened still needs its successor.
+      if (get().locked) scheduleNext(200);
     },
 
     nextQuestion() {
       clearTimeout(advanceTimer);
-      const { drill, saved, question } = get();
-      const avoid = question.kind === drill ? question.itemId : undefined;
+      const { saved, question } = get();
+      const stage = stageById(saved.stageId);
+      const avoid = question.kind === stage.drill ? question.itemId : undefined;
       set({
-        question: makeQuestion(drill, stageAt(saved.stage), saved.deck, now(), Math.random, avoid),
+        question: makeQuestion(stage, saved.deck, now(), Math.random, avoid),
         askedAt: now(),
         feedback: null,
         found: [],
@@ -207,8 +226,8 @@ export const usePalace = create<PalaceState>()((set, get) => {
     },
 
     answerName(note) {
-      const { question, locked, askedAt, screen } = get();
-      if (question.kind !== 'name' || locked || screen !== 'play') return;
+      const { question, locked, askedAt, screen, stagesOpen } = get();
+      if (question.kind !== 'name' || locked || screen !== 'play' || stagesOpen) return;
       unlockAudio();
       const correct = note === question.answer;
       const ms = now() - askedAt;
@@ -227,9 +246,11 @@ export const usePalace = create<PalaceState>()((set, get) => {
 
     tapPosition(p) {
       unlockAudio();
-      const { question, locked, found, saved, screen } = get();
-      if (!isUnlocked(stageAt(saved.stage), p)) return;
-      if (screen !== 'play' || question.kind === 'name') {
+      const { question, locked, found, saved, screen, stagesOpen } = get();
+      if (!inRegion(stageById(saved.stageId), p) || stagesOpen) return;
+      // Octaves: the lit note itself only rings.
+      const isSource = question.kind === 'octave' && samePosition(question.position, p);
+      if (screen !== 'play' || question.kind === 'name' || isSource) {
         // Exploring the neck in Name-it: let it ring quietly, no grading.
         if (!locked) {
           set({ lastPluck: { id: ++eventId, position: p, at: performance.now() } });
@@ -286,7 +307,7 @@ export const usePalace = create<PalaceState>()((set, get) => {
 
     leave() {
       clearTimeout(advanceTimer);
-      set({ screen: 'attract', session: emptySession(), feedback: null, found: [], locked: false });
+      set({ screen: 'attract', stagesOpen: false, session: emptySession(), feedback: null, found: [], locked: false });
     },
 
     shimmer(p) {
@@ -302,7 +323,7 @@ export const usePalace = create<PalaceState>()((set, get) => {
 
     resetProgress() {
       const { settings } = get().saved;
-      const saved: SavedState = { ...emptyState(), settings, onboarded: true };
+      const saved: SavedState = { ...emptyState(), settings, onboarded: true, stageId: get().saved.stageId };
       persist(saved);
       set({ saved, session: emptySession() });
       get().nextQuestion();
@@ -313,14 +334,3 @@ export const usePalace = create<PalaceState>()((set, get) => {
 export function useSettings(): Settings {
   return usePalace((s) => s.saved.settings);
 }
-
-export function currentStageProgress() {
-  const { saved } = usePalace.getState();
-  return stageProgress(stageAt(saved.stage), saved.deck);
-}
-
-/** Positions the current question wants highlighted / accepted. */
-export function questionAnswerPositions(q: Question): Position[] {
-  return q.kind === 'name' ? [q.position] : q.targets;
-}
-

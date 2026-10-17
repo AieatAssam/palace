@@ -50,7 +50,25 @@ export interface SheetLozenge {
   y: number;
 }
 
-export type SheetItem = SheetText | SheetRule | SheetBar | SheetLozenge;
+/** A gilt rosette: the mark of a mastered stage. */
+export interface SheetMark {
+  kind: 'mark';
+  x: number;
+  y: number;
+  /** Radius, card units (default 0.07). */
+  r?: number;
+}
+
+/** A brass hairline frame round a cell, centred at (x, y). */
+export interface SheetBox {
+  kind: 'box';
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export type SheetItem = SheetText | SheetRule | SheetBar | SheetLozenge | SheetMark | SheetBox;
 
 /** A real control, centred at (x, y) in card units, drawn over its 3D label. */
 export interface SheetRect {
@@ -71,6 +89,8 @@ export interface SheetGeom {
   monogram?: boolean;
   /** A wax seal pressed on the page, centred here in card units. */
   seal?: { x: number; y: number };
+  /** Frame the card alone, as large as the screen allows (a dense card; the neck leaves the shot). */
+  solo?: boolean;
   rects: SheetRect[];
 }
 

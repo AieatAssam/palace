@@ -1,9 +1,9 @@
 import { useLayoutEffect, useRef } from 'react';
 import { NOTE_NAMES, type NoteName } from '../game/notes';
-import { stageProgress } from '../game/unlocks';
+import { stageLabel, stageProgress } from '../game/stages';
 import { usePalace } from '../store';
-import { useView } from '../three/view';
-import { positionLabel, pretty } from './format';
+import { useNeckWindow, useView } from '../three/view';
+import { flatOf, positionLabel, pretty, spelled } from './format';
 
 function useInsetReporter() {
   const top = useRef<HTMLElement>(null);
@@ -35,43 +35,43 @@ function useInsetReporter() {
   return { top, bottom };
 }
 
-function DrillSwitch() {
-  const drill = usePalace((s) => s.drill);
-  const setDrill = usePalace((s) => s.setDrill);
+/** The stage card's door: the word itself, a brass lozenge before it. */
+function StagesMark() {
+  const open = usePalace((s) => s.openStages);
   return (
-    <div className="modes scrimmed" role="tablist" aria-label="Drill">
-      {(
-        [
-          ['name', 'Name', 'I'],
-          ['find', 'Find', 'II'],
-        ] as const
-      ).map(([kind, label, numeral]) => (
-        <button
-          key={kind}
-          role="tab"
-          aria-selected={drill === kind}
-          className={drill === kind ? 'active' : ''}
-          onClick={() => setDrill(kind)}
-          data-testid={`drill-${kind}`}
-        >
-          <span className="rn" aria-hidden>
-            {numeral}
-          </span>
-          {label}
-        </button>
-      ))}
-    </div>
+    <button className="stages-mark scrimmed" onClick={open} data-testid="stages-open" aria-haspopup="dialog">
+      Stages
+    </button>
   );
+}
+
+/** A note name in the question: the letter in italic, its accidental upright (the sign has no italic). */
+function Note({ name }: { name: string }) {
+  return (
+    <em className="q-note">
+      {name[0]}
+      {name.length > 1 && <span className="q-acc">{name.slice(1)}</span>}
+    </em>
+  );
+}
+
+/** Phone, long reach: the frets on screen, and a word that the rest is a drag away. */
+function windowNote(from: number, to: number) {
+  return `frets ${from}\u2013${to} \u00b7 drag for more`;
 }
 
 function Prompt() {
   const q = usePalace((s) => s.question);
   const found = usePalace((s) => s.found);
   const feedback = usePalace((s) => s.feedback);
+  const accidentals = usePalace((s) => s.stage().book === 'accidentals');
+  const win = useNeckWindow();
   if (q.kind === 'name') {
     let line = 'Name this note.';
-    if (feedback?.kind === 'correct') line = pretty(q.answer);
-    if (feedback?.kind === 'miss') line = `It\u2019s ${pretty(q.answer)}`;
+    // Sharps and flats: the answer in both spellings.
+    const answer = accidentals && q.answer.includes('#') ? `${pretty(q.answer)} or ${flatOf(q.answer)}` : pretty(q.answer);
+    if (feedback?.kind === 'correct') line = answer;
+    if (feedback?.kind === 'miss') line = `It\u2019s ${answer}`;
     return (
       <div className="prompt scrimmed" aria-live="polite">
         <h1 className={`prompt-title ${feedback?.kind ?? ''}`} data-testid="prompt">
@@ -84,14 +84,29 @@ function Prompt() {
     );
   }
   const done = found.length === q.targets.length;
+  const tally = `${found.length} of ${q.targets.length}`;
+  const where = q.kind === 'octave' ? `${positionLabel(q.position)} \u00b7 ${tally}` : tally;
   return (
     <div className="prompt scrimmed" aria-live="polite">
       <h1 className={`prompt-title ${done ? (feedback?.kind ?? '') : ''}`} data-testid="prompt">
-        Find every <em>{pretty(q.note)}</em>
+        {q.kind === 'find' ? (
+          <>
+            Find every <Note name={spelled(q.note, q.spelling)} />
+          </>
+        ) : q.targets.length > 1 ? (
+          'Find both octaves.'
+        ) : (
+          'Find its octave.'
+        )}
       </h1>
       <p className="prompt-sub" data-testid="prompt-where">
-        {found.length} of {q.targets.length}
+        {where}
       </p>
+      {win.windowed && q.kind === 'find' && (
+        <p className="prompt-sub prompt-window" data-testid="prompt-window">
+          {windowNote(win.from, win.to)}
+        </p>
+      )}
     </div>
   );
 }
@@ -101,13 +116,19 @@ function Meta() {
   const deck = usePalace((s) => s.saved.deck);
   const streak = usePalace((s) => s.session.streak);
   const stage = usePalace((s) => s.stage)();
-  const finding = usePalace((s) => s.question.kind === 'find');
+  const finding = usePalace((s) => s.question.kind !== 'name');
   const next = usePalace((s) => s.nextQuestion);
   const end = usePalace((s) => s.endSession);
   const prog = stageProgress(stage, deck);
   return (
     <div className="meta scrimmed" data-testid="progress">
-      <span className="meta-stage">{stage.title}</span>
+      <span className="meta-stage" data-testid="meta-stage" aria-label={stageLabel(stage)}>
+        {stage.title}
+        <span className="meta-book" aria-hidden>
+          {stage.book === 'naturals' ? '\u266e' : '\u266f\u266d'}
+        </span>
+        {prog.mastered && <span className="gilt-mark" role="img" aria-label="mastered" />}
+      </span>
       <span className="hairline" aria-hidden>
         <span style={{ width: `${Math.round(prog.toward * 100)}%` }} />
       </span>
@@ -133,6 +154,8 @@ function NamePad() {
   const q = usePalace((s) => s.question);
   const feedback = usePalace((s) => s.feedback);
   const answer = usePalace((s) => s.answerName);
+  // Sharps and flats: the ebony keys carry both names.
+  const both = usePalace((s) => s.stage().book === 'accidentals');
   if (q.kind !== 'name') return null;
   const stateOf = (n: NoteName) => {
     if (!feedback) return '';
@@ -147,10 +170,17 @@ function NamePad() {
           key={n}
           className={`note ${n.includes('#') ? 'sharp' : ''} ${stateOf(n)}`}
           data-note={n}
-          aria-label={n.includes('#') ? `${n[0]} sharp` : n}
+          aria-label={n.includes('#') ? (both ? `${n[0]} sharp, ${flatOf(n)[0]} flat` : `${n[0]} sharp`) : n}
           onClick={() => answer(n)}
         >
-          {pretty(n)}
+          {both && n.includes('#') ? (
+            <span className="note-pair" aria-hidden>
+              <span>{pretty(n)}</span>
+              <span className="note-flat">{flatOf(n)}</span>
+            </span>
+          ) : (
+            pretty(n)
+          )}
         </button>
       ))}
     </div>
@@ -168,7 +198,7 @@ export function Hud({ onSettings, hidden = false }: { onSettings: () => void; hi
     <>
       <header ref={top} className={`hud-top ${hidden ? 'hud-hidden' : ''}`} id="hud-top" inert={hidden}>
         <div className="bar">
-          <DrillSwitch />
+          <StagesMark />
           <button className="settings-mark scrimmed" data-testid="settings-open" onClick={onSettings}>
             Settings
           </button>
