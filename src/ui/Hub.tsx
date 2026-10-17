@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { type ModeId } from '../modes/catalog';
-import { hubModes } from '../modes/registry';
+import { hubModes, useRoomProgress } from '../modes/registry';
 import { daysWarm, dayKey } from '../rewards/logic';
 import { rewardClock, useRewards } from '../rewards/store';
 import { usePalace } from '../store';
@@ -101,7 +101,7 @@ export function hubLayout(landscape: boolean, plates: HubPlate[], fig: HubFigure
 
 /** The hub: every room on one card on the desk, the day's record at its foot. Nothing is locked. */
 export function Hub({ onSettings }: { onSettings: () => void }) {
-  const deck = usePalace((s) => s.saved.deck);
+  const progress = useRoomProgress();
   const openRoom = usePalace((s) => s.openRoom);
   const daily = useRewards((s) => s.daily);
   const refreshDay = useRewards((s) => s.refreshDay);
@@ -110,7 +110,7 @@ export function Hub({ onSettings }: { onSettings: () => void }) {
 
   const modes = hubModes();
   const plates: HubPlate[] = modes.map((m) => {
-    const p = m.room?.progress(deck);
+    const p = progress[m.id];
     return {
       id: m.id,
       numeral: m.numeral,

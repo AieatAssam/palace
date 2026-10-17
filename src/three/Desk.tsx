@@ -20,7 +20,7 @@ export const DESK_Y = -0.95;
 /** Contact-shadow plane: just above the tallest desk fitting, below the headstock tip (≈ -0.89). */
 export const SHADOW_Y = -0.918;
 
-const MAT = { x0: -5.4, x1: BOARD_END + 3, halfZ: 2.3, thickness: 0.012 } as const;
+export const MAT = { x0: -5.4, x1: BOARD_END + 3, halfZ: 2.3, thickness: 0.012 } as const;
 /** Gold tooling: a bolder outer rule and a hairline inside it. */
 const RULES = [
   { inset: 0.13, width: 0.02 },

@@ -16,10 +16,9 @@ describe('mode catalogue', () => {
     expect(MODES.map((m) => m.numeral)).toEqual(['I', 'II', 'III', 'IV', 'V', 'VI']);
   });
 
-  it('opens exactly one room, the fretboard', () => {
-    const open = MODES.filter((m) => m.open);
-    expect(open).toHaveLength(1);
-    expect(open[0]!.id).toBe('fretboard');
+  it('opens exactly two rooms, the fretboard and Echo', () => {
+    const open = MODES.filter((m) => m.open).map((m) => m.id);
+    expect(open).toEqual(['fretboard', 'echo']);
   });
 
   it('gives every room a title, pitch and trains line, with its emblem matching its id', () => {

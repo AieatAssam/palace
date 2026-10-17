@@ -6,7 +6,7 @@ import { usePalace } from '../store';
 import { useNeckWindow, useView } from '../three/view';
 import { flatOf, positionLabel, pretty, spelled } from './format';
 
-function useInsetReporter() {
+export function useInsetReporter() {
   const top = useRef<HTMLElement>(null);
   const bottom = useRef<HTMLElement>(null);
   const setInsets = useView((s) => s.setInsets);
@@ -37,7 +37,7 @@ function useInsetReporter() {
 }
 
 /** The stage card's door: the word itself, a brass lozenge before it. */
-function StagesMark() {
+export function StagesMark() {
   const open = usePalace((s) => s.openStages);
   return (
     <button className="stages-mark scrimmed" onClick={open} data-testid="stages-open" aria-haspopup="dialog">
@@ -47,7 +47,7 @@ function StagesMark() {
 }
 
 /** Back to the hub: the word, in small caps. */
-function RoomsMark() {
+export function RoomsMark() {
   const toHub = usePalace((s) => s.toHub);
   return (
     <button className="rooms-mark scrimmed" onClick={toHub} data-testid="hub-open">

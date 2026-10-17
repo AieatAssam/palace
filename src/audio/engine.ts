@@ -1,4 +1,5 @@
 import { type Position, frequencyAt, positionKey } from '../game/notes';
+import { HANDBELL_BEAT, HANDBELL_PARTIALS } from './bells';
 import { BEAT_HZ, BELL_PARTIALS, type ChimeKind, chimeNotes } from './chime';
 import { karplusStrong } from './karplus';
 
@@ -142,6 +143,56 @@ export function chime(kind: ChimeKind, tier = 1) {
       }
     }
   }
+}
+
+/**
+ * Echo's hand bell (see `bells.ts`): a felt-tipped clapper strike, then the fundamental and
+ * its twelfth ringing down. `velocity` 0–1; `damp` shortens the ring (a stroke from the
+ * player, quicker to clear than the room's own playing). Silent when sound is off.
+ */
+export function ringBell(freq: number, velocity = 1, damp = 1) {
+  if (!enabled) return;
+  const c = context();
+  if (!c || !master) return;
+  const t0 = c.currentTime + 0.005;
+  const air = c.createBiquadFilter();
+  air.type = 'lowpass';
+  air.frequency.value = 6500;
+  const bus = c.createGain();
+  bus.gain.value = 0.3 * velocity;
+  bus.connect(air).connect(master);
+  for (const p of HANDBELL_PARTIALS) {
+    const f = freq * p.ratio;
+    if (f > 14000) continue;
+    const ring = p.ring * damp;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(p.gain * 0.5, t0 + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + ring);
+    g.connect(bus);
+    for (const d of [-HANDBELL_BEAT / 2, HANDBELL_BEAT / 2]) {
+      const o = c.createOscillator();
+      o.frequency.value = f + d;
+      o.connect(g);
+      o.start(t0);
+      o.stop(t0 + ring + 0.05);
+    }
+  }
+  // The clapper: a few milliseconds of band-passed noise at the strike.
+  const len = Math.floor(c.sampleRate * 0.02);
+  const buf = c.createBuffer(1, len, c.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.exp((-i / c.sampleRate) * 300);
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const bp = c.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = Math.min(9000, freq * 4);
+  bp.Q.value = 1.4;
+  const tg = c.createGain();
+  tg.gain.value = 0.12;
+  src.connect(bp).connect(tg).connect(bus);
+  src.start(t0);
 }
 
 export function haptic(ms = 10) {

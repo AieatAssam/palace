@@ -85,6 +85,8 @@ interface PalaceState {
   closeWorkshop(): void;
   /** Back to the hub from play. */
   toHub(): void;
+  /** Walk into a room's play (rooms other than the Fretboard keep their own stage and sitting). */
+  enterRoom(id: ModeId): void;
   answerName(note: NoteName): void;
   tapPosition(p: Position): void;
   nextQuestion(): void;
@@ -110,6 +112,11 @@ const MISS_DELAY = 1500;
 const FIND_DONE_DELAY = 900;
 
 let eventId = 0;
+/** Rooms with their own saved progress clear it here when the player clears everything. */
+const resetHooks: (() => void)[] = [];
+export function onResetProgress(fn: () => void) {
+  resetHooks.push(fn);
+}
 let advanceTimer: ReturnType<typeof setTimeout> | undefined;
 
 function now() {
@@ -227,13 +234,16 @@ export const usePalace = create<PalaceState>()((set, get) => {
     closeStages() {
       set({ stagesOpen: false });
       // A question answered just before the card opened still needs its successor.
-      if (get().screen === 'play' && get().locked) scheduleNext(200);
+      if (get().screen === 'play' && get().locked && get().saved.modeId === 'fretboard') scheduleNext(200);
     },
 
     openRoom(id) {
       if (get().screen !== 'hub') return;
-      if (modeInfo(id).open) set({ stagesOpen: true, workshop: null });
-      else set({ workshop: id, stagesOpen: false });
+      if (!modeInfo(id).open) return set({ workshop: id, stagesOpen: false });
+      // The room's furniture comes onto the desk behind its stage card.
+      const saved = { ...get().saved, modeId: id };
+      persist(saved);
+      set({ saved, stagesOpen: true, workshop: null });
     },
 
     closeWorkshop() {
@@ -244,6 +254,14 @@ export const usePalace = create<PalaceState>()((set, get) => {
       clearTimeout(advanceTimer);
       useRewards.getState().refreshDay();
       set({ screen: 'hub', stagesOpen: false, workshop: null, session: emptySession(), feedback: null, found: [], locked: false });
+    },
+
+    enterRoom(id) {
+      clearTimeout(advanceTimer);
+      const saved = { ...get().saved, modeId: id };
+      persist(saved);
+      useRewards.getState().startRun();
+      set({ saved, screen: 'play', stagesOpen: false, workshop: null, session: emptySession(), feedback: null, found: [], locked: false });
     },
 
     nextQuestion() {
@@ -361,6 +379,7 @@ export const usePalace = create<PalaceState>()((set, get) => {
       const saved: SavedState = { ...emptyState(), settings, onboarded: true, stageId: get().saved.stageId };
       persist(saved);
       set({ saved, session: emptySession() });
+      for (const fn of resetHooks) fn();
       get().nextQuestion();
     },
   };
