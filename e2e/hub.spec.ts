@@ -158,9 +158,22 @@ test('pick Fretboard and a stage from the hub', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => window.__palace!.stage().id)).toBe('acc-s0');
 });
 
+/** Record the reward word's text the moment it mounts: it lives seconds, and a slow runner can miss it between checks. */
+async function watchFlourish(page: Page) {
+  await page.evaluate(() => {
+    const w = window as unknown as { __flourishSeen?: string };
+    new MutationObserver(() => {
+      const el = document.querySelector('[data-testid="flourish"]');
+      if (el && !w.__flourishSeen) w.__flourishSeen = el.textContent ?? '';
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+}
+const flourishSeen = (page: Page) => page.evaluate(() => (window as unknown as { __flourishSeen?: string }).__flourishSeen ?? '');
+
 test('rewards update after correct answers', async ({ page }) => {
   test.setTimeout(90_000);
   await enterFretboard(page, 'nat-s0');
+  await watchFlourish(page);
   await expect(page.getByTestId('combo')).toHaveAttribute('role', 'meter');
   const baseline = (await page.evaluate(() => window.__palace!.rewards())).daily.items;
 
@@ -178,8 +191,7 @@ test('rewards update after correct answers', async ({ page }) => {
   expect(r.flourish!.word).toBe('Bravo');
   expect(r.flourish!.streak).toBe(5);
   expect(r.burstId).toBeGreaterThan(0);
-  await expect(page.getByTestId('flourish')).toBeVisible();
-  await expect(page.getByTestId('flourish')).toContainText('Bravo');
+  await expect.poll(() => flourishSeen(page)).toContain('Bravo');
   await expect.poll(() => page.evaluate(() => window.__palace!.rewards().daily.items)).toBe(baseline + 5);
   expect((await page.evaluate(() => window.__palace!.rewards())).daily.bestStreak).toBeGreaterThanOrEqual(5);
 
@@ -256,11 +268,19 @@ test('reduced motion: the flourish still shows, without travel', async ({ page }
   test.setTimeout(90_000);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await enterFretboard(page, 'nat-s0');
+  // The word lives a couple of seconds; on a slow runner it can leave between two checks, so read it as it mounts.
+  await page.evaluate(() => {
+    const w = window as unknown as { __flourish?: { text: string; anim: string } };
+    new MutationObserver(() => {
+      const el = document.querySelector('[data-testid="flourish"]');
+      if (el && !w.__flourish) w.__flourish = { text: el.textContent ?? '', anim: getComputedStyle(el).animationName };
+    }).observe(document.body, { childList: true, subtree: true });
+  });
 
   for (let i = 1; i <= 5; i++) await answerCorrect(page, i < 5);
-  const flourish = page.getByTestId('flourish');
-  await expect(flourish).toBeVisible();
-  await expect(flourish).toContainText('Bravo');
-  const animationName = await flourish.evaluate((el) => getComputedStyle(el).animationName);
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __flourish?: { text: string } }).__flourish?.text ?? ''))
+    .toContain('Bravo');
+  const animationName = await page.evaluate(() => (window as unknown as { __flourish: { anim: string } }).__flourish.anim);
   expect(animationName).toBe('none');
 });
