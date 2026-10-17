@@ -33,8 +33,8 @@ export interface FacesStage {
 
 export const FACES_STAGES: readonly FacesStage[] = [
   { id: 'four', title: 'Four sitters', short: 'Four sitters', note: 'Four portraits, four names', size: 4, kinds: ['name', 'face'], delay: 0, questions: 8 },
-  { id: 'eight', title: 'Eight sitters', short: 'Eight sitters', note: 'A fuller gallery', size: 8, kinds: ['name', 'face'], delay: 0, questions: 14 },
-  { id: 'trades', title: 'Sitters and trades', short: 'Names and trades', note: 'Four sitters, each with a trade', size: 4, kinds: ['name', 'trade', 'face'], delay: 0, questions: 10 },
+  { id: 'eight', title: 'Eight sitters', short: 'Eight sitters', note: 'Eight portraits, eight names', size: 8, kinds: ['name', 'face'], delay: 0, questions: 14 },
+  { id: 'trades', title: 'Sitters and trades', short: 'Names and trades', note: 'Four sitters, their trades', size: 4, kinds: ['name', 'trade', 'face'], delay: 0, questions: 10 },
   { id: 'delayed', title: 'Sitters, asked later', short: 'Asked later', note: 'Six sitters, then a pause', size: 6, kinds: ['name', 'face'], delay: 30, questions: 10 },
 ];
 

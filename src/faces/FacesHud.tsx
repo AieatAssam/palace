@@ -51,7 +51,7 @@ function Prompt() {
     const s = cast[q.sitter]!;
     if (q.kind !== 'face') portrait = describe(s.look);
     if (phase === 'ask') {
-      title = q.kind === 'name' ? 'Who sat for this?' : q.kind === 'trade' ? 'What was their trade?' : `Which is ${s.name}?`;
+      title = q.kind === 'name' ? 'Name the sitter.' : q.kind === 'trade' ? 'Name their trade.' : `Find ${s.name}.`;
       sub = count;
     } else if (phase === 'right') {
       title = q.kind === 'trade' ? s.trade : s.name;

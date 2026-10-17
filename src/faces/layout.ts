@@ -24,13 +24,13 @@ export interface Slot {
   scale: number;
 }
 
-const SINGLE = { landscape: 1.45, portrait: 1.42 };
+const SINGLE = { landscape: 1.12, portrait: 1.3 };
 const FOUR = { landscape: 0.86, portrait: 0.84 };
 const GAP = 0.34;
 
 /** The large single portrait. */
 export function singleSlot(portrait: boolean): Slot {
-  return { x: 0, v: portrait ? 0 : 0, scale: SINGLE[portrait ? 'portrait' : 'landscape'] };
+  return { x: 0, v: 0, scale: SINGLE[portrait ? 'portrait' : 'landscape'] };
 }
 
 /** Four portraits: a row on a wide screen, two by two on a phone, in reading order. */

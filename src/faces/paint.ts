@@ -116,13 +116,27 @@ export function paintPortrait(canvas: HTMLCanvasElement, look: Look, lite = fals
   };
   // The neck first, so the collar sits over it.
   const skin = rgb(look.skin);
-  g.fillStyle = css(dark(skin, 0.18));
-  g.fillRect(cx - neckW, jawY, neckW * 2, shoulderY - jawY);
+  // A tapered neck, shaded across by the light and darker under the jaw.
+  const neckLit = g.createLinearGradient(cx + L * neckW * 1.2, 0, cx - L * neckW * 1.2, 0);
+  neckLit.addColorStop(0, css(dark(skin, 0.08)));
+  neckLit.addColorStop(1, css(dark(skin, 0.42)));
+  g.fillStyle = neckLit;
+  const neckPath = () => {
+    g.beginPath();
+    g.moveTo(cx - neckW * 0.92, jawY);
+    g.quadraticCurveTo(cx - neckW * 0.86, chinY + hh * 0.1, cx - neckW * 1.25, shoulderY);
+    g.lineTo(cx + neckW * 1.25, shoulderY);
+    g.quadraticCurveTo(cx + neckW * 0.86, chinY + hh * 0.1, cx + neckW * 0.92, jawY);
+    g.closePath();
+  };
+  neckPath();
+  g.fill();
   const neckShade = g.createLinearGradient(0, chinY - hh * 0.05, 0, chinY + hh * 0.2);
   neckShade.addColorStop(0, css(dark(skin, 0.55), 0.9));
   neckShade.addColorStop(1, css(dark(skin, 0.2), 0));
   g.fillStyle = neckShade;
-  g.fillRect(cx - neckW, chinY - hh * 0.05, neckW * 2, hh * 0.3);
+  neckPath();
+  g.fill();
 
   const gownCut = look.attire === 'gown';
   if (gownCut) {

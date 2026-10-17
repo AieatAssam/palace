@@ -11,6 +11,12 @@ import { EchoSession } from '../echo/EchoSession';
 import { EchoStages } from '../echo/EchoStages';
 import { ECHO_STAGES } from '../echo/logic';
 import { echoMastered, useEcho } from '../echo/store';
+import { FacesHud } from '../faces/FacesHud';
+import { FacesSession } from '../faces/FacesSession';
+import { FacesStages } from '../faces/FacesStages';
+import { Gallery } from '../faces/Gallery';
+import { FACES_STAGES, facesMastered } from '../faces/logic';
+import { useFaces } from '../faces/store';
 import { STAGES, stageLabel, stageProgress } from '../game/stages';
 import { usePalace } from '../store';
 import { Fretboard } from '../three/Fretboard';
@@ -88,13 +94,23 @@ const blocks: Room = {
   progress: () => ({ mastered: blocksMastered(useBlocks.getState().record), total: BLOCKS_STAGES.length }),
 };
 
-const ROOMS: Partial<Record<ModeId, Room>> = { fretboard, echo, blocks };
+const faces: Room = {
+  Scene: Gallery,
+  Overlay: FacesHud,
+  StageCard: FacesStages,
+  Session: FacesSession,
+  stages: () => FACES_STAGES.map((s) => ({ id: s.id, title: s.title })),
+  progress: () => ({ mastered: facesMastered(useFaces.getState().deck), total: FACES_STAGES.length }),
+};
+
+const ROOMS: Partial<Record<ModeId, Room>> = { fretboard, echo, blocks, faces };
 
 /** Every room's progress, re-rendering when any room's record changes. */
 export function useRoomProgress(): Partial<Record<ModeId, RoomProgress>> {
   usePalace((s) => s.saved.deck);
   useEcho((s) => s.record);
   useBlocks((s) => s.record);
+  useFaces((s) => s.deck);
   const out: Partial<Record<ModeId, RoomProgress>> = {};
   for (const [id, room] of Object.entries(ROOMS) as [ModeId, Room][]) out[id] = room.progress();
   return out;

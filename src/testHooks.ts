@@ -1,6 +1,9 @@
 import { blockRects } from './blocks/fx';
 import { BLOCKS_STAGES, type BlocksProgress, bestSpan, blocksProgress, expectedOrder as blocksOrder } from './blocks/logic';
 import { type BlocksPhase, type BlocksSitting, useBlocks } from './blocks/store';
+import { faceRects, singleRect } from './faces/fx';
+import { FACES_STAGES, type FacesProgress, type QuestionKind, answerIndex, castOf, facesProgress } from './faces/logic';
+import { type FacesPhase, type FacesSitting, useFaces } from './faces/store';
 import { bellRects } from './echo/fx';
 import { type EchoProgress, expectedOrder, echoProgress, ECHO_STAGES, wantedNow } from './echo/logic';
 import { type EchoPhase, type EchoSitting, lineRng, useEcho } from './echo/store';
@@ -67,6 +70,32 @@ export interface PalaceTestHooks {
   echo: EchoHooks;
   /** Blocks: the board, the line and the player's place in it. Blocks are numbered from 1 here, in reading order. */
   blocks: BlocksHooks;
+  /** Faces: the cast, the sitter being met, the question. Choices are numbered from 1, in the order shown. */
+  faces: FacesHooks;
+}
+
+export interface FacesHooks {
+  state(): {
+    phase: FacesPhase;
+    stage: { id: string; title: string; size: number; kinds: QuestionKind[]; delay: number; questions: number };
+    cast: { id: string; name: string; trade: string }[];
+    /** The sitter being met (index into the cast). */
+    meeting: number;
+    question: { kind: QuestionKind; sitter: number; choices: number[]; answer: number } | null;
+    chosen: number;
+    sitting: FacesSitting;
+    active: boolean;
+  };
+  /** The right choice now (1–4), or null unless a question is being asked. */
+  answer(): number | null;
+  stages(): ({ id: string; title: string } & FacesProgress)[];
+  /** Page rectangles of the four portrait buttons (a "which is" question), and of the single portrait. */
+  rects(): { slot: number; x: number; y: number; w: number; h: number }[];
+  single(): { x: number; y: number; w: number; h: number } | null;
+  /** End the asked-later pause now. */
+  endPause(): void;
+  /** Walk straight into Faces on a stage, from any screen, through the actions the hub uses. */
+  enter(stageId: string): void;
 }
 
 export interface BlocksHooks {
@@ -132,6 +161,16 @@ export function installTestHooks() {
   const toHub = () => {
     if (!s().saved.onboarded) s().completePrimer();
     else if (s().screen !== 'hub') s().toHub();
+  };
+  /**
+   * To the hub, then into a room. Already in play, the overlay must be seen hidden on the hub
+   * first (a room wakes on that change), so the stage is chosen a moment later.
+   */
+  const walkIn = (choose: () => void) => {
+    const inPlay = s().screen !== 'hub' && s().screen !== 'attract' && s().screen !== 'primer';
+    toHub();
+    if (inPlay) setTimeout(choose, 80);
+    else choose();
   };
   window.__palace = {
     state: () => ({ mode: s().stage().drill, question: s().question }),
@@ -226,10 +265,37 @@ export function installTestHooks() {
       },
       stages: () => ECHO_STAGES.map((st) => ({ id: st.id, title: st.title, bells: st.bells, ...echoProgress(st, useEcho.getState().record) })),
       enter: (stageId) => {
-        if (s().screen !== 'hub') s().toHub();
-        useEcho.getState().chooseStage(stageId);
+        walkIn(() => useEcho.getState().chooseStage(stageId));
       },
       bells: () => [...bellRects.entries()].sort((a, b) => a[0] - b[0]).map(([i, r]) => ({ bell: i + 1, ...r })),
+    },
+    faces: {
+      state: () => {
+        const f = useFaces.getState();
+        const st = f.stage();
+        const q = f.question;
+        return {
+          phase: f.phase,
+          stage: { id: st.id, title: st.title, size: st.size, kinds: [...st.kinds], delay: st.delay, questions: st.questions },
+          cast: castOf(st).map((c) => ({ id: c.id, name: c.name, trade: c.trade })),
+          meeting: f.meeting,
+          question: q && { kind: q.kind, sitter: q.sitter, choices: [...q.choices], answer: answerIndex(q) + 1 },
+          chosen: f.chosen,
+          sitting: { ...f.sitting },
+          active: f.active,
+        };
+      },
+      answer: () => {
+        const f = useFaces.getState();
+        return f.phase === 'ask' && f.question ? answerIndex(f.question) + 1 : null;
+      },
+      stages: () => FACES_STAGES.map((st) => ({ id: st.id, title: st.title, ...facesProgress(st, useFaces.getState().deck) })),
+      rects: () => [...faceRects.entries()].sort((a, b) => a[0] - b[0]).map(([i, r]) => ({ slot: i + 1, ...r })),
+      single: () => singleRect.current && { ...singleRect.current },
+      endPause: () => useFaces.getState().endPause(),
+      enter: (stageId) => {
+        walkIn(() => useFaces.getState().chooseStage(stageId));
+      },
     },
     blocks: {
       state: () => {
@@ -257,8 +323,7 @@ export function installTestHooks() {
       bestSpan: () => ({ forward: bestSpan(useBlocks.getState().record, 'forward'), reverse: bestSpan(useBlocks.getState().record, 'reverse') }),
       rects: () => [...blockRects.entries()].sort((a, b) => a[0] - b[0]).map(([i, r]) => ({ block: i + 1, ...r })),
       enter: (stageId) => {
-        toHub();
-        useBlocks.getState().chooseStage(stageId);
+        walkIn(() => useBlocks.getState().chooseStage(stageId));
       },
     },
   };

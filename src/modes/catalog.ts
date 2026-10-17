@@ -28,7 +28,7 @@ export const MODES: readonly ModeInfo[] = [
   { id: 'fretboard', numeral: 'I', title: 'Fretboard', pitch: 'Name every note on a guitar neck.', trains: 'Facts on sight', emblem: 'fretboard', open: true },
   { id: 'echo', numeral: 'II', title: 'Echo', pitch: 'Hear a line of brass bells, then ring it back.', trains: 'Order and sequence', emblem: 'echo', open: true },
   { id: 'blocks', numeral: 'III', title: 'Blocks', pitch: 'Watch a line of blocks light on the blotter, then tap it back.', trains: 'Where things were', emblem: 'blocks', open: true },
-  { id: 'faces', numeral: 'IV', title: 'Faces', pitch: 'Meet a bust, then name it a minute later.', trains: 'Names to faces', emblem: 'faces', open: false },
+  { id: 'faces', numeral: 'IV', title: 'Faces', pitch: 'Meet the sitters in their frames, then name them.', trains: 'Names to faces', emblem: 'faces', open: true },
   { id: 'ledger', numeral: 'V', title: 'Ledger', pitch: 'Turn digits into images and walk them through a room.', trains: 'Long numbers', emblem: 'ledger', open: false },
   { id: 'nback', numeral: 'VI', title: 'N-Back', pitch: 'Walk a corridor and call out each repeat n steps back.', trains: 'Working memory', emblem: 'nback', open: false },
 ];
