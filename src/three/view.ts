@@ -105,3 +105,16 @@ export const useNeckWindow = create<NeckWindow & { set(w: NeckWindow): void }>()
     if (cur.windowed !== w.windowed || cur.from !== w.from || cur.to !== w.to) set(w);
   },
 }));
+
+/**
+ * Where a reward lands in the room (world space): the active room registers a resolver
+ * (the Fretboard answers with the place just plucked). Gilt bursts rise from here.
+ */
+let rewardAnchor: ((out: Vector3) => boolean) | null = null;
+export function setRewardAnchor(fn: ((out: Vector3) => boolean) | null) {
+  rewardAnchor = fn;
+}
+/** Writes the anchor into `out`; false when no room has registered one. */
+export function rewardAnchorPoint(out: Vector3): boolean {
+  return rewardAnchor ? rewardAnchor(out) : false;
+}

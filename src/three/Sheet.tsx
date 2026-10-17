@@ -134,6 +134,14 @@ const brassLine = new THREE.MeshBasicMaterial({ color: RULE });
 const paperDot = new THREE.MeshBasicMaterial({ color: '#efe3c6' });
 const rosette = { ring: new THREE.RingGeometry(0.058, 0.07, 32), boss: new THREE.CircleGeometry(0.014, 16) };
 const rings = { outer: new THREE.RingGeometry(0.255, 0.265, 48), inner: new THREE.RingGeometry(0.225, 0.2295, 48) };
+/** Hub plates: a faint umber wash over the page (its fibre still shows), framed in brass or a hairline. */
+const plateWash = new THREE.MeshBasicMaterial({ color: '#6b4f22', transparent: true, opacity: 0.075, depthWrite: false });
+const plateWashQuiet = new THREE.MeshBasicMaterial({ color: '#6b4f22', transparent: true, opacity: 0.035, depthWrite: false });
+/** A workshop room's emblem: the same gilt, worn back towards the page. */
+const goldQuiet = new THREE.MeshBasicMaterial({ color: '#a8946c' });
+const circle = new THREE.CircleGeometry(1, 24);
+const ringThin = new THREE.RingGeometry(0.86, 1, 40);
+const arcThin = new THREE.RingGeometry(0.88, 1, 32, 1, 0, Math.PI);
 const capsule = new THREE.MeshBasicMaterial({ color: RULE, map: makeCapsule(), transparent: true, depthWrite: false, opacity: 0 });
 const impression = new THREE.MeshBasicMaterial({ color: '#2e2414', map: makeImpression(), transparent: true, depthWrite: false, opacity: 0 });
 
@@ -166,7 +174,7 @@ function deckledPage(w: number, h: number, amp: number, seed: number) {
 }
 
 /** A seal of wax: a round blob with an uneven rim and a thin flash of squeezed-out wax, pressed to a flat disc with a raised lip. */
-function waxSeal(r: number, seed: number) {
+export function waxSeal(r: number, seed: number) {
   let a = seed;
   const rnd = () => {
     a = (a * 1664525 + 1013904223) >>> 0;
@@ -267,6 +275,32 @@ function Item({ item, foil, onBounds }: { item: SheetItem; foil: THREE.Material 
         </group>
       );
     }
+    case 'plate': {
+      const { x, y, w, h, quiet } = item;
+      const t = quiet ? 0.006 : 0.011;
+      const line = quiet ? hair : brassLine;
+      const z = PAPER_Z + 0.0015;
+      return (
+        <>
+          <Flat x={x} y={y} w={w} h={h} material={quiet ? plateWashQuiet : plateWash} z={z} />
+          <Flat x={x} y={y + h / 2} w={w} h={t} material={line} />
+          <Flat x={x} y={y - h / 2} w={w} h={t} material={line} />
+          <Flat x={x - w / 2} y={y} w={t} h={h} material={line} />
+          <Flat x={x + w / 2} y={y} w={t} h={h} material={line} />
+          {!quiet && (
+            // A second, finer frame inside the first: the catalogue's double rule.
+            <>
+              <Flat x={x} y={y + h / 2 - 0.04} w={w - 0.08} h={0.005} material={brassLine} />
+              <Flat x={x} y={y - h / 2 + 0.04} w={w - 0.08} h={0.005} material={brassLine} />
+              <Flat x={x - w / 2 + 0.04} y={y} w={0.005} h={h - 0.08} material={brassLine} />
+              <Flat x={x + w / 2 - 0.04} y={y} w={0.005} h={h - 0.08} material={brassLine} />
+            </>
+          )}
+        </>
+      );
+    }
+    case 'emblem':
+      return <Emblem item={item} />;
     case 'box': {
       const t = LITE ? 0.014 : 0.01;
       const { x, y, w, h } = item;
@@ -365,7 +399,10 @@ export function Sheet() {
   const onBounds = (item: SheetItem, b: Bounds) => {
     if (item.kind !== 'text' || !last) return;
     const r = last.rects.find((q) => within(item, q));
-    if (r) labels.current.set(r.id, [item.x + b[0], item.y + b[1], item.x + b[2], item.y + b[3]]);
+    if (!r) return;
+    // A rect holding several lines takes its marked label (a hub plate: the room's name).
+    if (!item.label && last.items.some((o) => o.kind === 'text' && o.label && within(o, r))) return;
+    labels.current.set(r.id, [item.x + b[0], item.y + b[1], item.x + b[2], item.y + b[3]]);
   };
 
   const W = last?.width ?? 3.2;
@@ -512,6 +549,77 @@ export function Sheet() {
       </group>
     </group>
   );
+}
+
+/**
+ * A room's emblem, drawn in gilt line like an engraver's vignette: strings and frets for the
+ * Fretboard, three orbs for Echo, a grid for Blocks, a cameo for Faces, ledger lines for
+ * Ledger, a receding corridor of lozenges for N-Back.
+ */
+function Emblem({ item }: { item: Extract<SheetItem, { kind: 'emblem' }> }) {
+  const mat = item.quiet ? goldQuiet : gold;
+  const u = item.size / 2;
+  const t = Math.max(0.007, item.size * 0.022);
+  const z = TEXT_Z - 0.002;
+  const at = (dx: number, dy: number) => [dx * u, dy * u, 0] as const;
+  const parts: React.ReactNode[] = [];
+  const line = (key: string, cx: number, cy: number, w: number, h: number, rot = 0) =>
+    parts.push(<mesh key={key} geometry={unit} material={mat} position={at(cx, cy)} scale={[w * u, h * u, 1]} rotation={[0, 0, rot]} />);
+  const ring = (key: string, cx: number, cy: number, r: number, sx = 1, geom = ringThin) =>
+    parts.push(<mesh key={key} geometry={geom} material={mat} position={at(cx, cy)} scale={[r * u * sx, r * u, 1]} />);
+  const dot = (key: string, cx: number, cy: number, r: number) =>
+    parts.push(<mesh key={key} geometry={circle} material={mat} position={at(cx, cy)} scale={[r * u, r * u, 1]} />);
+  const th = t / u;
+  switch (item.shape) {
+    case 'fretboard':
+      // Four strings across, the nut heavy at the left, three frets, one inlay.
+      for (let i = 0; i < 4; i++) line(`s${i}`, 0, -0.45 + i * 0.3, 1.9, th * (1.2 - i * 0.15));
+      line('nut', -0.92, 0, th * 3.2, 1.08);
+      for (let i = 1; i <= 3; i++) line(`f${i}`, -0.92 + i * 0.5, 0, th, 1.0);
+      dot('inlay', -0.17, 0, 0.09);
+      break;
+    case 'echo':
+      ring('a', -0.66, -0.12, 0.26);
+      ring('b', 0, 0.12, 0.34);
+      ring('c', 0.66, -0.12, 0.26);
+      dot('lit', 0, 0.12, 0.17);
+      break;
+    case 'blocks':
+      for (let r = 0; r < 3; r++)
+        for (let c = 0; c < 3; c++) {
+          const lit = (r === 0 && c === 2) || (r === 1 && c === 0) || (r === 2 && c === 1);
+          const cx = -0.62 + c * 0.62;
+          const cy = 0.62 - r * 0.62;
+          if (lit) line(`b${r}${c}`, cx, cy, 0.42, 0.42);
+          else {
+            line(`t${r}${c}`, cx, cy + 0.21, 0.42, th);
+            line(`u${r}${c}`, cx, cy - 0.21, 0.42, th);
+            line(`l${r}${c}`, cx - 0.21, cy, th, 0.42);
+            line(`r${r}${c}`, cx + 0.21, cy, th, 0.42);
+          }
+        }
+      break;
+    case 'faces':
+      // A cameo: an oval head over the arc of the shoulders, inside a fine frame.
+      ring('head', 0, 0.22, 0.4, 0.78);
+      ring('shoulders', 0, -0.62, 0.62, 1, arcThin);
+      ring('frame', 0, 0, 0.98, 0.8);
+      break;
+    case 'ledger':
+      // Ruled lines with entries of different lengths, a lozenge at the total.
+      for (let i = 0; i < 4; i++) line(`r${i}`, 0, 0.6 - i * 0.4, 1.8, th * 0.7);
+      [1.1, 0.7, 1.3].forEach((w, i) => line(`e${i}`, -0.9 + w / 2 + 0.1, 0.4 - i * 0.4, w, th * 2.4));
+      line('total', 0.45, -0.6, 0.9, th * 2.4);
+      line('lz', -0.6, -0.6, 0.18, 0.18, Math.PI / 4);
+      break;
+    case 'nback':
+      // A corridor: two converging walls and doorways that shrink as they recede.
+      line('wl', -0.55, 0, th, 1.6, -0.32);
+      line('wr', 0.55, 0, th, 1.6, 0.32);
+      [0.36, 0.24, 0.15].forEach((s, i) => line(`d${i}`, 0, -0.5 + i * 0.5, s, s, Math.PI / 4));
+      break;
+  }
+  return <group position={[item.x, item.y, z]}>{parts}</group>;
 }
 
 /** A gilt "P" cypher inside a double ring, engraved at the head of the page. */

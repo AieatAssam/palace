@@ -28,3 +28,16 @@ Unlock gating is gone. Every stage is open from the Stages card, so the primer a
 | Primer II body | Name: pick one of twelve keys. Find: touch every place the note lives. | Name it from twelve keys, find every place it lives, or tap its octave two strings over. | One sentence covers the octave drill; states the rule. |
 | Primer III body | Sure answers rest. Slow ones return sooner. Strings and frets open as you advance. | Sure answers rest. Every stage is open on the Stages card; gilt marks the ones you know. | Nothing unlocks now. Says where stages open and what the gilt mark means. |
 | Stages row 4 title | Across the neck | Whole neck | Both stages in the row (Octaves, Find all) range over the whole neck; the cells already name them. |
+
+## Hub pass (night/hub-rewards)
+
+Scope: the new hub and rewards strings only (title kicker and line, room pitches and trains, hub and workshop labels, flourish words, the overlay and combo meter). Each string was read against the stop-slop rules, and the two changes below also make the pitches fit their card: one sentence, under 70 characters, and the trains label under 24.
+
+| Where | Before | After | Why |
+|---|---|---|---|
+| Title line (Attract) | Rooms for recall. | Each room trains a different kind of memory. | A noun fragment that reads as a tagline; the new line says what a room does. |
+| Room I trains (catalog) | Facts you recall on sight | Facts on sight | Five words and 25 characters, over the 24-character limit for the trains label. |
+| Room IV pitch (catalog) | Meet a bust once. Give its name a minute later. | Meet a bust, then name it a minute later. | Two sentences; one sentence now, and "once" was filler. |
+| Room VI pitch (catalog) | Walk a corridor. Say when a place or tone repeats from n steps back. | Walk a corridor and call out each repeat n steps back. | Two sentences, 68 characters; one sentence now, and the repeat is named as the action. |
+
+Reviewed and kept: the title kicker "Six rooms / One open" (short, and "open" matches the catalog's built flag), the other pitches and trains labels, the hub drawn labels (Palace, in the workshop, the mastered count, Answered, Best run, Days, Settings) and the hub record sentence with its `${n} answered` pattern, the dialog label and room aria labels, the workshop kicker, label, Back, aria and hidden text, the flourish words (Bravo, Splendid, Superb, Bravissimo: none carries casino or gamer tone), the overlay captions and live-region lines (in a row, Mastered), the combo meter aria label and value text, and the Rooms button in the HUD.

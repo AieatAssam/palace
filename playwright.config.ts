@@ -15,7 +15,8 @@ const launchOptions = {
 
 export default defineConfig({
   testDir: './e2e',
-  timeout: 30_000,
+  // CI runners draw WebGL on the CPU at a few fps, so sheet slides alone take seconds per test.
+  timeout: process.env.CI ? 60_000 : 30_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
   // One worker: two CPU-rendered WebGL pages fighting over a small CI runner is what made runs flaky.

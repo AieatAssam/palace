@@ -27,6 +27,7 @@ describe('storage', () => {
     const state: SavedState = {
       deck: { 'name:s0f0': newCard('name:s0f0', 1) },
       stageId: 'acc-oct',
+      modeId: 'fretboard',
       settings: { leftHanded: true, sound: false, haptics: false, reduceMotion: true },
       onboarded: true,
     };
@@ -61,6 +62,20 @@ describe('storage', () => {
     expect(s.settings.haptics).toBe(true);
     expect(s.settings.reduceMotion).toBe(false);
     expect(s.onboarded).toBe(false);
+  });
+
+  it('defaults the room to the fretboard', () => {
+    expect(emptyState().modeId).toBe('fretboard');
+    expect(parseState(JSON.stringify({ stageId: 'nat-s0' })).modeId).toBe('fretboard');
+  });
+
+  it('falls back to the fretboard for an unknown room', () => {
+    expect(parseState(JSON.stringify({ modeId: 'piano' })).modeId).toBe('fretboard');
+    expect(parseState(JSON.stringify({ modeId: 3 })).modeId).toBe('fretboard');
+  });
+
+  it('keeps a stored catalogue room id', () => {
+    expect(parseState(JSON.stringify({ modeId: 'echo' })).modeId).toBe('echo');
   });
 
   it('survives a throwing store', () => {

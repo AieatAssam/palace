@@ -38,6 +38,15 @@
   unicode-range: U+266D-266F;
 }
 
+/* Pinyon Script: the one hand, kept for accents (flourishes, the seal's caption). */
+@font-face {
+  font-family: 'Palace Script';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/pinyon-script.ttf') format('truetype');
+}
+
 :root {
   --plaster: #ede6d9;
   --paper: #f5f0e6;
@@ -57,6 +66,8 @@
   --correct-lit: #9cc8b5;
   --miss-lit: #e0a183;
   --serif: 'Palace Garamond', serif;
+  --script: 'Palace Script', 'Palace Garamond', serif;
+  --gilt-lit: #e6c98c;
   /* Type scale (px at the 1.2 step, rounded): labels in true small caps never go below 16. */
   --fs-label: 16px;
   --fs-body: 18px;
@@ -365,6 +376,30 @@ button:focus-visible {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.bar-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* Rooms: back to the hub, a plain word in small caps. */
+.rooms-mark {
+  min-height: 44px;
+  min-width: 44px;
+  margin-left: -4px;
+  padding: 0 6px;
+  font-size: var(--fs-label);
+  font-variant-caps: small-caps;
+  letter-spacing: var(--sc-track);
+  color: var(--stone-lit);
+  text-shadow: 0 1px 0 rgba(10, 7, 5, 0.9);
+  transition: color var(--fade) var(--ease);
+}
+
+.rooms-mark:hover {
+  color: var(--brass);
 }
 
 /* Stages: the word itself in small caps, a brass lozenge set before it (the card's door). */
@@ -781,5 +816,230 @@ button:focus-visible {
   *::after {
     animation-duration: 1ms !important;
     transition-duration: 1ms !important;
+  }
+}
+
+/* ------------------------------------------------------------- Rewards */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The combo meter: a slim brass rule beside the run, a lozenge per milestone passed. */
+.combo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: center;
+  margin-left: 4px;
+}
+
+.combo-track {
+  position: relative;
+  display: block;
+  width: 46px;
+  height: 2px;
+  background: rgba(176, 141, 87, 0.28);
+  overflow: hidden;
+}
+
+.combo-fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #8a6a37, var(--brass) 60%, #e6c77d);
+  transform-origin: left center;
+  transition: transform 320ms var(--ease);
+}
+
+/* A milestone: the full rule takes a glint of light along its length. */
+.combo-full .combo-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 244, 214, 0.95), transparent);
+  animation: glint 480ms var(--ease) forwards;
+}
+
+@keyframes glint {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.combo-tiers {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.combo-tier {
+  width: 5px;
+  height: 5px;
+  background: var(--brass);
+  transform: rotate(45deg);
+  animation: fade 320ms var(--ease);
+}
+
+/* The flourish: a word in a fine hand over the room, a gilt rule drawn out under it. */
+.flourish {
+  position: absolute;
+  left: 50%;
+  top: 27%;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translateX(-50%);
+  pointer-events: none;
+  text-shadow: var(--lift-deep);
+  animation: flourish 1700ms var(--ease) forwards;
+}
+
+.flourish-word {
+  font-family: var(--script);
+  font-size: clamp(58px, 6.4vw, 96px);
+  line-height: 1.1;
+  color: var(--gilt-lit);
+  white-space: nowrap;
+}
+
+.flourish-rule {
+  display: block;
+  width: 120px;
+  height: 1px;
+  margin: 2px 0 8px;
+  background: linear-gradient(90deg, transparent, var(--brass), transparent);
+  transform-origin: center;
+  animation: draw 700ms var(--ease) both;
+}
+
+.flourish-run {
+  font-size: var(--fs-label);
+  font-style: italic;
+  color: var(--plaster);
+}
+
+@keyframes flourish {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  16% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  72% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -4px);
+  }
+}
+
+@keyframes draw {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* The room's own shade behind the words, no edge. */
+.flourish::before,
+.seal-caption::before {
+  content: '';
+  position: absolute;
+  inset: -10px -48px;
+  z-index: -1;
+  background: var(--scrim);
+}
+
+.flourish,
+.seal-caption {
+  isolation: isolate;
+}
+
+/* Under the wax seal: "Mastered" in the hand, the stage in italic. */
+.seal-caption {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translateX(-50%);
+  pointer-events: none;
+  text-align: center;
+  text-shadow: var(--lift-deep);
+  animation: seal-caption 3470ms var(--ease) forwards;
+}
+
+.seal-word {
+  font-family: var(--script);
+  font-size: 40px;
+  line-height: 1.1;
+  color: var(--gilt-lit);
+}
+
+.seal-title {
+  white-space: nowrap;
+  font-size: var(--fs-label);
+  font-style: italic;
+  color: var(--plaster);
+}
+
+@keyframes seal-caption {
+  0% {
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  84% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .flourish {
+    top: 30%;
+  }
+  .bar-left {
+    gap: 6px;
+  }
+}
+
+/* Reduced motion: the words simply appear for their time and go; no travel, no glint, no draw. */
+.calm .flourish,
+.calm .seal-caption,
+.calm .flourish-rule,
+.calm .combo-full .combo-fill::after {
+  animation: none !important;
+  transform: translateX(-50%);
+}
+.calm .flourish-rule {
+  transform: none;
+}
+.calm .combo-full .combo-fill::after {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flourish,
+  .seal-caption,
+  .flourish-rule {
+    animation: none !important;
+  }
+  .combo-full .combo-fill::after {
+    display: none;
   }
 }

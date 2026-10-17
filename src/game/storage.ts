@@ -1,3 +1,4 @@
+import { DEFAULT_MODE, type ModeId, isModeId } from '../modes/catalog';
 import { type Deck, isCard } from './srs';
 import { FIRST_STAGE, STAGES } from './stages';
 
@@ -15,6 +16,8 @@ export interface SavedState {
   deck: Deck;
   /** The stage on the desk (see `stages.ts`); every stage is open, this is only where you left off. */
   stageId: string;
+  /** The room last entered from the hub (see `modes/catalog.ts`). */
+  modeId: ModeId;
   settings: Settings;
   onboarded: boolean;
 }
@@ -22,7 +25,7 @@ export interface SavedState {
 export const DEFAULT_SETTINGS: Settings = { leftHanded: false, sound: true, haptics: true, reduceMotion: false };
 
 export function emptyState(): SavedState {
-  return { deck: {}, stageId: FIRST_STAGE.id, settings: { ...DEFAULT_SETTINGS }, onboarded: false };
+  return { deck: {}, stageId: FIRST_STAGE.id, modeId: DEFAULT_MODE, settings: { ...DEFAULT_SETTINGS }, onboarded: false };
 }
 
 interface KV {
@@ -62,6 +65,7 @@ export function parseState(raw: string | null): SavedState {
     deck,
     // Older saves kept an unlock index (`stage`); there is nothing to unlock now, so they start at the first stage.
     stageId: typeof d.stageId === 'string' && STAGES.some((st) => st.id === d.stageId) ? d.stageId : FIRST_STAGE.id,
+    modeId: isModeId(d.modeId) ? d.modeId : DEFAULT_MODE,
     settings: {
       leftHanded: typeof settings.leftHanded === 'boolean' ? settings.leftHanded : DEFAULT_SETTINGS.leftHanded,
       sound: typeof settings.sound === 'boolean' ? settings.sound : DEFAULT_SETTINGS.sound,

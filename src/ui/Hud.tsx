@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef } from 'react';
 import { NOTE_NAMES, type NoteName } from '../game/notes';
 import { stageLabel, stageProgress } from '../game/stages';
+import { ComboMeter } from '../rewards/ComboMeter';
 import { usePalace } from '../store';
 import { useNeckWindow, useView } from '../three/view';
 import { flatOf, positionLabel, pretty, spelled } from './format';
@@ -41,6 +42,16 @@ function StagesMark() {
   return (
     <button className="stages-mark scrimmed" onClick={open} data-testid="stages-open" aria-haspopup="dialog">
       Stages
+    </button>
+  );
+}
+
+/** Back to the hub: the word, in small caps. */
+function RoomsMark() {
+  const toHub = usePalace((s) => s.toHub);
+  return (
+    <button className="rooms-mark scrimmed" onClick={toHub} data-testid="hub-open">
+      Rooms
     </button>
   );
 }
@@ -137,6 +148,7 @@ function Meta() {
         <span className="numeral-run" data-testid="streak">
           {streak}
         </span>
+        <ComboMeter />
       </span>
       {finding && (
         <button className="meta-action" onClick={next} data-testid="find-skip">
@@ -198,7 +210,10 @@ export function Hud({ onSettings, hidden = false }: { onSettings: () => void; hi
     <>
       <header ref={top} className={`hud-top ${hidden ? 'hud-hidden' : ''}`} id="hud-top" inert={hidden}>
         <div className="bar">
-          <StagesMark />
+          <span className="bar-left">
+            <RoomsMark />
+            <StagesMark />
+          </span>
           <button className="settings-mark scrimmed" data-testid="settings-open" onClick={onSettings}>
             Settings
           </button>

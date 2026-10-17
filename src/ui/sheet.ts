@@ -24,6 +24,8 @@ export interface SheetText {
   lineHeight?: number;
   /** Degrees anticlockwise: a signature rides a little uphill. */
   tilt?: number;
+  /** The control's own label: where its focus rule and press impression go when its rect holds several lines. */
+  label?: boolean;
 }
 
 export interface SheetRule {
@@ -68,7 +70,27 @@ export interface SheetBox {
   h: number;
 }
 
-export type SheetItem = SheetText | SheetRule | SheetBar | SheetLozenge | SheetMark | SheetBox;
+/** A room's plate on the hub: a panel set into the page under a brass frame (a hairline when `quiet`). */
+export interface SheetPlate {
+  kind: 'plate';
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  quiet?: boolean;
+}
+
+/** A small gilt drawing for a room, centred at (x, y), `size` card units across. */
+export interface SheetEmblem {
+  kind: 'emblem';
+  shape: 'fretboard' | 'echo' | 'blocks' | 'faces' | 'ledger' | 'nback';
+  x: number;
+  y: number;
+  size: number;
+  quiet?: boolean;
+}
+
+export type SheetItem = SheetText | SheetRule | SheetBar | SheetLozenge | SheetMark | SheetBox | SheetPlate | SheetEmblem;
 
 /** A real control, centred at (x, y) in card units, drawn over its 3D label. */
 export interface SheetRect {

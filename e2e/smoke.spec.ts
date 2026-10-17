@@ -2,13 +2,41 @@ import { type Page, expect, test } from '@playwright/test';
 
 type Pos = { string: number; fret: number };
 
-/** Attract → (primer on a first visit, skipped) → play. */
-async function enterPlay(page: Page) {
+/** Attract → (primer on a first visit, skipped) → hub. */
+async function enterHub(page: Page) {
   await expect(page.getByTestId('attract')).toBeVisible();
   await page.getByTestId('attract-begin').click();
   if ((await page.evaluate(() => window.__palace!.screen())) === 'primer') await page.getByTestId('primer-skip').click();
   await expect(page.getByTestId('attract')).toBeHidden();
+  await expect(page.getByTestId('hub')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__palace!.screen())).toBe('hub');
+}
+
+/** Hub → Fretboard's stage card → the current stage's cell → play. */
+async function playFromHub(page: Page) {
+  await expect(page.getByTestId('hub')).toBeVisible();
+  const room = page.getByTestId('room-fretboard');
+  await expect(room).toHaveClass(/placed/);
+  await room.click();
+  await expect(page.getByTestId('stages')).toBeVisible();
+  const id = await page.evaluate(() => window.__palace!.stage().id);
+  if (id.startsWith('acc-')) {
+    const accidentals = page.getByTestId('book-accidentals');
+    await expect(accidentals).toHaveClass(/placed/);
+    await accidentals.click();
+    await expect(accidentals).toHaveAttribute('aria-checked', 'true');
+  }
+  const cell = page.getByTestId(`stage-${id}`);
+  await expect(cell).toHaveClass(/placed/);
+  await cell.click();
+  await expect(page.getByTestId('stages')).toBeHidden();
   await expect.poll(() => page.evaluate(() => window.__palace!.screen())).toBe('play');
+}
+
+/** Attract → (primer on a first visit, skipped) → hub → current stage → play. */
+async function enterPlay(page: Page) {
+  await enterHub(page);
+  await playFromHub(page);
 }
 
 async function waitForFrames(page: Page, n = 10) {
@@ -204,10 +232,11 @@ test('toggles left-handed mode (mirrors the neck, persists)', async ({ page }) =
   expect(JSON.parse(stored!).settings.leftHanded).toBe(true);
   await page.reload();
   expect(await page.evaluate(() => window.__palace!.leftHanded())).toBe(true);
-  // A returning player goes straight from the title to play: no primer.
+  // A returning player goes straight from the title to the hub: no primer.
   await page.getByTestId('attract-begin').click();
   await expect(page.getByTestId('primer')).toBeHidden();
-  expect(await page.evaluate(() => window.__palace!.screen())).toBe('play');
+  await expect(page.getByTestId('hub')).toBeVisible();
+  expect(await page.evaluate(() => window.__palace!.screen())).toBe('hub');
 });
 
 test('the settings sheet is a real dialog: focus, Escape, and no slide under reduced motion', async ({ page }) => {
@@ -266,7 +295,10 @@ test('first visit: title, three-beat primer, then play without the wordmark', as
   await expect(primer.locator('.numeral')).toHaveText('III');
   await page.getByTestId('primer-next').click();
   await expect(primer).toBeHidden();
-  expect(await page.evaluate(() => window.__palace!.screen())).toBe('play');
+  // The first visit ends on the hub, then the player picks a stage into play.
+  await expect(page.getByTestId('hub')).toBeVisible();
+  expect(await page.evaluate(() => window.__palace!.screen())).toBe('hub');
+  await playFromHub(page);
   await expect(page.getByTestId('prompt')).toBeVisible();
   await expect(page.getByText('Palace', { exact: true })).toHaveCount(0);
   const stored = await page.evaluate(() => localStorage.getItem('palace.fretboard.v1'));
@@ -291,12 +323,12 @@ test('a full sitting closes on the session sheet; Again and Leave', async ({ pag
   await expect(sheet).toBeHidden();
   expect(await page.evaluate(() => window.__palace!.session())).toMatchObject({ answered: 0, correct: 0 });
 
-  // A deliberate End, then Leave returns to the title.
+  // A deliberate End, then Leave returns to the hub.
   await page.getByTestId('session-end').click();
   await expect(sheet).toBeVisible();
   await page.getByTestId('session-leave').click();
-  await expect(page.getByTestId('attract')).toBeVisible();
-  await expect(page.getByTestId('attract-begin')).toHaveText('Continue');
+  await expect(page.getByTestId('hub')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__palace!.screen())).toBe('hub');
 });
 
 /**
