@@ -504,10 +504,11 @@ export function Sheet() {
           y0 = Math.min(y0, py);
           y1 = Math.max(y1, py);
         }
-      const w = Math.max(44, x1 - x0);
-      const h = Math.max(44, y1 - y0);
-      el.style.left = `${(x0 + x1) / 2 - w / 2}px`;
-      el.style.top = `${(y0 + y1) / 2 - h / 2}px`;
+      // Whole pixels: the camera's ease never quite stops, and a button creeping by fractions of a pixel never holds still for a pointer (or a test).
+      const w = Math.round(Math.max(44, x1 - x0));
+      const h = Math.round(Math.max(44, y1 - y0));
+      el.style.left = `${Math.round((x0 + x1) / 2 - w / 2)}px`;
+      el.style.top = `${Math.round((y0 + y1) / 2 - h / 2)}px`;
       el.style.width = `${w}px`;
       el.style.height = `${h}px`;
       // Only an arrived sheet takes touches: a button chasing a moving label would miss.

@@ -116,7 +116,8 @@ test.describe('Faces', () => {
   });
 
   test('a full sitting on four ends in the session sheet, and Again starts over', async ({ page }) => {
-    test.setTimeout(45_000);
+    // Eight answers, the session sheet sliding in and a camera dolly, on a CPU rasteriser.
+    test.setTimeout(75_000);
     await enterFaces(page, 'four');
     await meetAll(page);
 
@@ -128,6 +129,8 @@ test.describe('Faces', () => {
     expect(four.known).toBeGreaterThan(0);
 
     await expect(page.getByTestId('session-again')).toHaveClass(/placed/);
+    // The button rides the camera's dolly to the sheet; click once the camera is at rest.
+    await expect.poll(() => page.evaluate(() => window.__palace!.cameraSettled()), { timeout: 20_000 }).toBe(true);
     await page.getByTestId('session-again').click();
     await expect.poll(() => phaseOf(page)).toBe('meet');
     expect((await facesState(page)).sitting.asked).toBe(0);
