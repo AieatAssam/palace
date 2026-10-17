@@ -469,6 +469,9 @@ function NeckRig({ children }: { children: React.ReactNode }) {
   const drift = useMemo(() => new THREE.Vector3(), []);
   const goal = useMemo(() => new THREE.Vector3(), []);
 
+  // Priority -1: before every other frame callback, so the buttons the rooms lay over the scene are
+  // projected through this frame's camera (same-priority callbacks run in subscription order, which
+  // a remount flips, children first).
   useFrame((state, dt) => {
     renderInfo.frames++;
     const wantIdle = usePalace.getState().screen === 'attract' && !isCalm() ? 1 : 0;
@@ -502,7 +505,7 @@ function NeckRig({ children }: { children: React.ReactNode }) {
     camera.up.set(0, 1, 0);
     camera.lookAt(lookNow.current);
     focusPoint.copy(aim.focus);
-  });
+  }, -1);
 
   // Register a projector (and scene stats) for the e2e test hooks.
   useEffect(() => {
