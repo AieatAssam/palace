@@ -367,62 +367,87 @@ button:focus-visible {
   align-items: center;
 }
 
-/*
- * The drill switch is engraved, not tabbed: two words, each led by a roman numeral.
- * The chosen one is lit, its numeral in brass, with a small brass lozenge set in front.
- */
-.modes {
-  display: inline-flex;
-  gap: 22px;
-}
-
-.modes button {
+/* Stages: the word itself in small caps, a brass lozenge set before it (the card's door). */
+.stages-mark {
   position: relative;
   min-height: 44px;
   min-width: 44px;
-  padding: 0 4px 0 14px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
+  margin-left: -4px;
+  padding: 0 6px 0 18px;
   font-size: var(--fs-label);
   font-variant-caps: small-caps;
   letter-spacing: var(--sc-track);
-  color: var(--stone-lit);
+  color: var(--plaster);
   text-shadow: 0 1px 0 rgba(10, 7, 5, 0.9), 0 -1px 0 rgba(237, 230, 217, 0.1);
   transition: color var(--fade) var(--ease);
 }
 
-.modes .rn {
-  font-variant-caps: normal;
-  font-size: 16px;
-  letter-spacing: 0.04em;
-  color: var(--stone-lit);
-}
-
-.modes button::before {
+.stages-mark::before {
   content: '';
   position: absolute;
-  left: 2px;
+  left: 5px;
   top: 50%;
   width: 6px;
   height: 6px;
   margin-top: -3px;
   background: var(--brass);
-  transform: rotate(45deg) scale(0);
-  transition: transform var(--fade) var(--ease);
+  transform: rotate(45deg);
 }
 
-.modes button:hover,
-.modes button.active {
-  color: var(--plaster);
-}
-
-.modes button.active::before {
-  transform: rotate(45deg) scale(1);
-}
-
-.modes button.active .rn {
+.stages-mark:hover {
   color: var(--brass);
+}
+
+/* A mastered stage: a small gilt rosette after its name. */
+.gilt-mark {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-left: 8px;
+  vertical-align: 0.05em;
+  border-radius: 50%;
+  background: radial-gradient(circle, #efe3c6 0 18%, #c9a45a 22% 58%, transparent 62%), conic-gradient(from 22.5deg, #d8b468, #8a6a37, #e6c77d, #8a6a37, #d8b468, #8a6a37, #e6c77d, #8a6a37, #d8b468);
+  box-shadow: 0 0 0 1px rgba(201, 164, 90, 0.7);
+}
+
+/* Sharps and flats: an ebony key carries both names, the flat beneath. */
+.note-pair {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  line-height: 1;
+}
+
+.note-flat {
+  font-size: 16px;
+  color: #bfb3a0;
+}
+
+.q-acc {
+  font-style: normal;
+  margin-left: 0.04em;
+}
+
+/* The book in play, as its sign: ♮ naturals, ♯♭ sharps and flats. */
+.meta-book {
+  margin-left: 0.45em;
+  font-size: 1.15em;
+  font-variant-caps: normal;
+  letter-spacing: 0.06em;
+  /* Lit brass: the sign is small, so it takes the lighter metal to read on the dark desk. */
+  color: #d8b878;
+}
+
+.meta-stage {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prompt-window {
+  margin-top: 2px;
+  font-style: italic;
+  color: #c4bcad;
 }
 
 /* Settings: the word itself, in small caps. */

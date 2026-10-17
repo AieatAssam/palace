@@ -9,12 +9,12 @@ const BEATS = [
     body: 'Name its note.',
   },
   {
-    title: 'Name it, or find it.',
-    body: 'Name: pick one of twelve keys. Find: touch every place the note lives.',
+    title: 'Name it, find it, reach its octave.',
+    body: 'Name it from twelve keys, find every place it lives, or tap its octave two strings over.',
   },
   {
     title: 'Slow answers come back.',
-    body: 'Sure answers rest. Slow ones return sooner. Strings and frets open as you advance.',
+    body: 'Sure answers rest. Every stage is open on the Stages card; gilt marks the ones you know.',
   },
 ];
 

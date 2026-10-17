@@ -7,11 +7,13 @@ import { Hud } from './ui/Hud';
 import { Primer } from './ui/Primer';
 import { SessionSheet } from './ui/SessionSheet';
 import { Settings } from './ui/Settings';
+import { Stages } from './ui/Stages';
 
 /** One desk, always lit; screens are ink laid over it. */
 export function App() {
   const screen = usePalace((s) => s.screen);
   const replayPrimer = usePalace((s) => s.replayPrimer);
+  const stagesOpen = usePalace((s) => s.stagesOpen && s.screen === 'play');
   const calm = useCalm();
   const [settings, setSettings] = useState(false);
 
@@ -19,10 +21,11 @@ export function App() {
     <div className={`app ${calm ? 'calm' : ''}`} data-screen={screen}>
       <Scene />
       <div className="dim" aria-hidden />
-      <Hud onSettings={() => setSettings(true)} hidden={screen !== 'play' || settings} />
+      <Hud onSettings={() => setSettings(true)} hidden={screen !== 'play' || settings || stagesOpen} />
       {screen === 'attract' && <Attract />}
       {screen === 'primer' && <Primer />}
       {screen === 'session' && <SessionSheet />}
+      {stagesOpen && !settings && <Stages />}
       {settings && (
         <Settings
           onClose={() => setSettings(false)}

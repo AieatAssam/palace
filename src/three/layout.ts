@@ -148,6 +148,35 @@ export function cellRect(p: Position): [number, number, number, number] {
   return [x0, x1, z - half, z + half];
 }
 
+/** Neck-local x span of frets 0..maxFret: from the open-string zone behind the nut to just past the last fret. */
+export function regionSpan(maxFret: number): { x0: number; x1: number } {
+  return { x0: -HEADSTOCK_GAP - 0.2, x1: fretX(maxFret) + 0.35 };
+}
+
+/**
+ * Slide a window [x0, x0 + len] the least distance so it covers [a, b], kept
+ * inside [lo, hi]. A span wider than the window is centred instead.
+ */
+export function followWindow(x0: number, len: number, lo: number, hi: number, a: number, b: number): number {
+  let x = x0;
+  if (b - a > len) x = (a + b) / 2 - len / 2;
+  else if (a < x) x = a;
+  else if (b > x + len) x = b - len;
+  return Math.max(lo, Math.min(Math.max(lo, hi - len), x));
+}
+
+/** Neck-local x range a set of positions needs on screen, with a little air either side. */
+export function positionsSpan(ps: readonly Position[], air = 0.6): { a: number; b: number } {
+  let a = Infinity;
+  let b = -Infinity;
+  for (const p of ps) {
+    const [x0, x1] = cellRect(p);
+    a = Math.min(a, x0);
+    b = Math.max(b, x1);
+  }
+  return { a: a - air, b: b + air };
+}
+
 /**
  * Local-space rectangle to frame for a region of frets. With `strings`, the
  * band across the neck shrinks to those strings plus a string's width of
@@ -157,10 +186,11 @@ export function cellRect(p: Position): [number, number, number, number] {
 export function regionBounds(
   maxFret: number,
   strings?: readonly number[],
+  span: { x0: number; x1: number } = regionSpan(maxFret),
 ): { x0: number; x1: number; z0: number; z1: number } {
-  const x1 = fretX(maxFret);
+  const x1 = Math.max(0, span.x1 - 0.35);
   const half = neckWidth(x1) / 2;
-  const bounds = { x0: -HEADSTOCK_GAP - 0.2, x1: x1 + 0.35, z0: -half, z1: half };
+  const bounds = { x0: span.x0, x1: span.x1, z0: -half, z1: half };
   if (!strings?.length) return bounds;
   const sp = stringSpacing(x1);
   const lo = Math.min(...strings);

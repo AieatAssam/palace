@@ -15,22 +15,51 @@ async function waitForFrames(page: Page, n = 10) {
   await expect.poll(() => page.evaluate(() => window.__palace!.render().frames), { timeout: 15_000 }).toBeGreaterThan(n);
 }
 
-/** Wait until the camera dolly has settled (projected point stops moving). */
+/**
+ * Wait until the camera dolly has settled: the scene says its camera is at rest, frames are
+ * still being drawn (a stalled renderer would freeze the projection mid-dolly and look settled),
+ * and the projected point has stopped moving.
+ */
 async function settledProjection(page: Page, p: Pos) {
-  let last = { x: -1, y: -1 };
+  let last = { x: -1, y: -1, frames: -1 };
   await expect
     .poll(
       async () => {
         await page.waitForTimeout(250);
-        const cur = (await page.evaluate((q) => window.__palace!.project(q), p))!;
+        const cur = await page.evaluate((q) => ({ ...window.__palace!.project(q)!, frames: window.__palace!.render().frames, settled: window.__palace!.cameraSettled() }), p);
+        const fresh = cur.frames > last.frames + 1;
         const moved = Math.hypot(cur.x - last.x, cur.y - last.y);
         last = cur;
-        return moved;
+        return cur.settled && fresh && moved < 0.5;
       },
-      { timeout: 10_000 },
+      { timeout: 20_000 },
     )
-    .toBeLessThan(0.5);
-  return last;
+    .toBe(true);
+  return { x: last.x, y: last.y };
+}
+
+/** Whether a fret is on screen: always on desktop; on a phone, inside the neck's window. */
+async function fretInWindow(page: Page, fret: number) {
+  return page.evaluate((f) => {
+    const w = window.__palace!.neckWindow();
+    return !w.windowed || (f >= w.from && f <= w.to);
+  }, fret);
+}
+
+/** Open the stage card, switch book if needed, and choose a stage (the card closes). */
+async function chooseStage(page: Page, id: string) {
+  await page.getByTestId('stages-open').click();
+  await expect(page.getByTestId('stages')).toBeVisible();
+  const book = id.startsWith('acc-') ? 'book-accidentals' : 'book-naturals';
+  const bookBtn = page.getByTestId(book);
+  await expect(bookBtn).toHaveClass(/placed/);
+  if ((await bookBtn.getAttribute('aria-checked')) !== 'true') await bookBtn.click();
+  await expect(bookBtn).toHaveAttribute('aria-checked', 'true');
+  const cell = page.getByTestId(`stage-${id}`);
+  await expect(cell).toHaveClass(/placed/);
+  await cell.click();
+  await expect(page.getByTestId('stages')).toBeHidden();
+  await expect.poll(() => page.evaluate(() => window.__palace!.stage().id)).toBe(id);
 }
 
 async function tapAt(page: Page, x: number, y: number) {
@@ -56,10 +85,11 @@ test('loads and renders the fretboard canvas', async ({ page }) => {
   // Something non-trivial was drawn (a blank canvas compresses to almost nothing).
   const shot = await canvas.screenshot();
   expect(shot.byteLength).toBeGreaterThan(20_000);
-  // Starting region: low E and A strings, frets 0–5.
+  // Starting stage (nat-s0): low E string only, frets 0–12.
+  expect(await page.evaluate(() => window.__palace!.stage().id)).toBe('nat-s0');
   const positions = await page.evaluate(() => window.__palace!.positions());
-  expect(positions).toHaveLength(12);
-  expect(new Set(positions.map((p) => p.string))).toEqual(new Set([0, 1]));
+  expect(positions).toHaveLength(13);
+  expect(new Set(positions.map((p) => p.string))).toEqual(new Set([0]));
 });
 
 test('answers a Name-it question through the UI', async ({ page }) => {
@@ -88,12 +118,16 @@ test('answers a Name-it question through the UI', async ({ page }) => {
 test('Find-all: tapping the neck finds a target', async ({ page }) => {
   await enterPlay(page);
   await waitForFrames(page);
-  await page.getByTestId('drill-find').click();
+  await chooseStage(page, 'nat-find');
   expect(await page.evaluate(() => window.__palace!.drill())).toBe('find');
   expect(await page.evaluate(() => window.__palace!.state().mode)).toBe('find');
   const targets = (await page.evaluate(() => window.__palace!.answer())) as Pos[];
   expect(targets.length).toBeGreaterThan(0);
-  const pt = await settledProjection(page, targets[0]!);
+  // On a phone the target must be inside the window; natural notes always have one in frets 0–4.
+  const win = await page.evaluate(() => window.__palace!.neckWindow());
+  const target = targets.find((t) => t.fret <= 4 && (!win.windowed || (t.fret >= win.from && t.fret <= win.to)));
+  if (!target) throw new Error(`no target in the window ${win.from}–${win.to}: ${JSON.stringify(targets)}`);
+  const pt = await settledProjection(page, target);
   await tapAt(page, pt.x, pt.y);
   // Either the target is marked found, or (single-target notes) the question was graded.
   await expect
@@ -103,13 +137,19 @@ test('Find-all: tapping the neck finds a target', async ({ page }) => {
 });
 
 test('every unlocked cell is tappable where it is drawn, with phone-sized string spacing', async ({ page }) => {
-  test.setTimeout(120_000); // many taps on a CPU rasteriser
+  test.setTimeout(180_000); // many taps on a CPU rasteriser
+  // A two-string stage, so the spacing check has adjacent strings to compare.
+  await page.addInitScript((save) => localStorage.setItem('palace.fretboard.v1', save), seededSave('nat-p01', [], [], false));
+  await page.goto('./');
   await enterPlay(page);
   await waitForFrames(page);
   const positions = (await page.evaluate(() => window.__palace!.positions())).map(({ string, fret }) => ({ string, fret }));
+  expect(new Set(positions.map((p) => p.string))).toEqual(new Set([0, 1]));
   await settledProjection(page, positions[0]!);
   const phone = test.info().project.name === 'phone';
   for (const p of positions) {
+    // Frets outside the phone's window are not on screen; they are checked when the window reaches them.
+    if (!(await fretInWindow(page, p.fret))) continue;
     // Nothing in the HUD sits over a playable cell (re-project until the camera has settled on screen).
     await expect
       .poll(() =>
@@ -128,6 +168,7 @@ test('every unlocked cell is tappable where it is drawn, with phone-sized string
   if (phone) {
     // Adjacent strings at least a fingertip apart (≥ 44 CSS px) right at the nut.
     for (const fret of [0, 1, 5]) {
+      if (!(await fretInWindow(page, fret))) continue;
       const [a, b] = await page.evaluate((f) => [window.__palace!.project({ string: 0, fret: f }), window.__palace!.project({ string: 1, fret: f })], fret);
       expect(Math.hypot(a!.x - b!.x, a!.y - b!.y)).toBeGreaterThanOrEqual(44);
     }
@@ -264,7 +305,7 @@ test('a full sitting closes on the session sheet; Again and Leave', async ({ pag
  * stage was seen and isn't due until tomorrow. Answered items go back into
  * learning (due in seconds), so they don't come round again within a test.
  */
-function seededSave(stage: number, positions: Pos[], ask: Pos[], leftHanded: boolean) {
+function seededSave(stageId: string, positions: Pos[], ask: Pos[], leftHanded: boolean) {
   const now = Date.now();
   const deck: Record<string, unknown> = {};
   for (const p of positions) {
@@ -273,10 +314,10 @@ function seededSave(stage: number, positions: Pos[], ask: Pos[], leftHanded: boo
     const due = order < 0 ? now + 86_400_000 : now - (ask.length - order) * 3_600_000;
     deck[id] = { id, ease: 2.5, interval: 60_000, reps: 0, lapses: 0, seen: 1, correct: 0, due, last: now - 86_400_000, avgMs: 0 };
   }
-  return JSON.stringify({ deck, stage, settings: { leftHanded, sound: false }, onboarded: true });
+  return JSON.stringify({ deck, stageId, settings: { leftHanded, sound: false }, onboarded: true });
 }
 
-const STAGE_ALL_STRINGS = 2; // all six strings, frets 0–5
+const STAGE_NATURAL_ALL_STRINGS = 'nat-n5'; // all six strings, frets 0–5
 const ALL_0_5: Pos[] = Array.from({ length: 36 }, (_, i) => ({ string: Math.floor(i / 6), fret: i % 6 }));
 // Open A (the reported case), its neighbour open low E, open high E, and two fretted positions.
 const PROBES: Pos[] = [
@@ -289,7 +330,7 @@ const PROBES: Pos[] = [
 
 for (const leftHanded of [false, true]) {
   test(`the highlighted position matches the prompt (${leftHanded ? 'left' : 'right'}-handed)`, async ({ page }) => {
-    await page.addInitScript((save) => localStorage.setItem('palace.fretboard.v1', save), seededSave(STAGE_ALL_STRINGS, ALL_0_5, PROBES, leftHanded));
+    await page.addInitScript((save) => localStorage.setItem('palace.fretboard.v1', save), seededSave(STAGE_NATURAL_ALL_STRINGS, ALL_0_5, PROBES, leftHanded));
     await page.goto('./');
     await enterPlay(page);
     await waitForFrames(page);
@@ -320,3 +361,132 @@ for (const leftHanded of [false, true]) {
     }
   });
 }
+
+test("choosing a stage on the stage card", async ({ page }) => {
+  test.setTimeout(90_000);
+  await enterPlay(page);
+  await waitForFrames(page);
+  await page.getByTestId('stages-open').click();
+  const card = page.getByTestId('stages');
+  await expect(card).toBeVisible();
+  await expect(card).toHaveAttribute('role', 'dialog');
+  await expect(page.getByTestId('stage-nat-s0')).toHaveAttribute('aria-current', 'true');
+
+  const accidentals = page.getByTestId('book-accidentals');
+  await expect(accidentals).toHaveClass(/placed/);
+  await accidentals.click();
+  await expect(accidentals).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('book-naturals')).toHaveAttribute('aria-checked', 'false');
+
+  const cell = page.getByTestId('stage-acc-p23');
+  await expect(cell).toHaveClass(/placed/);
+  await cell.click();
+  await expect(card).toBeHidden();
+  await expect.poll(() => page.evaluate(() => window.__palace!.stage().id)).toBe('acc-p23');
+  await expect
+    .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('palace.fretboard.v1')!).stageId))
+    .toBe('acc-p23');
+
+  const positions = await page.evaluate(() => window.__palace!.positions());
+  expect(new Set(positions.map((p) => p.string))).toEqual(new Set([2, 3]));
+
+  // The question is on the chosen strings, and its answer is an accidental.
+  await expect
+    .poll(() => page.evaluate(() => window.__palace!.question()))
+    .toMatchObject({ kind: 'name' });
+  const q = await page.evaluate(() => window.__palace!.question());
+  expect(q.kind).toBe('name');
+  if (q.kind !== 'name') return;
+  expect([2, 3]).toContain(q.position.string);
+  expect(q.answer).toContain('#');
+
+  await expect(page.getByTestId('meta-stage')).toHaveAttribute('aria-label', /G/);
+
+  // Reopened, the card closes on Escape and focus goes back to the opener.
+  await page.getByTestId('stages-open').click();
+  await expect(card).toBeVisible();
+  await expect(page.getByTestId('stage-acc-p23')).toHaveAttribute('aria-current', 'true');
+  await page.keyboard.press('Escape');
+  await expect(card).toBeHidden();
+  await expect(page.getByTestId('stages-open')).toBeFocused();
+});
+
+test('every stage is open, mastery shows', async ({ page }) => {
+  test.setTimeout(90_000);
+  const now = Date.now();
+  // Every natural item of nat-s0 (low E, frets 0–12) is mastered.
+  const deck: Record<string, unknown> = {};
+  for (let f = 0; f <= 12; f++) {
+    const id = `name:s0f${f}`;
+    deck[id] = { id, ease: 2.6, interval: 86_400_000, reps: 5, lapses: 0, seen: 5, correct: 5, due: now + 86_400_000, last: now, avgMs: 1500 };
+  }
+  const save = JSON.stringify({ deck, stageId: 'nat-s0', settings: { leftHanded: false, sound: false }, onboarded: true });
+  await page.addInitScript((s) => localStorage.setItem('palace.fretboard.v1', s), save);
+  await page.goto('./');
+  await enterPlay(page);
+  await waitForFrames(page);
+
+  await page.getByTestId('stages-open').click();
+  await expect(page.getByTestId('stages')).toBeVisible();
+  await expect(page.getByTestId('stage-nat-s0')).toHaveClass(/placed/);
+  // The cell's accessible name carries the progress and, when mastered, the word "mastered".
+  await expect(page.getByTestId('stage-nat-s0')).toHaveAccessibleName(/mastered/);
+  await expect(page.getByTestId('stage-nat-s1')).not.toHaveAccessibleName(/mastered/);
+  // Every stage is open: a late one can be chosen with no progress on it.
+  const find = page.getByTestId('stage-nat-find');
+  await expect(find).toHaveClass(/placed/);
+  await find.click();
+  await expect(page.getByTestId('stages')).toBeHidden();
+  await expect.poll(() => page.evaluate(() => window.__palace!.drill())).toBe('find');
+  expect(await page.evaluate(() => window.__palace!.stage().id)).toBe('nat-find');
+});
+
+test('octave shapes', async ({ page }) => {
+  test.setTimeout(120_000);
+  await enterPlay(page);
+  await waitForFrames(page);
+  await chooseStage(page, 'nat-oct');
+  await expect.poll(() => page.evaluate(() => window.__palace!.question().kind)).toBe('octave');
+  const q = await page.evaluate(() => window.__palace!.question());
+  if (q.kind !== 'octave') return;
+  expect(q.targets.length).toBeGreaterThan(0);
+
+  for (const t of q.targets) {
+    await expect.poll(() => fretInWindow(page, t.fret)).toBe(true);
+    const pt = await settledProjection(page, t);
+    await tapAt(page, pt.x, pt.y);
+    // Found (the question is still open) or, after the last target, the question is graded.
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (x) => window.__palace!.found().some((f) => f.string === x.string && f.fret === x.fret) || window.__palace!.session().correct === 1,
+          t,
+        ),
+      )
+      .toBe(true);
+  }
+  await expect.poll(() => page.evaluate(() => window.__palace!.session().correct)).toBe(1);
+});
+
+test('a long reach on a phone pans with a drag', async ({ page }) => {
+  test.skip(test.info().project.name !== 'phone', 'the window only applies on a phone');
+  test.setTimeout(90_000);
+  await page.addInitScript((save) => localStorage.setItem('palace.fretboard.v1', save), seededSave('nat-find', [], [], false));
+  await page.goto('./');
+  await enterPlay(page);
+  await waitForFrames(page);
+  await expect.poll(() => page.evaluate(() => window.__palace!.neckWindow().windowed)).toBe(true);
+  expect(await page.evaluate(() => window.__palace!.neckWindow().from)).toBe(0);
+  await expect(page.getByTestId('prompt-window')).toBeVisible();
+
+  const canvas = page.locator('canvas');
+  const box = (await canvas.boundingBox())!;
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx, cy - 300, { steps: 10 });
+  await page.mouse.up();
+  // Dragging the finger up moves the window toward higher frets.
+  await expect.poll(() => page.evaluate(() => window.__palace!.neckWindow().from)).toBeGreaterThan(0);
+});

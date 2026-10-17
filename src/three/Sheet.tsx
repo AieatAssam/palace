@@ -130,6 +130,9 @@ const gold = new THREE.MeshBasicMaterial({ color: GILT });
 const track = new THREE.MeshBasicMaterial({ color: '#b3a78e' });
 const hair = new THREE.MeshBasicMaterial({ color: '#8a8272' });
 
+const brassLine = new THREE.MeshBasicMaterial({ color: RULE });
+const paperDot = new THREE.MeshBasicMaterial({ color: '#efe3c6' });
+const rosette = { ring: new THREE.RingGeometry(0.058, 0.07, 32), boss: new THREE.CircleGeometry(0.014, 16) };
 const rings = { outer: new THREE.RingGeometry(0.255, 0.265, 48), inner: new THREE.RingGeometry(0.225, 0.2295, 48) };
 const capsule = new THREE.MeshBasicMaterial({ color: RULE, map: makeCapsule(), transparent: true, depthWrite: false, opacity: 0 });
 const impression = new THREE.MeshBasicMaterial({ color: '#2e2414', map: makeImpression(), transparent: true, depthWrite: false, opacity: 0 });
@@ -252,6 +255,30 @@ function Item({ item, foil, onBounds }: { item: SheetItem; foil: THREE.Material 
     }
     case 'lozenge':
       return <Flat x={item.x} y={item.y} w={0.06} h={0.06} material={gold} rot={Math.PI / 4} />;
+    case 'mark': {
+      // Eight gilt petals round a boss: two squares turned against each other inside a fine ring.
+      const r = item.r ?? 0.07;
+      return (
+        <group position={[item.x, item.y, TEXT_Z - 0.002]} scale={[r / 0.07, r / 0.07, 1]}>
+          <mesh geometry={rosette.ring} material={foil ?? gold} />
+          <mesh geometry={unit} material={foil ?? gold} scale={[0.064, 0.064, 1]} />
+          <mesh geometry={unit} material={foil ?? gold} scale={[0.064, 0.064, 1]} rotation={[0, 0, Math.PI / 4]} />
+          <mesh geometry={rosette.boss} material={paperDot} position={[0, 0, 0.001]} />
+        </group>
+      );
+    }
+    case 'box': {
+      const t = LITE ? 0.014 : 0.01;
+      const { x, y, w, h } = item;
+      return (
+        <>
+          <Flat x={x} y={y + h / 2} w={w} h={t} material={brassLine} />
+          <Flat x={x} y={y - h / 2} w={w} h={t} material={brassLine} />
+          <Flat x={x - w / 2} y={y} w={t} h={h} material={brassLine} />
+          <Flat x={x + w / 2} y={y} w={t} h={h} material={brassLine} />
+        </>
+      );
+    }
   }
 }
 

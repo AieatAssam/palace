@@ -14,6 +14,8 @@ export interface SheetControl {
   group?: string;
   groupLabel?: string;
   autoFocus?: boolean;
+  /** The one in use among its peers (aria-current). */
+  current?: boolean;
 }
 
 /**
@@ -83,6 +85,7 @@ export function SheetLayer({
       className="sheet-control"
       role={c.checked === undefined ? undefined : 'radio'}
       aria-checked={c.checked}
+      aria-current={c.current ? 'true' : undefined}
       data-testid={c.testId}
       data-autofocus={c.autoFocus ? '' : undefined}
       onPointerDown={() => (sheetUi.press = c.id)}

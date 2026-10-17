@@ -221,6 +221,17 @@ describe('pickNext', () => {
     expect(pickNext({ a }, ['b', 'a', 'c'], now, () => 0)).toBe('a');
   });
 
+  it('introduces unseen items in a window of 3 in curriculum order, and an overdue card still comes first', () => {
+    const ids = ['a', 'b', 'c', 'd', 'e'];
+    expect(pickNext({}, ids, T0, () => 0)).toBe('a');
+    const seenA = review(newCard('a', T0), 5, T0, 1000); // due T0 + 20s
+    expect(pickNext({ a: seenA }, ids, T0, () => 0)).toBe('b');
+    const seenB = review(newCard('b', T0), 5, T0, 1000);
+    expect(pickNext({ a: seenA, b: seenB }, ids, T0, () => 0)).toBe('c');
+    // Overdue beats unseen.
+    expect(pickNext({ a: seenA }, ids, T0 + 5 * 60_000, () => 0)).toBe('a');
+  });
+
   it('prefers the most overdue / hardest due card', () => {
     const easy = passN(newCard('easy', T0), 5);
     let hard = newCard('hard', T0);

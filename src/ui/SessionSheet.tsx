@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { stageProgress } from '../game/unlocks';
+import { stageLabel, stageProgress } from '../game/stages';
 import { usePalace } from '../store';
 import { SheetLayer } from './SheetLayer';
 import { type SheetItem, type SheetRect, SHEET_WIDTH } from './sheet';
@@ -27,8 +27,10 @@ export function SessionSheet() {
   ];
   const figure = session.answered ? `${pct}%` : '—';
   const caption = session.answered ? `${session.correct} of ${session.answered} named` : 'Nothing answered';
-  const roomLabel = session.opened ? 'Opened' : 'Room';
-  const roomName = session.opened || stage.title;
+  // The stage in play; if this sitting carried it over the bar, it says so, with its gilt mark.
+  const masteredNow = session.mastered.includes(stage.id);
+  const roomLabel = masteredNow ? 'Mastered' : prog.mastered ? 'Stage \u00b7 mastered' : 'Stage';
+  const roomName = stageLabel(stage);
   const toward = Math.round(prog.toward * 100) / 100;
 
   const geom = useMemo(() => {
@@ -53,6 +55,7 @@ export function SessionSheet() {
     items.push(
       { kind: 'text', text: roomLabel, x: -X, y: -1.78, size: 0.18, font: 'smcp', ink: 'soft' },
       { kind: 'text', text: roomName, x: -X, y: -2.04, size: 0.2, font: 'italic' },
+      ...(prog.mastered ? [{ kind: 'mark' as const, x: X - 0.06, y: -1.84, r: 0.06 }] : []),
       { kind: 'bar', y: -2.2, x0: -X, x1: X, fill: toward },
       { kind: 'text', text: 'Again', x: -0.72, y: -2.62, size: 0.27, font: 'smcp', align: 'center' },
       { kind: 'text', text: 'Leave', x: 0.72, y: -2.62, size: 0.27, font: 'smcp', ink: 'quiet', align: 'center' },
@@ -65,7 +68,7 @@ export function SessionSheet() {
     ];
     return { key: 'session', width: SHEET_WIDTH, height: HEIGHT, items, rects, monogram: true, seal: SEAL };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [today, figure, caption, roomLabel, roomName, toward, session.best, session.strengthened.length, session.slipped.length]);
+  }, [today, figure, caption, roomLabel, roomName, toward, prog.mastered, session.best, session.strengthened.length, session.slipped.length]);
 
   return (
     <SheetLayer
