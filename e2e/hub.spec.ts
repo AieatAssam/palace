@@ -224,6 +224,16 @@ test('a mastered stage presses a wax seal', async ({ page }) => {
   });
   await seed(page, save);
   await enterFretboard(page, 'nat-s0');
+  // The caption lives ~3.5 s of wall time; a slow CI runner can take longer than that between checks,
+  // so record it the moment it mounts rather than racing it.
+  await page.evaluate(() => {
+    const w = window as unknown as { __sealCaption?: string };
+    const grab = () => {
+      const el = document.querySelector('[data-testid="seal-caption"]');
+      if (el && !w.__sealCaption) w.__sealCaption = el.textContent ?? '';
+    };
+    new MutationObserver(grab).observe(document.body, { childList: true, subtree: true });
+  });
 
   // The caption lives for a few seconds: look for the seal straight after each answer, not after the next question arrives.
   for (let i = 0; i < 4; i++) {
@@ -235,8 +245,10 @@ test('a mastered stage presses a wax seal', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => window.__palace!.rewards().seal)).not.toBeNull();
   const seal = (await page.evaluate(() => window.__palace!.rewards().seal))!;
   expect(seal.title).toContain('Low E string');
-  await expect(page.getByTestId('seal-caption')).toBeVisible();
-  await expect(page.getByTestId('seal-caption')).toContainText('Mastered');
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __sealCaption?: string }).__sealCaption ?? ''))
+    .toMatch(/Mastered.*Low E string/);
+  await expect(page.getByTestId('reward-announce')).toContainText('Mastered');
   expect(await page.evaluate(() => window.__palace!.stages().find((s) => s.id === 'nat-s0')!.mastered)).toBe(true);
 });
 
