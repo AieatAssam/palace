@@ -5,7 +5,7 @@
 <h1 align="center">Palace</h1>
 
 <p align="center"><b>A memory palace in rosewood, brass and leather.</b><br>
-Four rooms, four kinds of memory, one walnut desk.</p>
+Six rooms, six kinds of memory, one walnut desk.</p>
 
 <p align="center"><a href="https://aieatassam.github.io/palace/"><b>▶&nbsp;&nbsp;Play in your browser</b></a><br>
 <sub>Free. No account, no install. Phone or desktop.</sub></p>
@@ -42,11 +42,15 @@ Meet a cast of sitters, each an oil portrait in a gilt frame with a name and som
   <img src="docs/screenshots/phone-hub.webp" alt="The hub on a phone, two plates a row" width="32%">
 </p>
 
-**In the workshop:** Ledger (long numbers) and N-Back (a corridor of repeats). Their plates already sit on the card; open one to see what it will train.
+### V · Ledger
+An oxblood account book lies open on the desk. A clerk writes a number in copperplate ink and blots the page, and you key it back on ivory keys. Digit span writes one figure a second. Two stages teach the Major system: the ten consonant sounds, then a peg word for every pair from 00 to 99, picked by spaced repetition and asked both ways. The long-number stages write up to thirty figures at once, with the pegs pencilled under each pair or left for you to find. The left-hand page keeps the sitting's account by hand.
+
+### VI · N-Back
+Nine tiles sit in brass bezels on a walnut tray. One turns over each beat to show its pearl face. Call Tile when it matches the one n turns back. Stages run one, two and three back, then dual two back, where a bell rings with each tile and you call Bell as well. A run scores matches caught against matches missed and wrong calls.
 
 ## Rewards
 
-- **Flourish.** Five right in a row, in any room, writes a word in Pinyon Script: *Bravo*, then *Splendid*, *Superb*, *Bravissimo*. In Echo and Blocks a clean line counts as one.
+- **Flourish.** Five right in a row, in any room, writes a word in Pinyon Script: *Bravo*, then *Splendid*, *Superb*, *Bravissimo*. In Echo, Blocks and the Ledger's spans a clean line counts as one; in N-Back, each match caught.
 - **Gold leaf.** The same milestone throws torn gold scraps up from the place you answered. They flash as they turn and drift down.
 - **Chime.** A brass chime strikes at each milestone, a step higher on a pentatonic scale each time the run goes on.
 - **Combo meter.** A slim brass bar beside your run fills toward the next milestone.
@@ -55,7 +59,7 @@ Meet a cast of sitters, each an oil portrait in a gilt frame with a name and som
 
 Every stage in every room is open from your first visit. Choose where to start.
 
-Turn on reduce motion (in your OS or the settings sheet) and the gold leaf stays away and the seal sets down without travel. A screen reader hears each reward once. You can play by keyboard: arrow keys and Enter on the neck and the blotter, number keys for the bells and the Faces choices.
+Turn on reduce motion (in your OS or the settings sheet) and the gold leaf stays away and the seal sets down without travel. A screen reader hears each reward once. You can play by keyboard: arrow keys and Enter on the neck and the blotter, number keys for the bells, the Faces choices and the Ledger's figures, A and L for the N-Back calls.
 
 ---
 
@@ -63,7 +67,7 @@ Turn on reduce motion (in your OS or the settings sheet) and the gold leaf stays
 
 **Stack.** React 19, TypeScript, Vite, three.js through react-three-fiber and drei, Zustand. Web Audio makes every sound: a Karplus–Strong pluck for the strings, additive synthesis for bells and chimes. Type is EB Garamond, self-hosted.
 
-**Layout.** `src/modes/catalog.ts` lists the six rooms as data and `src/modes/registry.tsx` registers the four that are built. Fretboard lives in `src/game` and `src/three`; the others in `src/echo`, `src/blocks` and `src/faces`. Shared rewards sit in `src/rewards`, and the spaced-repetition scheduler (an SM-2 variant with in-session learning steps) in `src/game/srs.ts`.
+**Layout.** `src/modes/catalog.ts` lists the six rooms as data and `src/modes/registry.tsx` registers each room. Fretboard lives in `src/game` and `src/three`; the others in `src/echo`, `src/blocks`, `src/faces`, `src/ledger` and `src/nback`. Shared rewards sit in `src/rewards`, and the spaced-repetition scheduler (an SM-2 variant with in-session learning steps) in `src/game/srs.ts`.
 
 ```sh
 npm install

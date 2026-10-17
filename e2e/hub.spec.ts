@@ -1,7 +1,6 @@
 import { type Page, expect, test } from '@playwright/test';
 
 const ROOMS = ['fretboard', 'echo', 'blocks', 'faces', 'ledger', 'nback'] as const;
-const WORKSHOP_ROOMS = ['ledger', 'nback'] as const;
 const DAY = 86_400_000;
 
 /** Seed the fretboard save before the app loads, once per tab (a reload keeps the player's own data). */
@@ -46,6 +45,8 @@ async function openStages(page: Page) {
   await expect(room).toHaveClass(/placed/);
   await room.click();
   await expect(page.getByTestId('stages')).toBeVisible();
+  // The card's buttons ride the camera's dolly to the card; clicks wait for the camera to come to rest.
+  await expect.poll(() => page.evaluate(() => window.__palace!.cameraSettled()), { timeout: 20_000 }).toBe(true);
 }
 
 /** Click the correct note. With `settle`, wait until the next question has arrived (~700ms later). */
@@ -80,59 +81,40 @@ test('the hub loads with every room', async ({ page }) => {
   await expect(page.getByTestId('room-echo')).toHaveAccessibleName(/Echo/);
   await expect(page.getByTestId('room-blocks')).toHaveAccessibleName(/Blocks/);
   await expect(page.getByTestId('room-faces')).toHaveAccessibleName(/Faces/);
-  await expect(page.getByTestId('room-ledger')).toHaveAccessibleName(/workshop/);
+  await expect(page.getByTestId('room-ledger')).toHaveAccessibleName(/Ledger/);
+  await expect(page.getByTestId('room-nback')).toHaveAccessibleName(/N-Back/);
+  for (const id of ROOMS) {
+    const name = (await page.getByTestId(`room-${id}`).getAttribute('aria-label')) ?? '';
+    expect(name, `${id} plate`).not.toMatch(/workshop/i);
+  }
 
   const modes = await page.evaluate(() => window.__palace!.modes());
   expect(modes).toHaveLength(6);
-  expect(modes.filter((m) => m.open).map((m) => m.id)).toEqual(['fretboard', 'echo', 'blocks', 'faces']);
+  expect(modes.filter((m) => m.open).map((m) => m.id)).toEqual(['fretboard', 'echo', 'blocks', 'faces', 'ledger', 'nback']);
 });
 
-test('workshop rooms open a placeholder and come back', async ({ page }) => {
-  await page.goto('./');
-  await toHub(page);
-
-  await expect(page.getByTestId('room-ledger')).toHaveClass(/placed/);
-  await page.getByTestId('room-ledger').click();
-  await expect(page.getByTestId('workshop')).toBeVisible();
-  expect(await page.evaluate(() => window.__palace!.hubCard())).toBe('workshop:ledger');
-  await expect(page.getByTestId('workshop-back')).toHaveClass(/placed/);
-  await page.getByTestId('workshop-back').click();
-  await expect(page.getByTestId('workshop')).toBeHidden();
-  await expect(page.getByTestId('hub')).toBeVisible();
-
-  await expect(page.getByTestId('room-nback')).toHaveClass(/placed/);
-  await page.getByTestId('room-nback').click();
-  await expect(page.getByTestId('workshop')).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.getByTestId('workshop')).toBeHidden();
-  await expect(page.getByTestId('hub')).toBeVisible();
-});
-
-test('no room is gated: every workshop placeholder and the stage cards open', async ({ page }) => {
+test('every room opens its stage card, and none is a workshop placeholder', async ({ page }) => {
   // Six cards slide in and out, each on a CPU rasteriser: more than the default budget.
   test.setTimeout(120_000);
   await page.goto('./');
   await toHub(page);
 
-  for (const id of WORKSHOP_ROOMS) {
+  for (const id of ROOMS) {
     await expect(page.getByTestId(`room-${id}`)).toHaveClass(/placed/);
     await page.getByTestId(`room-${id}`).click();
-    await expect(page.getByTestId('workshop')).toBeVisible();
-    expect(await page.evaluate(() => window.__palace!.hubCard())).toBe(`workshop:${id}`);
-    await expect(page.getByTestId('workshop-back')).toHaveClass(/placed/);
-    await page.getByTestId('workshop-back').click();
+    await expect(page.getByTestId('stages')).toBeVisible();
+    expect(await page.evaluate(() => window.__palace!.hubCard())).toBe('stages');
     await expect(page.getByTestId('workshop')).toBeHidden();
+    await expect(page.getByTestId('stages-close')).toHaveClass(/placed/);
+    await page.getByTestId('stages-close').click();
+    await expect(page.getByTestId('stages')).toBeHidden();
     await expect(page.getByTestId('hub')).toBeVisible();
   }
-
-  await openStages(page);
-  await expect(page.getByTestId('stages-close')).toBeVisible();
-  await page.getByTestId('stages-close').click();
-  await expect(page.getByTestId('stages')).toBeHidden();
-  await expect(page.getByTestId('hub')).toBeVisible();
 });
 
 test('pick Fretboard and a stage from the hub', async ({ page }) => {
+  // Two stage cards, a round trip into play and back, on a CPU rasteriser.
+  test.setTimeout(75_000);
   await page.goto('./');
   await enterHub(page);
 
@@ -150,6 +132,7 @@ test('pick Fretboard and a stage from the hub', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => window.__palace!.screen())).toBe('hub');
 
   await openStages(page);
+  await expect(page.getByTestId('book-accidentals')).toHaveClass(/placed/);
   await page.getByTestId('book-accidentals').click();
   await expect(page.getByTestId('book-accidentals')).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByTestId('stage-acc-s0')).toHaveClass(/placed/);

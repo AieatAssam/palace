@@ -1229,3 +1229,91 @@ button:focus-visible {
     min-height: 50px;
   }
 }
+
+/* ---------------------------------------------------------------- Ledger */
+
+/* Ivory keys of a counting-house adding machine: a row of ten on a wide screen, two rows of five on a phone. */
+.ledger-keys {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(44px, 58px));
+  gap: 6px;
+  justify-content: center;
+}
+
+.ledger-key {
+  min-height: 52px;
+  font-size: 26px;
+  font-variant-numeric: oldstyle-nums;
+}
+
+.ledger-ready {
+  grid-column: 1 / -1;
+  justify-self: center;
+  min-width: 220px;
+  min-height: 48px;
+  font-size: 20px;
+}
+
+.ledger-key[aria-disabled='true'],
+.ledger-ready[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+@media (max-width: 760px) {
+  .ledger-keys {
+    grid-template-columns: repeat(5, 1fr);
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto;
+  }
+}
+
+/* ---------------------------------------------------------------- N-Back */
+
+/* Two broad ivory keys: Tile on the left, Bell on the right, each with its letter engraved small. */
+.nback-calls {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
+.nback-call {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 160px;
+  min-height: 64px;
+  font-size: 24px;
+  touch-action: manipulation;
+}
+
+.nback-key {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: #5a4a36;
+}
+
+.nback-call.called:not(.correct):not(.miss) {
+  --ring: 0 0 0 1.5px rgba(176, 141, 87, 0.9);
+}
+
+.nback-call[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+@media (max-width: 760px) {
+  .nback-calls {
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto;
+  }
+  .nback-call {
+    flex: 1;
+    min-width: 0;
+    min-height: 72px;
+  }
+}

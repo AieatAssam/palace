@@ -9,7 +9,11 @@ import { type EchoProgress, expectedOrder, echoProgress, ECHO_STAGES, wantedNow 
 import { type EchoPhase, type EchoSitting, lineRng, useEcho } from './echo/store';
 import { type Position, noteAt } from './game/notes';
 import { STAGES, regionPositions, stageProgress } from './game/stages';
+import { LEDGER_STAGES, type LedgerKind, type LedgerProgress, figuresFor, ledgerProgress, pegsFor, wordFor } from './ledger/logic';
+import { type LedgerPhase, type LedgerSitting, type LogEntry, useLedger } from './ledger/store';
 import { MODES } from './modes/catalog';
+import { NBACK_STAGES, type Channel, type NBackProgress, type Tally, isMatch, nbackProgress } from './nback/logic';
+import { type NBackPhase, type NBackSitting, useNBack } from './nback/store';
 import { type Combo, type DailyRecord, comboOf } from './rewards/logic';
 import { useRewards } from './rewards/store';
 import { type Screen, type SessionStats, usePalace } from './store';
@@ -72,6 +76,49 @@ export interface PalaceTestHooks {
   blocks: BlocksHooks;
   /** Faces: the cast, the sitter being met, the question. Choices are numbered from 1, in the order shown. */
   faces: FacesHooks;
+  /** Ledger: the number written, the question on the code, the player's place. */
+  ledger: LedgerHooks;
+  /** N-Back: the run, the trial under way, the calls and tallies. Tiles are numbered from 1 here. */
+  nback: NBackHooks;
+}
+
+export interface LedgerHooks {
+  state(): {
+    phase: LedgerPhase;
+    stage: { id: string; title: string; kind: LedgerKind; tempo: number; glosses: boolean };
+    digits: number[];
+    written: number;
+    done: number;
+    pegs: string[];
+    question: { kind: 'pick' | 'key'; item: number; word: string; figures: number[]; choices: string[] } | null;
+    log: LogEntry[];
+    sitting: LedgerSitting;
+    active: boolean;
+  };
+  /** What the ledger wants now: the next figure to key, the choice (1–4) to pick, or null. */
+  answer(): { figure: number } | { choice: number } | null;
+  stages(): ({ id: string; title: string; kind: LedgerKind } & LedgerProgress)[];
+  enter(stageId: string): void;
+}
+
+export interface NBackHooks {
+  state(): {
+    phase: NBackPhase;
+    stage: { id: string; title: string; n: number; channels: Channel[]; trials: number };
+    run: { place: number; tone: number }[];
+    at: number;
+    showing: boolean;
+    called: Record<Channel, boolean>;
+    tallies: Record<Channel, Tally>;
+    sitting: NBackSitting;
+    active: boolean;
+  };
+  /** The channels on which the trial under way matches n back. */
+  matches(): Channel[];
+  /** End the trial under way now. */
+  step(): void;
+  stages(): ({ id: string; title: string } & NBackProgress)[];
+  enter(stageId: string): void;
 }
 
 export interface FacesHooks {
@@ -295,6 +342,65 @@ export function installTestHooks() {
       endPause: () => useFaces.getState().endPause(),
       enter: (stageId) => {
         walkIn(() => useFaces.getState().chooseStage(stageId));
+      },
+    },
+    ledger: {
+      state: () => {
+        const l = useLedger.getState();
+        const st = l.stage();
+        const q = l.question;
+        return {
+          phase: l.phase,
+          stage: { id: st.id, title: st.title, kind: st.kind, tempo: st.tempo, glosses: st.glosses },
+          digits: [...l.digits],
+          written: l.written,
+          done: l.done,
+          pegs: pegsFor(l.digits),
+          question: q && { kind: q.kind, item: q.item, word: wordFor(st, q.item), figures: figuresFor(st, q.item), choices: q.choices.map((c) => wordFor(st, c)) },
+          log: l.log.map((e) => ({ ...e })),
+          sitting: { ...l.sitting },
+          active: l.active,
+        };
+      },
+      answer: () => {
+        const l = useLedger.getState();
+        const st = l.stage();
+        if (st.kind === 'span') return l.phase === 'recall' && l.done < l.digits.length ? { figure: l.digits[l.done]! } : null;
+        const q = l.question;
+        if (l.phase !== 'ask' || !q) return null;
+        if (q.kind === 'pick') return { choice: q.choices.indexOf(q.item) + 1 };
+        return { figure: figuresFor(st, q.item)[l.done]! };
+      },
+      stages: () => LEDGER_STAGES.map((st) => ({ id: st.id, title: st.title, kind: st.kind, ...ledgerProgress(st, useLedger.getState().record) })),
+      enter: (stageId) => {
+        walkIn(() => useLedger.getState().chooseStage(stageId));
+      },
+    },
+    nback: {
+      state: () => {
+        const b = useNBack.getState();
+        const st = b.stage();
+        return {
+          phase: b.phase,
+          stage: { id: st.id, title: st.title, n: st.n, channels: [...st.channels], trials: st.trials },
+          run: b.run.map((t) => ({ place: t.place + 1, tone: t.tone })),
+          at: b.at,
+          showing: b.showing,
+          called: { ...b.called },
+          tallies: { place: { ...b.tallies.place }, tone: { ...b.tallies.tone } },
+          sitting: { ...b.sitting },
+          active: b.active,
+        };
+      },
+      matches: () => {
+        const b = useNBack.getState();
+        const st = b.stage();
+        return st.channels.filter((ch) => isMatch(b.run, st.n, b.at, ch));
+      },
+      step: () => useNBack.getState().step(),
+      stages: () => NBACK_STAGES.map((st) => ({ id: st.id, title: st.title, ...nbackProgress(st, useNBack.getState().record) })),
+      enter: (stageId) => {
+        walkIn(() => useNBack.getState().chooseStage(stageId));
       },
     },
     blocks: {

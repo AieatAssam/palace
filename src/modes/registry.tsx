@@ -17,6 +17,18 @@ import { FacesStages } from '../faces/FacesStages';
 import { Gallery } from '../faces/Gallery';
 import { FACES_STAGES, facesMastered } from '../faces/logic';
 import { useFaces } from '../faces/store';
+import { LedgerBook } from '../ledger/LedgerBook';
+import { LedgerHud } from '../ledger/LedgerHud';
+import { LedgerSession } from '../ledger/LedgerSession';
+import { LedgerStages } from '../ledger/LedgerStages';
+import { LEDGER_STAGES, ledgerMastered } from '../ledger/logic';
+import { useLedger } from '../ledger/store';
+import { NBackHud } from '../nback/NBackHud';
+import { NBackSession } from '../nback/NBackSession';
+import { NBackStages } from '../nback/NBackStages';
+import { NBackTray } from '../nback/NBackTray';
+import { NBACK_STAGES, nbackMastered } from '../nback/logic';
+import { useNBack } from '../nback/store';
 import { STAGES, stageLabel, stageProgress } from '../game/stages';
 import { usePalace } from '../store';
 import { Fretboard } from '../three/Fretboard';
@@ -103,7 +115,25 @@ const faces: Room = {
   progress: () => ({ mastered: facesMastered(useFaces.getState().deck), total: FACES_STAGES.length }),
 };
 
-const ROOMS: Partial<Record<ModeId, Room>> = { fretboard, echo, blocks, faces };
+const ledger: Room = {
+  Scene: LedgerBook,
+  Overlay: LedgerHud,
+  StageCard: LedgerStages,
+  Session: LedgerSession,
+  stages: () => LEDGER_STAGES.map((s) => ({ id: s.id, title: s.title })),
+  progress: () => ({ mastered: ledgerMastered(useLedger.getState().record), total: LEDGER_STAGES.length }),
+};
+
+const nback: Room = {
+  Scene: NBackTray,
+  Overlay: NBackHud,
+  StageCard: NBackStages,
+  Session: NBackSession,
+  stages: () => NBACK_STAGES.map((s) => ({ id: s.id, title: s.title })),
+  progress: () => ({ mastered: nbackMastered(useNBack.getState().record), total: NBACK_STAGES.length }),
+};
+
+const ROOMS: Partial<Record<ModeId, Room>> = { fretboard, echo, blocks, faces, ledger, nback };
 
 /** Every room's progress, re-rendering when any room's record changes. */
 export function useRoomProgress(): Partial<Record<ModeId, RoomProgress>> {
@@ -111,6 +141,8 @@ export function useRoomProgress(): Partial<Record<ModeId, RoomProgress>> {
   useEcho((s) => s.record);
   useBlocks((s) => s.record);
   useFaces((s) => s.deck);
+  useLedger((s) => s.record);
+  useNBack((s) => s.record);
   const out: Partial<Record<ModeId, RoomProgress>> = {};
   for (const [id, room] of Object.entries(ROOMS) as [ModeId, Room][]) out[id] = room.progress();
   return out;
