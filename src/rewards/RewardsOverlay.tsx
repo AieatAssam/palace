@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { usePalace } from '../store';
 import { CAPTURE } from '../three/quality';
 import { SEAL_LIFE, sealNdc, sealRadiusPx, sealSpot } from './placement';
@@ -22,30 +22,25 @@ export function RewardsOverlay() {
 
   useEffect(() => {
     if (!flourishEvent) return;
+    // Like the seal caption, the word's life starts when it is first drawn (FlourishWord), not at the event.
     setFlourish(flourishEvent);
     setSaid(`${flourishEvent.word}. ${flourishEvent.streak} in a row.`);
-    const id = setTimeout(() => setFlourish((f) => (f?.id === flourishEvent.id ? null : f)), FLOURISH_MS);
-    return () => clearTimeout(id);
   }, [flourishEvent]);
+  const flourishDone = useCallback((id: number) => setFlourish((f) => (f?.id === id ? null : f)), []);
 
   useEffect(() => {
     if (!sealEvent) return;
+    // The caption's life starts when it is first drawn (see SealCaption), not when the event fires:
+    // on a slow device the frame that presses the seal can outlast the whole life.
     setSeal(sealEvent);
     setSaid(`Mastered: ${sealEvent.title}.`);
-    const id = setTimeout(() => setSeal((s) => (s?.id === sealEvent.id ? null : s)), SEAL_LIFE * 1000 * (CAPTURE ? 24 : 1));
-    return () => clearTimeout(id);
   }, [sealEvent]);
+  const sealDone = useCallback((id: number) => setSeal((s) => (s?.id === id ? null : s)), []);
 
   return (
     <>
-      {live && flourish && (
-        <div className="flourish" key={flourish.id} data-testid="flourish" data-tier={flourish.tier} aria-hidden>
-          <span className="flourish-word">{flourish.word}</span>
-          <span className="flourish-rule" />
-          <span className="flourish-run">{flourish.streak} in a row</span>
-        </div>
-      )}
-      {live && seal && <SealCaption key={seal.id} id={seal.id} title={seal.title} />}
+      {live && flourish && <FlourishWord key={flourish.id} flourish={flourish} onDone={flourishDone} />}
+      {live && seal && <SealCaption key={seal.id} id={seal.id} title={seal.title} onDone={sealDone} />}
       <p className="sr-only" aria-live="polite" data-testid="reward-announce">
         {said}
       </p>
@@ -53,8 +48,27 @@ export function RewardsOverlay() {
   );
 }
 
+/** The script word for a run; leaves FLOURISH_MS after it is first drawn. */
+function FlourishWord({ flourish, onDone }: { flourish: Flourish; onDone: (id: number) => void }) {
+  useEffect(() => {
+    const t = setTimeout(() => onDone(flourish.id), FLOURISH_MS);
+    return () => clearTimeout(t);
+  }, [flourish.id, onDone]);
+  return (
+    <div className="flourish" data-testid="flourish" data-tier={flourish.tier} aria-hidden>
+      <span className="flourish-word">{flourish.word}</span>
+      <span className="flourish-rule" />
+      <span className="flourish-run">{flourish.streak} in a row</span>
+    </div>
+  );
+}
+
 /** "Mastered" and the stage's name, set under the wax seal where the scene pressed it on the desk. */
-function SealCaption({ id, title }: { id: number; title: string }) {
+function SealCaption({ id, title, onDone }: { id: number; title: string; onDone: (id: number) => void }) {
+  useEffect(() => {
+    const t = setTimeout(() => onDone(id), SEAL_LIFE * 1000 * (CAPTURE ? 24 : 1));
+    return () => clearTimeout(t);
+  }, [id, onDone]);
   const [vw, vh] = [window.innerWidth, window.innerHeight];
   const fallback = () => {
     const ndc = sealNdc(vw, vh);

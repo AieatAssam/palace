@@ -18,7 +18,8 @@ export default defineConfig({
   // CI runners draw WebGL on the CPU at a few fps, so sheet slides alone take seconds per test.
   timeout: process.env.CI ? 60_000 : 30_000,
   expect: { timeout: 10_000 },
-  fullyParallel: false,
+  // CI: lets --shard split by test rather than by file; still one worker per runner.
+  fullyParallel: !!process.env.CI,
   // One worker: two CPU-rendered WebGL pages fighting over a small CI runner is what made runs flaky.
   workers: process.env.CI ? 1 : 2,
   retries: 0,

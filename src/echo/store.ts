@@ -4,6 +4,9 @@ import { bellScale, pairGain } from '../audio/bells';
 import { useRewards } from '../rewards/store';
 import { onResetProgress, usePalace } from '../store';
 import { CAPTURE } from '../three/quality';
+
+/** Source of randomness for new lines. Tests can swap in a seeded one via the test hooks. */
+export const lineRng: { current: () => number } = { current: Math.random };
 import { clearStrikes, markStrike as mark } from './fx';
 import {
   type EchoRecord,
@@ -179,7 +182,7 @@ export const useEcho = create<EchoState>()((set, get) => {
   };
 
   /** A fresh line at the stage's opening length. */
-  const freshLine = (st: EchoStage) => makeLine(st.start, st, Math.random);
+  const freshLine = (st: EchoStage) => makeLine(st.start, st, lineRng.current);
 
   const resetSitting = () => {
     clearTimers();
@@ -252,7 +255,7 @@ export const useEcho = create<EchoState>()((set, get) => {
           phase: 'slip',
           slip: { struck: bell, wanted: res.wanted, expected },
           recall: res.recall,
-          line: makeLine(length, st, Math.random),
+          line: makeLine(length, st, lineRng.current),
         });
         if (sitting.slips >= SLIPS_PER_SITTING) later(SLIP_PAUSE, () => usePalace.getState().endSession());
         else later(SLIP_PAUSE, () => playLine(250));
@@ -281,7 +284,7 @@ export const useEcho = create<EchoState>()((set, get) => {
           mastered: s.mastered || crossed,
           newBest: s.newBest || newBest,
         },
-        line: extendLine(line, st, Math.random),
+        line: extendLine(line, st, lineRng.current),
       });
       later(CLEAN_PAUSE, () => playLine(150));
     },

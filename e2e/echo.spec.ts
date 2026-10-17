@@ -11,9 +11,12 @@ async function enterHub(page: Page) {
 }
 
 /** Walk straight into Echo play on a stage, from any screen (fast path for every test but the UI one). */
-async function enterEcho(page: Page, stageId: string) {
+const CHORD_SEED = 1;
+
+async function enterEcho(page: Page, stageId: string, seed?: number) {
   await page.goto('./');
   await page.waitForFunction(() => !!window.__palace);
+  if (seed !== undefined) await page.evaluate((n) => window.__palace!.echo.seed(n), seed);
   await page.evaluate((id) => window.__palace!.echo.enter(id), stageId);
   await expect.poll(() => page.evaluate(() => window.__palace!.screen()), { timeout: 15_000 }).toBe('play');
   await expect.poll(() => page.evaluate(() => window.__palace!.echo.state().stage.id), { timeout: 15_000 }).toBe(stageId);
@@ -156,7 +159,8 @@ test.describe('Echo', () => {
 
   test('chord stage: both bells of a pair, in either order, count as one step', async ({ page }) => {
     test.setTimeout(45_000);
-    await enterEcho(page, 'chord');
+    // Seeded so the lines are known to contain a pair (unseeded, ~13% of runs saw none in four lines).
+    await enterEcho(page, 'chord', CHORD_SEED);
 
     let sawPair = false;
     let cleanLines = 0;
