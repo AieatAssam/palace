@@ -78,6 +78,8 @@ export interface EchoHooks {
   stages(): ({ id: string; title: string; bells: number } & EchoProgress)[];
   /** Page rectangles of the bell buttons, by bell number. */
   bells(): { bell: number; x: number; y: number; w: number; h: number }[];
+  /** Walk straight into Echo on a stage, from any screen, through the actions the hub uses (for fast tests). */
+  enter(stageId: string): void;
 }
 
 declare global {
@@ -158,6 +160,10 @@ export function installTestHooks() {
         return wantedNow(expectedOrder(e.line, e.stage().order), e.recall).map((b) => b + 1);
       },
       stages: () => ECHO_STAGES.map((st) => ({ id: st.id, title: st.title, bells: st.bells, ...echoProgress(st, useEcho.getState().record) })),
+      enter: (stageId) => {
+        if (s().screen !== 'hub') s().toHub();
+        useEcho.getState().chooseStage(stageId);
+      },
       bells: () => [...bellRects.entries()].sort((a, b) => a[0] - b[0]).map(([i, r]) => ({ bell: i + 1, ...r })),
     },
   };

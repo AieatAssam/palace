@@ -41,3 +41,15 @@ Scope: the new hub and rewards strings only (title kicker and line, room pitches
 | Room VI pitch (catalog) | Walk a corridor. Say when a place or tone repeats from n steps back. | Walk a corridor and call out each repeat n steps back. | Two sentences, 68 characters; one sentence now, and the repeat is named as the action. |
 
 Reviewed and kept: the title kicker "Six rooms / One open" (short, and "open" matches the catalog's built flag), the other pitches and trains labels, the hub drawn labels (Palace, in the workshop, the mastered count, Answered, Best run, Days, Settings) and the hub record sentence with its `${n} answered` pattern, the dialog label and room aria labels, the workshop kicker, label, Back, aria and hidden text, the flourish words (Bravo, Splendid, Superb, Bravissimo: none carries casino or gamer tone), the overlay captions and live-region lines (in a row, Mastered), the combo meter aria label and value text, and the Rooms button in the HUD.
+
+## Echo pass (night/echo)
+
+Scope: the Echo room's strings only (prompt titles and subs, bell and slip labels, meta labels, the stage card, the session sheet, the stage and room catalog entries, the Attract kicker). Each string was read against the stop-slop rules. The three changes below are the ones that failed; the rest were already terse.
+
+| Where | Before | After | Why |
+|---|---|---|---|
+| Stage card subtitle (EchoStages, drawn and hidden text) | Watch, listen, ring the line back. | Listen, then ring the line back. | Three-item list; the bells are heard, not watched. Two items, and the second clause matches the prompt "Ring it back." |
+| Room II pitch (catalog) | Brass bells ring a line; ring it back. | Hear a line of brass bells, then ring it back. | Semicolon-joined pair that repeats the prompt verb; "Hear ... then" matches the Faces pitch form. Still one sentence, 46 characters. |
+| Session figure when no line was rung (EchoSession) | — (em dash) | – (en dash) | Em dash removed. The en dash is the house glyph for ranges ("frets 0–4"); it stands in for an empty figure. |
+
+Reviewed and kept: the prompt titles (Listen., Ring it back., Ring it back, last first. at 25 characters, Rung true., Not that bell.) and their subs (Line of N, N of N, It ran ...), the bell and slip aria labels, the meta labels (Run, End, Clean lines in a row), the stage card kicker, Stages, nowLine and tally, the session rows and captions (Lines rung, Best on this stage, Slips, Longest line, Longest line, a new best, No line rung back, Mastered, Stage, Stage · mastered), the stage `short` and `note` fields (all `short` values 12 characters or fewer; notes read as plain description), the Echo trains label (Order and sequence, 18 characters), and the Attract kicker "Six rooms / Two open" (matches the open flag, as the hub pass kept it).

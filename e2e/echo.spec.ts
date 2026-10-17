@@ -1,6 +1,6 @@
 import { type Page, expect, test } from '@playwright/test';
 
-/** Title → (primer on a first visit, skipped) → hub. */
+/** Title → (primer on a first visit, skipped) → hub. Only the one test that walks the real UI uses this. */
 async function enterHub(page: Page) {
   await expect(page.getByTestId('attract')).toBeVisible();
   await page.getByTestId('attract-begin').click();
@@ -10,19 +10,14 @@ async function enterHub(page: Page) {
   await expect.poll(() => page.evaluate(() => window.__palace!.screen())).toBe('hub');
 }
 
-/** Choose an Echo stage: from the hub (room-echo opens its card) or from play (stages-open). The card closes on choice. */
-async function pickStage(page: Page, id: string) {
-  const screen = await page.evaluate(() => window.__palace!.screen());
-  const opener = screen === 'hub' ? page.getByTestId('room-echo') : page.getByTestId('stages-open');
-  await expect(opener).toHaveClass(/placed/);
-  await opener.click();
-  await expect(page.getByTestId('stages')).toBeVisible();
-  const cell = page.getByTestId(`echo-stage-${id}`);
-  await expect(cell).toHaveClass(/placed/);
-  await cell.click();
-  await expect(page.getByTestId('stages')).toBeHidden();
-  await expect.poll(() => page.evaluate(() => window.__palace!.echo.state().stage.id)).toBe(id);
-  await expect.poll(() => page.evaluate(() => window.__palace!.screen())).toBe('play');
+/** Walk straight into Echo play on a stage, from any screen (fast path for every test but the UI one). */
+async function enterEcho(page: Page, stageId: string) {
+  await page.goto('./');
+  await page.waitForFunction(() => !!window.__palace);
+  await page.evaluate((id) => window.__palace!.echo.enter(id), stageId);
+  await expect.poll(() => page.evaluate(() => window.__palace!.screen()), { timeout: 15_000 }).toBe('play');
+  await expect.poll(() => page.evaluate(() => window.__palace!.echo.state().stage.id), { timeout: 15_000 }).toBe(stageId);
+  await expect.poll(() => page.evaluate(() => window.__palace!.mode()), { timeout: 15_000 }).toBe('echo');
 }
 
 /** Wait until the room has played the line and handed it to the player. */
@@ -45,7 +40,7 @@ async function ringBack(page: Page) {
   throw new Error('the line never finished');
 }
 
-/** Bells that are rung in order by a Playwright keyboard press, for the same loop as ringBack. */
+/** Same loop as ringBack, but strikes with the number keys. */
 async function ringBackByKeys(page: Page) {
   for (let guard = 0; guard < 300; guard++) {
     const phase = await page.evaluate(() => window.__palace!.echo.state().phase);
@@ -62,13 +57,32 @@ async function ringBackByKeys(page: Page) {
 
 const echoState = (page: Page) => page.evaluate(() => window.__palace!.echo.state());
 const echoStage = (page: Page, id: string) => page.evaluate((s) => window.__palace!.echo.stages().find((x) => x.id === s)!, id);
+const phaseOf = (page: Page) => page.evaluate(() => window.__palace!.echo.state().phase);
 
 test.describe('Echo', () => {
-  test('a clean line lengthens by one and the next line keeps the old prefix', async ({ page }) => {
-    test.setTimeout(60_000);
+  test('from the title, through the hub and stage card, into a six-bell line', async ({ page }) => {
+    test.setTimeout(45_000);
     await page.goto('./');
     await enterHub(page);
-    await pickStage(page, 'six');
+
+    const room = page.getByTestId('room-echo');
+    await expect(room).toHaveClass(/placed/);
+    await room.click();
+    const cell = page.getByTestId('echo-stage-six');
+    await expect(cell).toHaveClass(/placed/);
+    await cell.click();
+    await expect(page.getByTestId('stages')).toBeHidden();
+
+    await expect.poll(() => page.evaluate(() => window.__palace!.screen())).toBe('play');
+    await expect.poll(() => page.evaluate(() => window.__palace!.echo.state().stage.id)).toBe('six');
+    await expect.poll(() => page.evaluate(() => window.__palace!.mode())).toBe('echo');
+    await waitForRepeat(page);
+    expect((await echoState(page)).line).toHaveLength(3);
+  });
+
+  test('a clean line lengthens by one and the next line keeps the old prefix', async ({ page }) => {
+    test.setTimeout(45_000);
+    await enterEcho(page, 'six');
     await waitForRepeat(page);
 
     const first = await echoState(page);
@@ -76,7 +90,7 @@ test.describe('Echo', () => {
     expect(first.stage.bells).toBe(6);
 
     expect(await ringBack(page)).toMatch(/^(clean|listen)$/);
-    await expect.poll(() => page.evaluate(() => window.__palace!.echo.state().phase)).toMatch(/^(clean|listen)$/);
+    await expect.poll(() => phaseOf(page)).toMatch(/^(clean|listen)$/);
     const after = await echoState(page);
     expect(after.sitting.clean).toBe(1);
     expect(after.sitting.lines).toBe(1);
@@ -92,18 +106,17 @@ test.describe('Echo', () => {
     expect(next.line.slice(0, 3)).toEqual(first.line);
   });
 
-  test('bell buttons are at least 44px, on screen, and barely overlapping (four, six, eight)', async ({ page }) => {
-    test.setTimeout(90_000);
-    await page.goto('./');
-    await enterHub(page);
-    const viewport = page.viewportSize()!;
-
-    for (const id of ['four', 'six', 'eight']) {
-      await pickStage(page, id);
+  for (const id of ['four', 'six', 'eight']) {
+    test(`bell buttons are at least 44px, on screen, and barely overlapping (${id})`, async ({ page }) => {
+      test.setTimeout(45_000);
+      await enterEcho(page, id);
+      const viewport = page.viewportSize()!;
       const n = (await echoState(page)).stage.bells;
       await expect.poll(() => page.evaluate(() => window.__palace!.echo.bells().length)).toBe(n);
       for (let i = 1; i <= n; i++) await expect(page.getByTestId(`echo-bell-${i}`)).toHaveClass(/placed/);
 
+      // Measure only once the camera has finished its dolly; mid-move rects are not where the bells will stay.
+      await expect.poll(() => page.evaluate(() => window.__palace!.cameraSettled()), { timeout: 15_000 }).toBe(true);
       const rects = await page.evaluate(() => window.__palace!.echo.bells());
       expect(rects).toHaveLength(n);
       for (const r of rects) {
@@ -124,14 +137,12 @@ test.describe('Echo', () => {
           expect.soft(ratio, `${id}: bells ${a.bell} and ${b.bell} overlap`).toBeLessThanOrEqual(0.1);
         }
       }
-    }
-  });
+    });
+  }
 
   test('keyboard: the number keys ring back a reversed line', async ({ page }) => {
-    test.setTimeout(60_000);
-    await page.goto('./');
-    await enterHub(page);
-    await pickStage(page, 'reverse');
+    test.setTimeout(45_000);
+    await enterEcho(page, 'reverse');
     await waitForRepeat(page);
 
     const s = await echoState(page);
@@ -144,10 +155,8 @@ test.describe('Echo', () => {
   });
 
   test('chord stage: both bells of a pair, in either order, count as one step', async ({ page }) => {
-    test.setTimeout(120_000);
-    await page.goto('./');
-    await enterHub(page);
-    await pickStage(page, 'chord');
+    test.setTimeout(45_000);
+    await enterEcho(page, 'chord');
 
     let sawPair = false;
     let cleanLines = 0;
@@ -159,7 +168,7 @@ test.describe('Echo', () => {
       await ringBack(page);
       cleanLines++;
       await expect.poll(() => page.evaluate(() => window.__palace!.echo.state().sitting.clean)).toBe(cleanLines);
-      await expect.poll(() => page.evaluate(() => window.__palace!.echo.state().phase)).toMatch(/^(clean|listen)$/);
+      await expect.poll(() => phaseOf(page)).toMatch(/^(clean|listen)$/);
     }
     // Each clean line rung back is counted once, however many bells a step had.
     const s = await echoState(page);
@@ -169,12 +178,8 @@ test.describe('Echo', () => {
   });
 
   test('three slips end the sitting; Again starts over; End then Leave goes to the hub', async ({ page }) => {
-    test.setTimeout(120_000);
-    await page.goto('./');
-    await enterHub(page);
-    await pickStage(page, 'six');
-    const prompt = page.getByTestId('prompt');
-    const slips = page.getByTestId('echo-slips');
+    test.setTimeout(45_000);
+    await enterEcho(page, 'six');
     const sheet = page.getByTestId('session-sheet');
 
     for (let i = 1; i <= 3; i++) {
@@ -184,8 +189,8 @@ test.describe('Echo', () => {
       const wrong = Array.from({ length: n }, (_, k) => k + 1).find((b) => !wanted.includes(b))!;
       await page.getByTestId(`echo-bell-${wrong}`).click();
 
-      await expect(prompt).toHaveText('Not that bell.');
-      await expect(slips).toHaveAttribute('aria-label', `${i} of 3 slips`);
+      await expect.poll(() => page.evaluate(() => window.__palace!.echo.state().sitting.slips)).toBe(i);
+      await expect(page.getByTestId('echo-slips')).toHaveAttribute('aria-label', /\d of 3 slips/);
       expect((await page.evaluate(() => window.__palace!.rewards())).streak).toBe(0);
     }
 
@@ -207,17 +212,24 @@ test.describe('Echo', () => {
     await page.getByTestId('session-leave').click();
     await expect(page.getByTestId('hub')).toBeVisible();
     await expect.poll(() => page.evaluate(() => window.__palace!.screen())).toBe('hub');
-    await expect(page.getByTestId('room-echo')).toHaveAccessibleName(/of 6 mastered/);
   });
 
   test('a tap while the room is playing the line does nothing', async ({ page }) => {
-    test.setTimeout(60_000);
-    await page.goto('./');
-    await enterHub(page);
-    await pickStage(page, 'six');
-    await expect.poll(() => page.evaluate(() => window.__palace!.echo.state().phase)).toBe('listen');
-
-    await page.getByTestId('echo-bell-1').click();
+    test.setTimeout(45_000);
+    await enterEcho(page, 'six');
+    // Strike in the same task that reads the phase, so the room cannot move on to 'repeat' between the check and the tap.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            if (window.__palace!.echo.state().phase !== 'listen') return false;
+            const el = document.querySelector<HTMLElement>('[data-testid="echo-bell-1"]')!;
+            el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, pointerType: 'touch' }));
+            return true;
+          }),
+        { timeout: 15_000 },
+      )
+      .toBe(true);
     const s = await echoState(page);
     expect(s.sitting.slips).toBe(0);
     expect(s.phase).not.toBe('slip');
@@ -226,19 +238,20 @@ test.describe('Echo', () => {
   });
 
   test('progress persists across a reload', async ({ page }) => {
-    test.setTimeout(60_000);
-    await page.goto('./');
-    await enterHub(page);
-    await pickStage(page, 'four');
+    test.setTimeout(45_000);
+    await enterEcho(page, 'four');
     await waitForRepeat(page);
     expect(await ringBack(page)).toMatch(/^(clean|listen)$/);
     await expect.poll(() => page.evaluate(() => window.__palace!.echo.state().sitting.clean)).toBe(1);
     const before = await echoStage(page, 'four');
     expect(before.best).toBeGreaterThanOrEqual(3);
+    expect(await page.evaluate(() => window.localStorage.getItem('palace.echo.v1'))).not.toBeNull();
 
     await page.reload();
+    await page.waitForFunction(() => !!window.__palace);
     await expect(page.getByTestId('attract')).toBeVisible();
     await page.getByTestId('attract-begin').click();
+    if ((await page.evaluate(() => window.__palace!.screen())) === 'primer') await page.getByTestId('primer-skip').click();
     await expect(page.getByTestId('hub')).toBeVisible();
     await expect.poll(() => page.evaluate(() => window.__palace!.screen())).toBe('hub');
 

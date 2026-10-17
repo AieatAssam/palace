@@ -24,7 +24,7 @@ export function EchoSession() {
     ['Best on this stage', String(prog.best)],
     ['Slips', String(sitting.slips)],
   ];
-  const figure = sitting.longest ? String(sitting.longest) : '—';
+  const figure = sitting.longest ? String(sitting.longest) : '–';
   const caption = sitting.longest ? (sitting.newBest ? 'Longest line, a new best' : 'Longest line') : 'No line rung back';
   const roomLabel = sitting.mastered ? 'Mastered' : prog.mastered ? 'Stage · mastered' : 'Stage';
   const toward = Math.round(prog.toward * 100) / 100;

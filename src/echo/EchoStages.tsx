@@ -33,7 +33,7 @@ export function EchoStages() {
     const items: SheetItem[] = [
       { kind: 'text', text: 'Palace · Echo', x: 0, y: TOP - 0.55, size: 0.17, font: 'smcp', ink: 'soft', align: 'center' },
       { kind: 'text', text: 'Stages', x: 0, y: TOP - 1.08, size: 0.5, font: 'italic', ink: 'gilt', align: 'center' },
-      { kind: 'text', text: 'Watch, listen, ring the line back.', x: 0, y: TOP - 1.5, size: 0.17, font: 'italic', ink: 'soft', align: 'center' },
+      { kind: 'text', text: 'Listen, then ring the line back.', x: 0, y: TOP - 1.5, size: 0.17, font: 'italic', ink: 'soft', align: 'center' },
       { kind: 'rule', y: TOP - 1.76, x0: -X, x1: X, weight: 'double' },
     ];
     const rects: SheetRect[] = [];
@@ -81,7 +81,7 @@ export function EchoStages() {
   return (
     <SheetLayer geom={geom} controls={controls} testId="stages" label="Echo stages" onEscape={close} onBackdrop={close}>
       <h2>Echo stages</h2>
-      <p>Watch, listen, ring the line back.</p>
+      <p>Listen, then ring the line back.</p>
       <p>{nowLine}</p>
       <p>{tally}</p>
     </SheetLayer>
