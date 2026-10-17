@@ -32,12 +32,12 @@ export function Attract() {
     >
       <div className="attract-block">
         <p className="attract-kicker">
-          <span>Nº I</span> The Fretboard Room
+          <span>Six rooms</span> One open
         </p>
         <h1 id="attract-title" className="wordmark-large">
           Palace
         </h1>
-        <p className="attract-line">Learn the neck.</p>
+        <p className="attract-line">Each room trains a different kind of memory.</p>
         <span className="attract-rule" aria-hidden />
         <button className="text-action attract-action" onClick={begin} data-testid="attract-begin" autoFocus>
           {returning ? 'Continue' : 'Begin'}

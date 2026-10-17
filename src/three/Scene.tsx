@@ -8,12 +8,13 @@ import { isCalm } from '../motion';
 import { usePalace } from '../store';
 import { useSheet } from '../ui/sheet';
 import { DESK_Y, Desk, SHADOW_Y } from './Desk';
-import { Fretboard } from './Fretboard';
+import { activeRoom } from '../modes/registry';
+import { Rewards3D } from '../rewards/Rewards3D';
 import { COLORS } from './palette';
 import { BOARD_THICKNESS, followWindow, fretX, markerPoint, markerX, neckMatrix, stringPoint, neckToWorld, positionsSpan, regionBounds, regionSpan } from './layout';
 import { COARSE, LITE, CAPTURE } from './quality';
 import { Sheet } from './Sheet';
-import { cameraState, focusPoint, renderInfo, setInspector, setProjector, sheetPose, useNeckWindow, useView } from './view';
+import { cameraState, focusPoint, renderInfo, setInspector, setProjector, setRewardAnchor, sheetPose, useNeckWindow, useView } from './view';
 
 const FOV = 30;
 
@@ -497,6 +498,18 @@ function NeckRig({ children }: { children: React.ReactNode }) {
       const rect = gl.domElement.getBoundingClientRect();
       return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height };
     });
+    // Rewards rise from the place just plucked (or the question's place before any answer).
+    setRewardAnchor((out) => {
+      const g = group.current;
+      if (!g) return false;
+      const st = usePalace.getState();
+      const q = st.question;
+      const p = st.lastPluck && !st.lastPluck.quiet ? st.lastPluck.position : q.kind === 'find' ? q.targets[0] : q.position;
+      if (!p) return false;
+      g.updateWorldMatrix(true, false);
+      out.set(...markerPoint(p)).applyMatrix4(g.matrixWorld);
+      return true;
+    });
     setInspector(() => {
       const g = group.current;
       if (!g) return null;
@@ -556,6 +569,7 @@ function NeckRig({ children }: { children: React.ReactNode }) {
     return () => {
       setProjector(null);
       setInspector(null);
+      setRewardAnchor(null);
     };
   }, [camera, gl]);
 
@@ -658,6 +672,7 @@ function Effects({ tier }: { tier: Quality['tier'] }) {
 export function Scene() {
   const [quality, setQuality] = useState<Quality>(initialQuality);
   const leftHanded = usePalace((s) => s.saved.settings.leftHanded);
+  const RoomScene = activeRoom(usePalace((s) => s.saved.modeId)).Scene;
   const maxDpr = quality.dpr;
 
   return (
@@ -688,8 +703,9 @@ export function Scene() {
       <Sheet />
       <NeckRig>
         <Desk />
-        <Fretboard />
+        <RoomScene />
       </NeckRig>
+      <Rewards3D />
       {/* A single soft contact shadow on the desk (no realtime shadow maps). */}
       <ContactShadowsForNeck key={String(leftHanded)} />
       <Effects tier={quality.tier} />

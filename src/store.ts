@@ -4,7 +4,9 @@ import { type Question, makeQuestion } from './game/drills';
 import { type NoteName, type Position, samePosition } from './game/notes';
 import { type Deck, ensureCards, gradeFromResponse, review } from './game/srs';
 import { type SavedState, type Settings, emptyState, loadState, saveState } from './game/storage';
-import { type Stage, inRegion, stageById, stageProgress } from './game/stages';
+import { type Stage, inRegion, stageById, stageLabel, stageProgress } from './game/stages';
+import { type ModeId, modeInfo } from './modes/catalog';
+import { useRewards } from './rewards/store';
 
 export type Feedback =
   | { kind: 'correct'; at: number; chosen?: NoteName }
@@ -39,9 +41,9 @@ export interface SessionStats {
 
 /**
  * Where the player is. The 3D desk is always behind; screens are ink over it.
- * attract → (primer, first visit) → play → session sheet → play | attract.
+ * attract → (primer, first visit) → hub → (a room's stage card) → play → session sheet → play | hub.
  */
-export type Screen = 'attract' | 'primer' | 'play' | 'session';
+export type Screen = 'attract' | 'primer' | 'hub' | 'play' | 'session';
 
 /** Answers per sitting before the session sheet closes the page. */
 export const SESSION_LENGTH = 10;
@@ -57,8 +59,10 @@ function addOnce(list: string[], id: string) {
 interface PalaceState {
   saved: SavedState;
   screen: Screen;
-  /** The stage card is open on the desk (over play). */
+  /** The stage card is open on the desk (over play, or over the hub). */
   stagesOpen: boolean;
+  /** The hub's card for a room still in the workshop. */
+  workshop: ModeId | null;
   question: Question;
   askedAt: number;
   feedback: Feedback | null;
@@ -76,19 +80,24 @@ interface PalaceState {
   chooseStage(id: string): void;
   openStages(): void;
   closeStages(): void;
+  /** Hub: a built room opens its stage card; a workshop room its placeholder card. */
+  openRoom(id: ModeId): void;
+  closeWorkshop(): void;
+  /** Back to the hub from play. */
+  toHub(): void;
   answerName(note: NoteName): void;
   tapPosition(p: Position): void;
   nextQuestion(): void;
-  /** Attract → primer (first visit) or play. */
+  /** Attract → primer (first visit) or the hub. */
   begin(): void;
-  /** Primer finished or skipped: remember it, then play. */
+  /** Primer finished or skipped: remember it, then the hub. */
   completePrimer(): void;
   replayPrimer(): void;
   /** Close the page: the session sheet. */
   endSession(): void;
   /** Session sheet → a fresh sitting. */
   again(): void;
-  /** Session sheet → back to the title. */
+  /** Session sheet → back to the hub. */
   leave(): void;
   /** Idle string shimmer, silent and ungraded. */
   shimmer(p: Position): void;
@@ -141,6 +150,10 @@ export const usePalace = create<PalaceState>()((set, get) => {
     const crossed = !stageProgress(stage, saved.deck).mastered && stageProgress(stage, deck).mastered;
     const next: SavedState = { ...saved, deck };
     persist(next);
+    // Shared rewards: the run, flourishes and the daily record; a wax seal for a stage just mastered.
+    const rewards = useRewards.getState();
+    if (rewards.answer(correct)) buzz(24);
+    if (crossed) rewards.mastered(stageLabel(stage));
     const s = get().session;
     const streak = correct ? s.streak + 1 : 0;
     set({
@@ -160,7 +173,8 @@ export const usePalace = create<PalaceState>()((set, get) => {
   /** Enter play: keep a question nobody has touched yet (restarting its clock), otherwise draw the next. */
   const startPlay = () => {
     const { locked, feedback, found } = get();
-    set({ screen: 'play', session: emptySession() });
+    useRewards.getState().startRun();
+    set({ screen: 'play', stagesOpen: false, workshop: null, session: emptySession() });
     if (locked || feedback || found.length) get().nextQuestion();
     else set({ askedAt: now() });
   };
@@ -178,6 +192,7 @@ export const usePalace = create<PalaceState>()((set, get) => {
     saved: initial,
     screen: 'attract',
     stagesOpen: false,
+    workshop: null,
     question: firstQuestion,
     askedAt: now(),
     feedback: null,
@@ -193,10 +208,15 @@ export const usePalace = create<PalaceState>()((set, get) => {
     chooseStage(id) {
       const stage = stageById(id);
       clearTimeout(advanceTimer);
-      const saved = { ...get().saved, stageId: stage.id };
+      const same = stage.id === get().saved.stageId;
+      const saved = { ...get().saved, stageId: stage.id, modeId: 'fretboard' as const };
       persist(saved);
       set({ saved, stagesOpen: false, lastMiss: null });
-      get().nextQuestion();
+      // From the hub, choosing a stage walks into the room; the stage left on the desk keeps its untouched question.
+      if (get().screen === 'hub') {
+        if (!same) get().nextQuestion();
+        startPlay();
+      } else get().nextQuestion();
     },
 
     openStages() {
@@ -207,7 +227,23 @@ export const usePalace = create<PalaceState>()((set, get) => {
     closeStages() {
       set({ stagesOpen: false });
       // A question answered just before the card opened still needs its successor.
-      if (get().locked) scheduleNext(200);
+      if (get().screen === 'play' && get().locked) scheduleNext(200);
+    },
+
+    openRoom(id) {
+      if (get().screen !== 'hub') return;
+      if (modeInfo(id).open) set({ stagesOpen: true, workshop: null });
+      else set({ workshop: id, stagesOpen: false });
+    },
+
+    closeWorkshop() {
+      set({ workshop: null });
+    },
+
+    toHub() {
+      clearTimeout(advanceTimer);
+      useRewards.getState().refreshDay();
+      set({ screen: 'hub', stagesOpen: false, workshop: null, session: emptySession(), feedback: null, found: [], locked: false });
     },
 
     nextQuestion() {
@@ -281,14 +317,14 @@ export const usePalace = create<PalaceState>()((set, get) => {
     begin() {
       unlockAudio();
       if (!get().saved.onboarded) set({ screen: 'primer' });
-      else startPlay();
+      else get().toHub();
     },
 
     completePrimer() {
       const saved = { ...get().saved, onboarded: true };
       persist(saved);
       set({ saved });
-      startPlay();
+      get().toHub();
     },
 
     replayPrimer() {
@@ -306,8 +342,7 @@ export const usePalace = create<PalaceState>()((set, get) => {
     },
 
     leave() {
-      clearTimeout(advanceTimer);
-      set({ screen: 'attract', stagesOpen: false, session: emptySession(), feedback: null, found: [], locked: false });
+      get().toHub();
     },
 
     shimmer(p) {

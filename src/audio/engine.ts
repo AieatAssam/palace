@@ -1,4 +1,5 @@
 import { type Position, frequencyAt, positionKey } from '../game/notes';
+import { BEAT_HZ, BELL_PARTIALS, type ChimeKind, chimeNotes } from './chime';
 import { karplusStrong } from './karplus';
 
 /**
@@ -103,6 +104,44 @@ export function knock() {
   g.gain.value = 0.35;
   src.connect(lp).connect(g).connect(master);
   src.start();
+}
+
+/**
+ * A brass chime (see `chime.ts`): a milestone in a run, or a stage mastered. Quiet under
+ * the plucks, bright on top; silent when the player has turned sound off.
+ */
+export function chime(kind: ChimeKind, tier = 1) {
+  if (!enabled) return;
+  const c = context();
+  if (!c || !master) return;
+  const t0 = c.currentTime + 0.01;
+  const air = c.createBiquadFilter();
+  air.type = 'lowpass';
+  air.frequency.value = 7000;
+  const bus = c.createGain();
+  bus.gain.value = kind === 'mastered' ? 0.2 : 0.16;
+  bus.connect(air).connect(master);
+  for (const note of chimeNotes(kind, tier)) {
+    for (const p of BELL_PARTIALS) {
+      const f = note.freq * p.ratio;
+      if (f > 12000) continue;
+      const ring = p.ring * (kind === 'mastered' ? 1.4 : 1);
+      const g = c.createGain();
+      const at = t0 + note.delay;
+      // A soft strike (3 ms) then an exponential ring to silence.
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(note.gain * p.gain * 0.5, at + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + ring);
+      g.connect(bus);
+      for (const d of [-BEAT_HZ / 2, BEAT_HZ / 2]) {
+        const o = c.createOscillator();
+        o.frequency.value = f + d;
+        o.connect(g);
+        o.start(at);
+        o.stop(at + ring + 0.05);
+      }
+    }
+  }
 }
 
 export function haptic(ms = 10) {

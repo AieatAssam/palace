@@ -1,5 +1,8 @@
 import { type Position, noteAt } from './game/notes';
 import { STAGES, regionPositions, stageProgress } from './game/stages';
+import { MODES } from './modes/catalog';
+import { type Combo, type DailyRecord, comboOf } from './rewards/logic';
+import { useRewards } from './rewards/store';
 import { type Screen, type SessionStats, usePalace } from './store';
 import { type HighlightReport, type NeckWindow, cameraState, inspectHighlight, projectPosition, renderInfo, useNeckWindow } from './three/view';
 
@@ -24,8 +27,15 @@ export interface PalaceTestHooks {
   positions(): (Position & { note: string })[];
   leftHanded(): boolean;
   session(): SessionStats;
-  /** attract | primer | play | session. */
+  /** attract | primer | hub | play | session. */
   screen(): Screen;
+  /** The room on the desk, and every room the hub lists (open or in the workshop). */
+  mode(): string;
+  modes(): { id: string; title: string; open: boolean }[];
+  /** The hub's open card, if any: a room's stage card or a workshop room's card. */
+  hubCard(): 'stages' | `workshop:${string}` | null;
+  /** Shared rewards: the run, its combo, today's record, the last flourish, the last gilt burst (event id, 0 = none) and the last seal. */
+  rewards(): { streak: number; combo: Combo; daily: DailyRecord; flourish: { word: string; streak: number; tier: number; id: number } | null; burstId: number; seal: { title: string; id: number } | null };
   /** Find-all positions found so far in the current question. */
   found(): Position[];
   /** The last position a tap on the neck resolved to (Name-it plucks it, ungraded). */
@@ -74,6 +84,21 @@ export function installTestHooks() {
     leftHanded: () => s().saved.settings.leftHanded,
     session: () => s().session,
     screen: () => s().screen,
+    mode: () => s().saved.modeId,
+    modes: () => MODES.map((m) => ({ id: m.id, title: m.title, open: m.open })),
+    hubCard: () => (s().screen !== 'hub' ? null : s().stagesOpen ? 'stages' : s().workshop ? (`workshop:${s().workshop}` as const) : null),
+    rewards: () => {
+      const r = useRewards.getState();
+      const f = r.flourish;
+      return {
+        streak: r.streak,
+        combo: comboOf(r.streak),
+        daily: { ...r.daily },
+        flourish: f && { word: f.word, streak: f.streak, tier: f.tier, id: f.id },
+        burstId: r.burst?.id ?? 0,
+        seal: r.seal && { title: r.seal.title, id: r.seal.id },
+      };
+    },
     found: () => s().found,
     lastTap: () => {
       const p = s().lastPluck;
