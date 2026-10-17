@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { usePalace } from '../store';
 import { CAPTURE } from '../three/quality';
 import { SEAL_LIFE, sealNdc, sealRadiusPx, sealSpot } from './placement';
@@ -30,11 +30,12 @@ export function RewardsOverlay() {
 
   useEffect(() => {
     if (!sealEvent) return;
+    // The caption's life starts when it is first drawn (see SealCaption), not when the event fires:
+    // on a slow device the frame that presses the seal can outlast the whole life.
     setSeal(sealEvent);
     setSaid(`Mastered: ${sealEvent.title}.`);
-    const id = setTimeout(() => setSeal((s) => (s?.id === sealEvent.id ? null : s)), SEAL_LIFE * 1000 * (CAPTURE ? 24 : 1));
-    return () => clearTimeout(id);
   }, [sealEvent]);
+  const sealDone = useCallback((id: number) => setSeal((s) => (s?.id === id ? null : s)), []);
 
   return (
     <>
@@ -45,7 +46,7 @@ export function RewardsOverlay() {
           <span className="flourish-run">{flourish.streak} in a row</span>
         </div>
       )}
-      {live && seal && <SealCaption key={seal.id} id={seal.id} title={seal.title} />}
+      {live && seal && <SealCaption key={seal.id} id={seal.id} title={seal.title} onDone={sealDone} />}
       <p className="sr-only" aria-live="polite" data-testid="reward-announce">
         {said}
       </p>
@@ -54,7 +55,11 @@ export function RewardsOverlay() {
 }
 
 /** "Mastered" and the stage's name, set under the wax seal where the scene pressed it on the desk. */
-function SealCaption({ id, title }: { id: number; title: string }) {
+function SealCaption({ id, title, onDone }: { id: number; title: string; onDone: (id: number) => void }) {
+  useEffect(() => {
+    const t = setTimeout(() => onDone(id), SEAL_LIFE * 1000 * (CAPTURE ? 24 : 1));
+    return () => clearTimeout(t);
+  }, [id, onDone]);
   const [vw, vh] = [window.innerWidth, window.innerHeight];
   const fallback = () => {
     const ndc = sealNdc(vw, vh);
