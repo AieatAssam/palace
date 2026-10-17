@@ -143,3 +143,26 @@ let roomAnchor: ((out: Vector3) => boolean) | null = null;
 export function setRoomAnchor(fn: ((out: Vector3) => boolean) | null) {
   roomAnchor = fn;
 }
+
+/**
+ * The keyboard's place on the neck in Find-all and octaves: the arrow keys move it between
+ * strings and frets, Enter or Space picks it (see `ui/NeckKeys.tsx`), and the neck draws a
+ * brass frame round it. `shown` is false until a key moves it, and again once a pointer is used.
+ * `seq` changes on every move, so the phone's window of frets can follow it.
+ */
+export interface NeckCursor {
+  pos: Position | null;
+  shown: boolean;
+  seq: number;
+}
+export const useNeckCursor = create<NeckCursor & { move(p: Position): void; hide(): void }>()((set, get) => ({
+  pos: null,
+  shown: false,
+  seq: 0,
+  move(p) {
+    set({ pos: p, shown: true, seq: get().seq + 1 });
+  },
+  hide() {
+    if (get().shown) set({ shown: false });
+  },
+}));

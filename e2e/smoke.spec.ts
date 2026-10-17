@@ -2,14 +2,13 @@ import { type Page, expect, test } from '@playwright/test';
 
 type Pos = { string: number; fret: number };
 
-/** Attract → (primer on a first visit, skipped) → hub. */
-async function enterHub(page: Page) {
-  await expect(page.getByTestId('attract')).toBeVisible();
-  await page.getByTestId('attract-begin').click();
-  if ((await page.evaluate(() => window.__palace!.screen())) === 'primer') await page.getByTestId('primer-skip').click();
-  await expect(page.getByTestId('attract')).toBeHidden();
-  await expect(page.getByTestId('hub')).toBeVisible();
-  await expect.poll(() => page.evaluate(() => window.__palace!.screen())).toBe('hub');
+/** Straight into Fretboard play on a stage from a fresh load: skips the title, primer, hub and stage card. */
+async function enterFretboard(page: Page, stageId: string) {
+  await page.goto('./');
+  await page.waitForFunction(() => !!window.__palace);
+  await page.evaluate((id) => window.__palace!.fretboard.enter(id), stageId);
+  await expect.poll(() => page.evaluate(() => window.__palace!.screen()), { timeout: 15_000 }).toBe('play');
+  await expect.poll(() => page.evaluate(() => window.__palace!.stage().id), { timeout: 15_000 }).toBe(stageId);
 }
 
 /** Hub → Fretboard's stage card → the current stage's cell → play. */
@@ -31,12 +30,6 @@ async function playFromHub(page: Page) {
   await cell.click();
   await expect(page.getByTestId('stages')).toBeHidden();
   await expect.poll(() => page.evaluate(() => window.__palace!.screen())).toBe('play');
-}
-
-/** Attract → (primer on a first visit, skipped) → hub → current stage → play. */
-async function enterPlay(page: Page) {
-  await enterHub(page);
-  await playFromHub(page);
 }
 
 async function waitForFrames(page: Page, n = 10) {
@@ -74,34 +67,14 @@ async function fretInWindow(page: Page, fret: number) {
   }, fret);
 }
 
-/** Open the stage card, switch book if needed, and choose a stage (the card closes). */
-async function chooseStage(page: Page, id: string) {
-  await page.getByTestId('stages-open').click();
-  await expect(page.getByTestId('stages')).toBeVisible();
-  const book = id.startsWith('acc-') ? 'book-accidentals' : 'book-naturals';
-  const bookBtn = page.getByTestId(book);
-  await expect(bookBtn).toHaveClass(/placed/);
-  if ((await bookBtn.getAttribute('aria-checked')) !== 'true') await bookBtn.click();
-  await expect(bookBtn).toHaveAttribute('aria-checked', 'true');
-  const cell = page.getByTestId(`stage-${id}`);
-  await expect(cell).toHaveClass(/placed/);
-  await cell.click();
-  await expect(page.getByTestId('stages')).toBeHidden();
-  await expect.poll(() => page.evaluate(() => window.__palace!.stage().id)).toBe(id);
-}
-
 async function tapAt(page: Page, x: number, y: number) {
   if (test.info().project.name === 'phone') await page.touchscreen.tap(x, y);
   else await page.mouse.click(x, y);
 }
 
-test.beforeEach(async ({ page }) => {
-  await page.goto('./');
-});
-
 test('loads and renders the fretboard canvas', async ({ page }) => {
+  await enterFretboard(page, 'nat-s0');
   await expect(page).toHaveTitle(/Palace/);
-  await enterPlay(page);
   const canvas = page.locator('canvas');
   await expect(canvas).toBeVisible();
   const box = await canvas.boundingBox();
@@ -122,7 +95,7 @@ test('loads and renders the fretboard canvas', async ({ page }) => {
 
 test('answers a Name-it question through the UI', async ({ page }) => {
   test.setTimeout(60_000);
-  await enterPlay(page);
+  await enterFretboard(page, 'nat-s0');
   await waitForFrames(page);
   expect(await page.evaluate(() => window.__palace!.drill())).toBe('name');
   const first = await page.evaluate(() => window.__palace!.question());
@@ -144,9 +117,8 @@ test('answers a Name-it question through the UI', async ({ page }) => {
 });
 
 test('Find-all: tapping the neck finds a target', async ({ page }) => {
-  await enterPlay(page);
+  await enterFretboard(page, 'nat-find');
   await waitForFrames(page);
-  await chooseStage(page, 'nat-find');
   expect(await page.evaluate(() => window.__palace!.drill())).toBe('find');
   expect(await page.evaluate(() => window.__palace!.state().mode)).toBe('find');
   const targets = (await page.evaluate(() => window.__palace!.answer())) as Pos[];
@@ -168,8 +140,7 @@ test('every unlocked cell is tappable where it is drawn, with phone-sized string
   test.setTimeout(180_000); // many taps on a CPU rasteriser
   // A two-string stage, so the spacing check has adjacent strings to compare.
   await page.addInitScript((save) => localStorage.setItem('palace.fretboard.v1', save), seededSave('nat-p01', [], [], false));
-  await page.goto('./');
-  await enterPlay(page);
+  await enterFretboard(page, 'nat-p01');
   await waitForFrames(page);
   const positions = (await page.evaluate(() => window.__palace!.positions())).map(({ string, fret }) => ({ string, fret }));
   expect(new Set(positions.map((p) => p.string))).toEqual(new Set([0, 1]));
@@ -205,7 +176,7 @@ test('every unlocked cell is tappable where it is drawn, with phone-sized string
 
 test('toggles left-handed mode (mirrors the neck, persists)', async ({ page }) => {
   test.setTimeout(90_000); // includes a full reload on the CPU rasteriser
-  await enterPlay(page);
+  await enterFretboard(page, 'nat-s0');
   await waitForFrames(page);
   const probe = { string: 0, fret: 3 };
   const before = await settledProjection(page, probe);
@@ -241,7 +212,7 @@ test('toggles left-handed mode (mirrors the neck, persists)', async ({ page }) =
 
 test('the settings sheet is a real dialog: focus, Escape, and no slide under reduced motion', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await enterPlay(page);
+  await enterFretboard(page, 'nat-s0');
   await waitForFrames(page);
   await page.getByTestId('settings-open').click();
   const close = page.getByTestId('settings-close');
@@ -258,6 +229,7 @@ test('the settings sheet is a real dialog: focus, Escape, and no slide under red
 });
 
 test('primer buttons paint no browser border, outline or box when pressed or focused; targets stay 44px', async ({ page }) => {
+  await page.goto('./');
   await page.getByTestId('attract-begin').click();
   await expect(page.getByTestId('primer')).toBeVisible();
   const next = page.getByTestId('primer-next');
@@ -281,6 +253,7 @@ test('primer buttons paint no browser border, outline or box when pressed or foc
 });
 
 test('first visit: title, three-beat primer, then play without the wordmark', async ({ page }) => {
+  await page.goto('./');
   await expect(page.getByTestId('attract')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Palace' })).toBeVisible();
   await expect(page.getByTestId('attract-begin')).toHaveText('Begin');
@@ -307,7 +280,7 @@ test('first visit: title, three-beat primer, then play without the wordmark', as
 
 test('a full sitting closes on the session sheet; Again and Leave', async ({ page }) => {
   test.setTimeout(60_000);
-  await enterPlay(page);
+  await enterFretboard(page, 'nat-s0');
   await waitForFrames(page);
   for (let i = 0; i < 10; i++) {
     const q = await page.evaluate(() => window.__palace!.question());
@@ -363,8 +336,7 @@ const PROBES: Pos[] = [
 for (const leftHanded of [false, true]) {
   test(`the highlighted position matches the prompt (${leftHanded ? 'left' : 'right'}-handed)`, async ({ page }) => {
     await page.addInitScript((save) => localStorage.setItem('palace.fretboard.v1', save), seededSave(STAGE_NATURAL_ALL_STRINGS, ALL_0_5, PROBES, leftHanded));
-    await page.goto('./');
-    await enterPlay(page);
+    await enterFretboard(page, STAGE_NATURAL_ALL_STRINGS);
     await waitForFrames(page);
     expect(await page.evaluate(() => window.__palace!.leftHanded())).toBe(leftHanded);
     const names = ['low E', 'A', 'D', 'G', 'B', 'high E'];
@@ -396,7 +368,7 @@ for (const leftHanded of [false, true]) {
 
 test("choosing a stage on the stage card", async ({ page }) => {
   test.setTimeout(90_000);
-  await enterPlay(page);
+  await enterFretboard(page, 'nat-s0');
   await waitForFrames(page);
   await page.getByTestId('stages-open').click();
   const card = page.getByTestId('stages');
@@ -454,8 +426,7 @@ test('every stage is open, mastery shows', async ({ page }) => {
   }
   const save = JSON.stringify({ deck, stageId: 'nat-s0', settings: { leftHanded: false, sound: false }, onboarded: true });
   await page.addInitScript((s) => localStorage.setItem('palace.fretboard.v1', s), save);
-  await page.goto('./');
-  await enterPlay(page);
+  await enterFretboard(page, 'nat-s0');
   await waitForFrames(page);
 
   await page.getByTestId('stages-open').click();
@@ -475,9 +446,8 @@ test('every stage is open, mastery shows', async ({ page }) => {
 
 test('octave shapes', async ({ page }) => {
   test.setTimeout(120_000);
-  await enterPlay(page);
+  await enterFretboard(page, 'nat-oct');
   await waitForFrames(page);
-  await chooseStage(page, 'nat-oct');
   await expect.poll(() => page.evaluate(() => window.__palace!.question().kind)).toBe('octave');
   const q = await page.evaluate(() => window.__palace!.question());
   if (q.kind !== 'octave') return;
@@ -504,8 +474,7 @@ test('a long reach on a phone pans with a drag', async ({ page }) => {
   test.skip(test.info().project.name !== 'phone', 'the window only applies on a phone');
   test.setTimeout(90_000);
   await page.addInitScript((save) => localStorage.setItem('palace.fretboard.v1', save), seededSave('nat-find', [], [], false));
-  await page.goto('./');
-  await enterPlay(page);
+  await enterFretboard(page, 'nat-find');
   await waitForFrames(page);
   await expect.poll(() => page.evaluate(() => window.__palace!.neckWindow().windowed)).toBe(true);
   expect(await page.evaluate(() => window.__palace!.neckWindow().from)).toBe(0);

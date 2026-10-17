@@ -1,7 +1,7 @@
 import { type Page, expect, test } from '@playwright/test';
 
 const ROOMS = ['fretboard', 'echo', 'blocks', 'faces', 'ledger', 'nback'] as const;
-const WORKSHOP_ROOMS = ['blocks', 'faces', 'ledger', 'nback'] as const;
+const WORKSHOP_ROOMS = ['faces', 'ledger', 'nback'] as const;
 const DAY = 86_400_000;
 
 /** Seed the fretboard save before the app loads, once per tab (a reload keeps the player's own data). */
@@ -23,34 +23,29 @@ async function enterHub(page: Page) {
   await expect.poll(() => page.evaluate(() => window.__palace!.screen())).toBe('hub');
 }
 
+/** Straight into Fretboard play on a stage from a fresh load: skips the title, primer, hub and stage card. */
+async function enterFretboard(page: Page, stageId: string) {
+  await page.goto('./');
+  await page.waitForFunction(() => !!window.__palace);
+  await page.evaluate((id) => window.__palace!.fretboard.enter(id), stageId);
+  await expect.poll(() => page.evaluate(() => window.__palace!.screen()), { timeout: 15_000 }).toBe('play');
+  await expect.poll(() => page.evaluate(() => window.__palace!.stage().id), { timeout: 15_000 }).toBe(stageId);
+}
+
+/** Straight to the hub from any screen (fast path; the primer counts as skipped). */
+async function toHub(page: Page) {
+  await page.waitForFunction(() => !!window.__palace);
+  await page.evaluate(() => window.__palace!.hub());
+  await expect(page.getByTestId('hub')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__palace!.screen()), { timeout: 15_000 }).toBe('hub');
+}
+
 /** Hub → Fretboard's stage card (the card is open until a cell is chosen). */
 async function openStages(page: Page) {
   const room = page.getByTestId('room-fretboard');
   await expect(room).toHaveClass(/placed/);
   await room.click();
   await expect(page.getByTestId('stages')).toBeVisible();
-}
-
-/** Switch book if needed, then choose a stage cell (the card closes). */
-async function chooseCell(page: Page, id: string) {
-  const book = id.startsWith('acc-') ? 'book-accidentals' : 'book-naturals';
-  const bookBtn = page.getByTestId(book);
-  await expect(bookBtn).toHaveClass(/placed/);
-  if ((await bookBtn.getAttribute('aria-checked')) !== 'true') await bookBtn.click();
-  await expect(bookBtn).toHaveAttribute('aria-checked', 'true');
-  const cell = page.getByTestId(`stage-${id}`);
-  await expect(cell).toHaveClass(/placed/);
-  await cell.click();
-  await expect(page.getByTestId('stages')).toBeHidden();
-  await expect.poll(() => page.evaluate(() => window.__palace!.stage().id)).toBe(id);
-}
-
-/** Title → hub → the stage card → a stage → play. */
-async function enterPlay(page: Page, stageId = 'nat-s0') {
-  await enterHub(page);
-  await openStages(page);
-  await chooseCell(page, stageId);
-  await expect.poll(() => page.evaluate(() => window.__palace!.screen())).toBe('play');
 }
 
 /** Click the correct note. With `settle`, wait until the next question has arrived (~700ms later). */
@@ -70,7 +65,7 @@ async function answerWrong(page: Page) {
 
 test('the hub loads with every room', async ({ page }) => {
   await page.goto('./');
-  await enterHub(page);
+  await toHub(page);
   await expect(page.getByTestId('hub')).toBeVisible();
   await expect(page.locator('[data-testid^="room-"]')).toHaveCount(6);
 
@@ -83,21 +78,22 @@ test('the hub loads with every room', async ({ page }) => {
   }
   await expect(page.getByTestId('room-fretboard')).toHaveAccessibleName(/Fretboard/);
   await expect(page.getByTestId('room-echo')).toHaveAccessibleName(/Echo/);
-  await expect(page.getByTestId('room-blocks')).toHaveAccessibleName(/workshop/);
+  await expect(page.getByTestId('room-blocks')).toHaveAccessibleName(/Blocks/);
+  await expect(page.getByTestId('room-faces')).toHaveAccessibleName(/workshop/);
 
   const modes = await page.evaluate(() => window.__palace!.modes());
   expect(modes).toHaveLength(6);
-  expect(modes.filter((m) => m.open).map((m) => m.id)).toEqual(['fretboard', 'echo']);
+  expect(modes.filter((m) => m.open).map((m) => m.id)).toEqual(['fretboard', 'echo', 'blocks']);
 });
 
 test('workshop rooms open a placeholder and come back', async ({ page }) => {
   await page.goto('./');
-  await enterHub(page);
+  await toHub(page);
 
-  await expect(page.getByTestId('room-blocks')).toHaveClass(/placed/);
-  await page.getByTestId('room-blocks').click();
+  await expect(page.getByTestId('room-faces')).toHaveClass(/placed/);
+  await page.getByTestId('room-faces').click();
   await expect(page.getByTestId('workshop')).toBeVisible();
-  expect(await page.evaluate(() => window.__palace!.hubCard())).toBe('workshop:blocks');
+  expect(await page.evaluate(() => window.__palace!.hubCard())).toBe('workshop:faces');
   await expect(page.getByTestId('workshop-back')).toHaveClass(/placed/);
   await page.getByTestId('workshop-back').click();
   await expect(page.getByTestId('workshop')).toBeHidden();
@@ -115,7 +111,7 @@ test('no room is gated: every workshop placeholder and the stage cards open', as
   // Six cards slide in and out, each on a CPU rasteriser: more than the default budget.
   test.setTimeout(120_000);
   await page.goto('./');
-  await enterHub(page);
+  await toHub(page);
 
   for (const id of WORKSHOP_ROOMS) {
     await expect(page.getByTestId(`room-${id}`)).toHaveClass(/placed/);
@@ -164,8 +160,7 @@ test('pick Fretboard and a stage from the hub', async ({ page }) => {
 
 test('rewards update after correct answers', async ({ page }) => {
   test.setTimeout(90_000);
-  await page.goto('./');
-  await enterPlay(page, 'nat-s0');
+  await enterFretboard(page, 'nat-s0');
   await expect(page.getByTestId('combo')).toHaveAttribute('role', 'meter');
   const baseline = (await page.evaluate(() => window.__palace!.rewards())).daily.items;
 
@@ -228,12 +223,14 @@ test('a mastered stage presses a wax seal', async ({ page }) => {
     onboarded: true,
   });
   await seed(page, save);
-  await page.goto('./');
-  await enterPlay(page, 'nat-s0');
+  await enterFretboard(page, 'nat-s0');
 
+  // The caption lives for a few seconds: look for the seal straight after each answer, not after the next question arrives.
   for (let i = 0; i < 4; i++) {
+    const q = await page.evaluate(() => window.__palace!.question().itemId);
+    await answerCorrect(page, false);
+    await expect.poll(() => page.evaluate((id) => !!window.__palace!.rewards().seal || window.__palace!.question().itemId !== id, q)).toBe(true);
     if (await page.evaluate(() => window.__palace!.rewards().seal)) break;
-    await answerCorrect(page);
   }
   await expect.poll(() => page.evaluate(() => window.__palace!.rewards().seal)).not.toBeNull();
   const seal = (await page.evaluate(() => window.__palace!.rewards().seal))!;
@@ -246,8 +243,7 @@ test('a mastered stage presses a wax seal', async ({ page }) => {
 test('reduced motion: the flourish still shows, without travel', async ({ page }) => {
   test.setTimeout(90_000);
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto('./');
-  await enterPlay(page, 'nat-s0');
+  await enterFretboard(page, 'nat-s0');
 
   for (let i = 1; i <= 5; i++) await answerCorrect(page, i < 5);
   const flourish = page.getByTestId('flourish');

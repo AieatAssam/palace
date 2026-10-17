@@ -14,7 +14,7 @@ import { COLORS } from './palette';
 import { BOARD_THICKNESS, followWindow, fretX, markerPoint, markerX, neckMatrix, stringPoint, neckToWorld, positionsSpan, regionBounds, regionSpan } from './layout';
 import { COARSE, LITE, CAPTURE } from './quality';
 import { Sheet } from './Sheet';
-import { cameraState, focusPoint, renderInfo, setInspector, setProjector, setRewardAnchor, sheetPose, useNeckWindow, useRoomFrame, useView } from './view';
+import { cameraState, focusPoint, renderInfo, setInspector, setProjector, setRewardAnchor, sheetPose, useNeckCursor, useNeckWindow, useRoomFrame, useView } from './view';
 
 const FOV = 30;
 
@@ -298,7 +298,7 @@ function NeckRig({ children }: { children: React.ReactNode }) {
   }, [view, portrait, attract, size.width, size.height, insets.top, insets.bottom, stageId, roomFrame]);
 
   /** Where the window sits (its near end, neck-local x), and the framing last built for it. */
-  const pan = useRef({ x0: rig.lo, built: NaN, framing: rig.full, question: '', dragging: false });
+  const pan = useRef({ x0: rig.lo, built: NaN, framing: rig.full, question: '', cursor: 0, dragging: false });
   useLayoutEffect(() => {
     // A new stage starts at the nut.
     pan.current.x0 = rig.lo;
@@ -316,6 +316,13 @@ function NeckRig({ children }: { children: React.ReactNode }) {
       return rig.full;
     }
     const { question, screen } = usePalace.getState();
+    const cursor = useNeckCursor.getState();
+    if (screen === 'play' && cursor.shown && cursor.pos && pn.cursor !== cursor.seq) {
+      // The keyboard's frame: the window slides to keep it on screen.
+      pn.cursor = cursor.seq;
+      const need = positionsSpan([cursor.pos]);
+      pn.x0 = followWindow(pn.x0, rig.len, rig.lo, rig.hi, need.a, need.b);
+    }
     if (screen === 'play' && question.kind !== 'find' && pn.question !== question.itemId) {
       // Follow the question: the lit place (and its octaves) slide into view.
       pn.question = question.itemId;

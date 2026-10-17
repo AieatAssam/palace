@@ -62,9 +62,15 @@ export function SheetLayer({
   useLayoutEffect(() => {
     root.current?.querySelector<HTMLElement>('[data-autofocus]')?.focus({ preventScroll: true });
     return () => {
-      requestAnimationFrame(() => {
-        if (opener?.isConnected) opener.focus({ preventScroll: true });
-      });
+      // The page behind may still be mid-way back from hidden for a frame (under reduced motion every
+      // property, visibility included, takes a 1 ms transition), so try again until the opener takes it.
+      let tries = 0;
+      const give = () => {
+        if (!opener?.isConnected) return;
+        opener.focus({ preventScroll: true });
+        if (document.activeElement !== opener && ++tries < 6) requestAnimationFrame(give);
+      };
+      requestAnimationFrame(give);
     };
   }, [opener]);
 

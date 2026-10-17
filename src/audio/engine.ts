@@ -1,5 +1,6 @@
 import { type Position, frequencyAt, positionKey } from '../game/notes';
 import { HANDBELL_BEAT, HANDBELL_PARTIALS } from './bells';
+import { BLOCK_PARTIALS, CLICK } from './blocks';
 import { BEAT_HZ, BELL_PARTIALS, type ChimeKind, chimeNotes } from './chime';
 import { karplusStrong } from './karplus';
 
@@ -193,6 +194,48 @@ export function ringBell(freq: number, velocity = 1, damp = 1) {
   tg.gain.value = 0.12;
   src.connect(bp).connect(tg).connect(bus);
   src.start(t0);
+}
+
+/**
+ * A lacquered block lighting (see `blocks.ts`): a wooden click, then, unless `chimeFreq` is 0,
+ * a small brass chime. `velocity` 0–1. Silent when sound is off.
+ */
+export function tapBlock(chimeFreq: number, velocity = 1) {
+  if (!enabled) return;
+  const c = context();
+  if (!c || !master) return;
+  const t0 = c.currentTime + 0.004;
+  const bus = c.createGain();
+  bus.gain.value = 0.32 * velocity;
+  bus.connect(master);
+  const len = Math.floor(c.sampleRate * 0.03);
+  const buf = c.createBuffer(1, len, c.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.exp((-i / c.sampleRate) * CLICK.decay);
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const bp = c.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = CLICK.centre;
+  bp.Q.value = CLICK.q;
+  const cg = c.createGain();
+  cg.gain.value = CLICK.gain * 4;
+  src.connect(bp).connect(cg).connect(bus);
+  src.start(t0);
+  if (!chimeFreq) return;
+  for (const p of BLOCK_PARTIALS) {
+    const g = c.createGain();
+    const at = t0 + 0.006;
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(p.gain * 0.22, at + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + p.ring);
+    g.connect(bus);
+    const o = c.createOscillator();
+    o.frequency.value = chimeFreq * p.ratio;
+    o.connect(g);
+    o.start(at);
+    o.stop(at + p.ring + 0.05);
+  }
 }
 
 export function haptic(ms = 10) {

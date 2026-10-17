@@ -1,4 +1,10 @@
 import type { ComponentType } from 'react';
+import { BlocksBoard } from '../blocks/BlocksBoard';
+import { BlocksHud } from '../blocks/BlocksHud';
+import { BlocksSession } from '../blocks/BlocksSession';
+import { BlocksStages } from '../blocks/BlocksStages';
+import { BLOCKS_STAGES, blocksMastered } from '../blocks/logic';
+import { useBlocks } from '../blocks/store';
 import { Bells } from '../echo/Bells';
 import { EchoHud } from '../echo/EchoHud';
 import { EchoSession } from '../echo/EchoSession';
@@ -73,12 +79,22 @@ const echo: Room = {
   progress: () => ({ mastered: echoMastered(useEcho.getState().record), total: ECHO_STAGES.length }),
 };
 
-const ROOMS: Partial<Record<ModeId, Room>> = { fretboard, echo };
+const blocks: Room = {
+  Scene: BlocksBoard,
+  Overlay: BlocksHud,
+  StageCard: BlocksStages,
+  Session: BlocksSession,
+  stages: () => BLOCKS_STAGES.map((s) => ({ id: s.id, title: s.title })),
+  progress: () => ({ mastered: blocksMastered(useBlocks.getState().record), total: BLOCKS_STAGES.length }),
+};
+
+const ROOMS: Partial<Record<ModeId, Room>> = { fretboard, echo, blocks };
 
 /** Every room's progress, re-rendering when any room's record changes. */
 export function useRoomProgress(): Partial<Record<ModeId, RoomProgress>> {
   usePalace((s) => s.saved.deck);
   useEcho((s) => s.record);
+  useBlocks((s) => s.record);
   const out: Partial<Record<ModeId, RoomProgress>> = {};
   for (const [id, room] of Object.entries(ROOMS) as [ModeId, Room][]) out[id] = room.progress();
   return out;

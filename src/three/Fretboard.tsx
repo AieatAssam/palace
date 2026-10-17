@@ -6,7 +6,7 @@ import { MAX_FRET, type Position, STRING_COUNT, samePosition } from '../game/not
 import { inRegion } from '../game/stages';
 import { isCalm } from '../motion';
 import { usePalace } from '../store';
-import { useNeckWindow } from './view';
+import { useNeckCursor, useNeckWindow } from './view';
 import {
   BOARD_END,
   BOARD_TAPER,
@@ -30,6 +30,7 @@ import {
   stringHeight,
   stringPoint,
   stringSpacing,
+  stringZ,
   tapRect,
   wrapPoint,
 } from './layout';
@@ -975,6 +976,56 @@ function HitCells() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Keyboard frame                                                     */
+/* ------------------------------------------------------------------ */
+
+const frameMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffd98a'), transparent: true, opacity: 0.95, depthWrite: false, depthTest: false, toneMapped: false });
+const frameFill = new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffcf7a'), transparent: true, opacity: 0.16, depthWrite: false, depthTest: false, toneMapped: false, blending: THREE.AdditiveBlending });
+
+/**
+ * The keyboard's place on the neck (Find-all and octaves): a fine brass frame laid on the
+ * board round the cell, breathing gently, so a player on the arrow keys can see where Enter
+ * will land. Hidden until a key moves it, and once a pointer is used.
+ */
+function KeyFrame() {
+  const pos = useNeckCursor((s) => s.pos);
+  const shown = useNeckCursor((s) => s.shown);
+  const asking = usePalace((s) => s.screen === 'play' && s.question.kind !== 'name');
+  useFrame(() => {
+    const k = isCalm() ? 1 : 0.8 + 0.2 * (0.5 + 0.5 * Math.sin((performance.now() / 1000) * 3));
+    frameMaterial.opacity = 0.95 * k;
+    frameFill.opacity = 0.16 * k;
+  });
+  if (!pos || !shown || !asking) return null;
+  const cell = cueCell(pos);
+  const x0 = cell.x0 - 0.02;
+  const x1 = cell.x1 + 0.02;
+  const z = stringZ(pos.string, (x0 + x1) / 2);
+  const half = stringSpacing((x0 + x1) / 2) * 0.48;
+  const t = 0.04;
+  // Drawn at the strings' height and over everything, so the board's camber and the strings never hide it.
+  const y = stringHeight((x0 + x1) / 2) + 0.01;
+  const bars: [number, number, number, number][] = [
+    [(x0 + x1) / 2, z - half, x1 - x0 + t, t],
+    [(x0 + x1) / 2, z + half, x1 - x0 + t, t],
+    [x0, z, t, 2 * half],
+    [x1, z, t, 2 * half],
+  ];
+  return (
+    <group userData={{ role: 'key-frame', string: pos.string, fret: pos.fret }}>
+      <mesh raycast={noRaycast} material={frameFill} position={[(x0 + x1) / 2, y, z]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={9}>
+        <planeGeometry args={[x1 - x0, 2 * half]} />
+      </mesh>
+      {bars.map(([x, zz, w, d], i) => (
+        <mesh key={i} raycast={noRaycast} material={frameMaterial} position={[x, y, zz]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={10}>
+          <planeGeometry args={[w, d]} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 
 export function Fretboard() {
   const m = useMaterials();
@@ -993,6 +1044,7 @@ export function Fretboard() {
         <GuitarString key={s} string={s} m={m} thick={thick} />
       ))}
       <Highlights m={m} thick={thick} />
+      <KeyFrame />
       <HitCells />
     </group>
   );
