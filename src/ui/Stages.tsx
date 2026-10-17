@@ -4,7 +4,7 @@ import { usePalace } from '../store';
 import { SheetLayer, type SheetControl } from './SheetLayer';
 import { type SheetItem, type SheetRect, SHEET_WIDTH, measure } from './sheet';
 
-const HEIGHT = 7.9;
+const HEIGHT = 8.92;
 const TOP = HEIGHT / 2;
 const X = 1.2;
 const CELL_H = 0.6;
@@ -16,10 +16,14 @@ const ROWS: { title: string; chapters: Chapter[] }[] = [
   { title: 'Two strings', chapters: ['pair'] },
   { title: 'The neck, by fret', chapters: ['neck'] },
   { title: 'Whole neck', chapters: ['octave', 'find'] },
+  { title: 'Melodies', chapters: ['melody'] },
 ];
 
+/** The two note books are a choice at the head of the card; the melodies row sits under both. */
+const NOTE_BOOKS = BOOKS.filter((b) => b.id !== 'melodies');
+
 function cellLabel(stage: Stage) {
-  return `${stage.title}, ${bookTitle(stage.book).toLowerCase()}`;
+  return stage.book === 'melodies' ? `Melodies, ${stage.title.toLowerCase()}` : `${stage.title}, ${bookTitle(stage.book).toLowerCase()}`;
 }
 
 /**
@@ -33,7 +37,7 @@ export function Stages() {
   const choose = usePalace((s) => s.chooseStage);
   const close = usePalace((s) => s.closeStages);
   const currentStage = STAGES.find((s) => s.id === current)!;
-  const [book, setBook] = useState<Book>(currentStage.book);
+  const [book, setBook] = useState<Book>(currentStage.book === 'melodies' ? 'naturals' : currentStage.book);
 
   const progress = useMemo(() => new Map(STAGES.map((s) => [s.id, stageProgress(s, deck)])), [deck]);
   const masteredCount = STAGES.filter((s) => progress.get(s.id)!.mastered).length;
@@ -56,7 +60,7 @@ export function Stages() {
 
     // The two books, as a pair of choices.
     const bookY = TOP - 1.56;
-    BOOKS.forEach((b, i) => {
+    NOTE_BOOKS.forEach((b, i) => {
       const cx = i === 0 ? -0.62 : 0.6;
       const chosen = b.id === book;
       items.push({ kind: 'text', text: b.title, x: cx, y: bookY, size: 0.2, ink: chosen ? 'ink' : 'quiet', align: 'center' });
@@ -68,13 +72,13 @@ export function Stages() {
     ROWS.forEach((row, r) => {
       const top = TOP - 2.08 - ROW * r;
       items.push({ kind: 'text', text: row.title, x: -X, y: top - 0.14, size: 0.16, font: 'smcp', ink: 'soft' });
-      const stages = STAGES.filter((s) => s.book === book && row.chapters.includes(s.chapter));
+      const stages = STAGES.filter((s) => (s.book === book || s.book === 'melodies') && row.chapters.includes(s.chapter));
       const cw = (2 * X) / stages.length;
       const cy = top - 0.26 - CELL_H / 2;
       stages.forEach((stage, i) => {
         const cx = -X + cw * (i + 0.5);
         const p = progress.get(stage.id)!;
-        const size = stage.chapter === 'pair' ? 0.22 : 0.24;
+        const size = stage.chapter === 'melody' ? 0.2 : stage.chapter === 'pair' ? 0.22 : 0.24;
         items.push({ kind: 'text', text: stage.short, x: cx, y: cy - 0.01, size, ink: p.mastered ? 'gilt' : 'ink', align: 'center' });
         // Mastery: a short gilt-on-hairline bar under the label.
         const bw = Math.min(0.3, cw * 0.55);
@@ -101,7 +105,7 @@ export function Stages() {
   }, [book, current, marks, nowLine, tally]);
 
   const controls: SheetControl[] = [
-    ...BOOKS.map((b) => ({
+    ...NOTE_BOOKS.map((b) => ({
       id: `book-${b.id}`,
       testId: `book-${b.id}`,
       label: b.title,
@@ -121,7 +125,7 @@ export function Stages() {
         onActivate: () => choose(stage.id),
       };
     }),
-    { id: 'done', testId: 'stages-close', label: 'Done', onActivate: close, autoFocus: currentStage.book !== book },
+    { id: 'done', testId: 'stages-close', label: 'Done', onActivate: close, autoFocus: currentStage.book !== book && currentStage.book !== 'melodies' },
   ];
 
   return (

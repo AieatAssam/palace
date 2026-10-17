@@ -298,7 +298,7 @@ function NeckRig({ children }: { children: React.ReactNode }) {
   }, [view, portrait, attract, size.width, size.height, insets.top, insets.bottom, stageId, roomFrame]);
 
   /** Where the window sits (its near end, neck-local x), and the framing last built for it. */
-  const pan = useRef({ x0: rig.lo, built: NaN, framing: rig.full, question: '', cursor: 0, dragging: false });
+  const pan = useRef({ x0: rig.lo, built: NaN, framing: rig.full, question: '', cursor: 0, pluck: 0, dragging: false });
   useLayoutEffect(() => {
     // A new stage starts at the nut.
     pan.current.x0 = rig.lo;
@@ -323,7 +323,14 @@ function NeckRig({ children }: { children: React.ReactNode }) {
       const need = positionsSpan([cursor.pos]);
       pn.x0 = followWindow(pn.x0, rig.len, rig.lo, rig.hi, need.a, need.b);
     }
-    if (screen === 'play' && question.kind !== 'find' && pn.question !== question.itemId) {
+    const pluck = usePalace.getState().lastPluck;
+    if (screen === 'play' && question.kind === 'melody' && pluck && !pluck.quiet && pn.pluck !== pluck.id) {
+      // A melody: the window follows the note just sounded (the player's, or the room's playing).
+      pn.pluck = pluck.id;
+      const need = positionsSpan([pluck.position]);
+      pn.x0 = followWindow(pn.x0, rig.len, rig.lo, rig.hi, need.a, need.b);
+    }
+    if (screen === 'play' && (question.kind === 'name' || question.kind === 'octave') && pn.question !== question.itemId) {
       // Follow the question: the lit place (and its octaves) slide into view.
       pn.question = question.itemId;
       const need = positionsSpan(question.kind === 'name' ? [question.position] : [question.position, ...question.targets]);
@@ -526,7 +533,7 @@ function NeckRig({ children }: { children: React.ReactNode }) {
       if (!g) return false;
       const st = usePalace.getState();
       const q = st.question;
-      const p = st.lastPluck && !st.lastPluck.quiet ? st.lastPluck.position : q.kind === 'find' ? q.targets[0] : q.position;
+      const p = st.lastPluck && !st.lastPluck.quiet ? st.lastPluck.position : q.kind === 'find' || q.kind === 'melody' ? q.targets[0] : q.position;
       if (!p) return false;
       g.updateWorldMatrix(true, false);
       out.set(...markerPoint(p)).applyMatrix4(g.matrixWorld);

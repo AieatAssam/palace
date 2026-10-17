@@ -19,7 +19,7 @@ You sit at a walnut desk with a gilt-framed card of rooms in front of you. Pick 
 ## The rooms
 
 ### I · Fretboard
-Name every note on a guitar neck. Brass marks a place; you name its note, find every place a note sounds, or reach its octave two strings over. Get it right and the string plucks at its true pitch. Thirty-two stages run in two books, naturals then sharps and flats, from a single string to the full twelve frets. Spaced repetition picks the next question.
+Name every note on a guitar neck. Brass marks a place; you name its note, find every place a note sounds, or reach its octave two strings over. Get it right and the string plucks at its true pitch. Thirty-two stages run in two books, naturals then sharps and flats, from a single string to the full twelve frets. Four more hold melodies: a public-domain tune sits on a card in note names and on a small stave, and you play it note by note at any place that sounds the note; the finished tune plays back on your own fingering. They run from opening phrases near the nut to whole tunes on the full neck, then from memory after one hearing. Spaced repetition picks the next question.
 
 ### II · Echo
 A row of brass hand bells rings a line. You ring it back. A clean line grows by one stroke, a slip shrinks it by one, and three slips close the page. Later stages ring last first, quicken the beat, or strike two bells at once.
@@ -81,7 +81,7 @@ npm run e2e        # Playwright: desktop 960×600 and phone 412×915
 
 **Render paths.** The full path has physical materials, an HDRI reading room, bloom, vignette and (on desktop) depth of field. The lite path runs at DPR 1 with standard materials, small textures and no post-processing. The app picks lite under automation (`navigator.webdriver`) or with `?lite`. `?quality=full` forces the full path; add `?capture` to hold it at its top tier and slow the animations for stills.
 
-**Tests.** Playwright builds the app and serves it with `vite preview`. Headless WebGL renders on the CPU, so e2e runs the lite path. To use a local Chrome: `CHROME_PATH=/usr/bin/google-chrome npm run e2e`. `window.__palace` exposes hooks for tests and devtools, among them `hub()` and `enter(stageId)` on `fretboard`, `echo`, `blocks` and `faces`.
+**Tests.** Playwright builds the app and serves it with `vite preview`. Headless WebGL renders on the CPU, so e2e runs the lite path. To use a local Chrome: `CHROME_PATH=/usr/bin/google-chrome npm run e2e`. `window.__palace` exposes hooks for tests and devtools, among them `hub()` and `enter(stageId)` on `fretboard`, `melody`, `echo`, `blocks` and `faces`.
 
 **CI.** `.github/workflows/ci.yml` runs typecheck, lint, unit tests and build in one job and splits e2e across four sharded runners, one worker each. `deploy.yml` publishes `dist/` to GitHub Pages on each push to `main`.
 

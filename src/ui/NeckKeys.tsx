@@ -3,7 +3,7 @@ import { type Position, samePosition } from '../game/notes';
 import { inRegion } from '../game/stages';
 import { usePalace } from '../store';
 import { projectPosition, useNeckCursor } from '../three/view';
-import { positionLabel } from './format';
+import { positionLabel, spokenNote } from './format';
 import { step } from './neckStep';
 
 const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
@@ -11,7 +11,7 @@ const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRigh
 const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /**
- * Keyboard play for Find-all and octaves: a focusable stand-in for the neck. The arrow keys
+ * Keyboard play for Find-all, octaves and melodies: a focusable stand-in for the neck. The arrow keys
  * move a brass frame over the neck between strings and frets, Enter or Space picks the place,
  * and a screen reader hears each place as the frame reaches it and what the pick found. The
  * keys also work with nothing focused, as long as no button has the focus.
@@ -64,9 +64,13 @@ export function NeckKeys({ live }: { live: boolean }) {
         if (e.repeat) return;
         const p = cursor.pos;
         const before = st.found.length;
+        const at = st.melody.at;
         st.tapPosition(p);
         const after = usePalace.getState();
-        if (q.kind === 'octave' && samePosition(q.position, p)) setSaid('That is the lit note. Find its octave.');
+        if (q.kind === 'melody') {
+          if (after.melody.at > at) setSaid(after.melody.at === q.notes.length ? `${spokenNote(q.notes[at]!.midi)}. The tune is whole.` : `${spokenNote(q.notes[at]!.midi)}.`);
+          else if (after.melody.misses > st.melody.misses) setSaid('Not that note.');
+        } else if (q.kind === 'octave' && samePosition(q.position, p)) setSaid('That is the lit note. Find its octave.');
         else if (after.found.length > before) {
           const total = q.targets.length;
           setSaid(after.found.length === total ? `Found, all ${total}.` : `Found, ${after.found.length} of ${total}.`);

@@ -101,3 +101,24 @@ Final strings, for review:
 - Stages sheet: Meet the sitters, then name them. Kept.
 - Session sheet: Today, Named right, No questions yet, Stage · mastered, Mastered. Kept.
 - Portrait buttons: Portrait N: followed by the `describe` sentence (for example, "A woman with pinned-up auburn hair, fair skin, in a plum gown with pearls, on an umber ground."). Kept.
+
+## Melody pass (night/melody)
+
+Scope: the Melody room's strings only (the card caption and sr-only line, the keyboard neck lines, the Listen meta button, the stage titles and shorts, the Melodies book and row, the stage cell labels, and the tune sources). Each string was read against the stop-slop rules and the Faces and Echo voice. One string changed; the rest already passed.
+
+| Where | Before | After | Why |
+|---|---|---|---|
+| Caption after slips (MelodyCard, done phase) | N slips. It comes back sooner. | N slips. It returns sooner. | "Comes back" is conversational; "returns" is the house verb in the Primer III body ("Slow ones return sooner"). |
+
+Final strings, for review:
+
+- Caption: Listen, then play it from memory. / Listen. / Played back. / Clean. / N slips. It returns sooner. / Note N of M, with " · from memory" on the recall stage and " · line N of M" on multi-line tunes. / Not that note. Try again.
+- Sr-only line: Next: E. Note 3 of 15.
+- Keyboard neck (NeckKeys): E. / F sharp. / <note>. The tune is whole. / Not that note.
+- Listen button (Hud meta): Listen.
+- Stage titles (under 18 characters): Opening phrases / Whole tunes / Tunes, full neck / Tunes from memory.
+- Stage shorts (6 characters or fewer): Phrase / Tunes / 0–12 / Recall.
+- Book and row: Melodies. Cell label: Melodies, tunes from memory (lowercased title).
+- Tune sources: Beethoven, 1824 / French air, 1761 / French round / English ballad, 1580 / English ballad / American tune, 1829. The Beethoven year is the Ninth Symphony's (1824). The 1761 date is the first printing of "Ah! vous dirai-je, maman." Kept as they are, since drills.test.ts asserts "Beethoven, 1824". The 1829 date for the Amazing Grace tune was not verified offline; check it before the next copy pass.
+
+Reviewed and kept: the title and source forms (a date where one is known, a kind where it is not, so "English ballad" for Scarborough Fair stays undated rather than guessed), "The tune is whole." (it echoes "Whole tunes" on the Stages card), "Not that note. Try again." (the caption must begin with "Not that note"), "Next: E. Note 3 of 15." (the spoken form the e2e and screen readers rely on), the stage titles (each already under 18 characters, so the HUD meta line stays short), and the Melodies book name.
