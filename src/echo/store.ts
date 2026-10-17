@@ -7,6 +7,8 @@ import { CAPTURE } from '../three/quality';
 
 /** Source of randomness for new lines. Tests can swap in a seeded one via the test hooks. */
 export const lineRng: { current: () => number } = { current: Math.random };
+
+import { DROPS_PER_SITTING, type Span, type SpanOutcome, line as inPlay, spanClean, spanMiss, startSpan } from '../game/span';
 import { clearStrikes, markStrike as mark } from './fx';
 import {
   type EchoRecord,
@@ -14,17 +16,14 @@ import {
   FIRST_ECHO_STAGE,
   FRESH_RECALL,
   type Recall,
-  SLIPS_PER_SITTING,
   type Step,
   ECHO_STAGES,
   echoProgress,
   echoStageById,
   emptyRecord,
   expectedOrder,
-  extendLine,
   interval,
-  makeLine,
-  nextLength,
+  nextStep,
   parseRecord,
   recordLine,
   schedule,
@@ -38,7 +37,11 @@ import {
  * `hidden` flag (play, with no card or settings over it).
  *
  * rest → listen (the room plays the line) → repeat (the player rings it back)
- *      → clean | slip → listen … until three slips close the page.
+ *      → clean | slip → listen … until three drop-backs close the page.
+ *
+ * The tune lasts the whole sitting (`game/span.ts`): a clean line adds a bell to it, a first
+ * miss plays the same line again, a second miss in a row goes back two bells. Only New tune
+ * or a new sitting draws a fresh one.
  */
 export const ECHO_KEY = 'palace.echo.v1';
 
@@ -50,7 +53,9 @@ export interface EchoSitting {
   clean: number;
   /** Steps in the longest clean line this sitting. */
   longest: number;
+  /** Lines missed, and drop-backs (two misses in a row). */
   slips: number;
+  drops: number;
   /** The stage crossed its mastery bar this sitting. */
   mastered: boolean;
   /** The sitting beat the stage's best. */
@@ -63,6 +68,10 @@ export interface EchoSlip {
   wanted: number[];
   /** The line as it should have been rung back. */
   expected: Step[];
+  /** 'retry': the same line again; 'drop': back two steps. */
+  outcome: SpanOutcome;
+  /** Steps in the line that plays next. */
+  next: number;
 }
 
 interface EchoSave {
@@ -72,6 +81,8 @@ interface EchoSave {
 
 interface EchoState extends EchoSave {
   phase: EchoPhase;
+  /** The sitting's tune; `line` is the part in play. */
+  span: Span<Step>;
   line: Step[];
   recall: Recall;
   /** The step sounding while the room plays the line, or -1. */
@@ -86,6 +97,8 @@ interface EchoState extends EchoSave {
   setActive(on: boolean): void;
   /** A stroke on bell `bell` (0-based), from a tap, a click or a number key. */
   press(bell: number): void;
+  /** A fresh tune at the stage's opening length (the sitting goes on). */
+  newTune(): void;
   /** Session sheet → a fresh sitting. */
   again(): void;
   end(): void;
@@ -97,7 +110,7 @@ const CLEAN_PAUSE = 850;
 const SLIP_PAUSE = 1700;
 
 function emptySitting(): EchoSitting {
-  return { lines: 0, clean: 0, longest: 0, slips: 0, mastered: false, newBest: false };
+  return { lines: 0, clean: 0, longest: 0, slips: 0, drops: 0, mastered: false, newBest: false };
 }
 
 function kv(): Storage | undefined {
@@ -181,19 +194,21 @@ export const useEcho = create<EchoState>()((set, get) => {
     later(delay + (line.length - 1) * gap + Math.max(380, gap * 0.8), () => set({ phase: 'repeat', sounding: -1 }));
   };
 
-  /** A fresh line at the stage's opening length. */
-  const freshLine = (st: EchoStage) => makeLine(st.start, st, lineRng.current);
+  const draw = (st: EchoStage) => (before: readonly Step[]) => nextStep(before, st, lineRng.current);
+  /** A fresh tune at the stage's opening length. */
+  const freshSpan = (st: EchoStage) => startSpan(st, draw(st));
+  const withSpan = (span: Span<Step>) => ({ span, line: inPlay(span) });
 
   const resetSitting = () => {
     clearTimers();
     clearStrikes();
-    set({ line: freshLine(stage()), recall: FRESH_RECALL, phase: 'rest', sounding: -1, slip: null, sitting: emptySitting() });
+    set({ ...withSpan(freshSpan(stage())), recall: FRESH_RECALL, phase: 'rest', sounding: -1, slip: null, sitting: emptySitting() });
   };
 
   return {
     ...initial,
     phase: 'rest',
-    line: freshLine(echoStageById(initial.stageId)),
+    ...withSpan(freshSpan(echoStageById(initial.stageId))),
     recall: FRESH_RECALL,
     sounding: -1,
     slip: null,
@@ -224,14 +239,14 @@ export const useEcho = create<EchoState>()((set, get) => {
         set({ phase: 'rest', recall: FRESH_RECALL, sounding: -1 });
         return;
       }
-      if (get().sitting.slips >= SLIPS_PER_SITTING) return usePalace.getState().endSession();
+      if (get().sitting.drops >= DROPS_PER_SITTING) return usePalace.getState().endSession();
       playLine(LEAD_IN);
     },
 
     press(bell) {
       unlockAudio();
       const st = stage();
-      const { phase, line, recall, active } = get();
+      const { phase, line, span, recall, active } = get();
       if (!active || bell < 0 || bell >= st.bells) return;
       if (phase !== 'repeat') return;
       const expected = expectedOrder(line, st.order);
@@ -245,19 +260,20 @@ export const useEcho = create<EchoState>()((set, get) => {
         buzz(30);
         const { record } = recordLine(get().record, st, line.length, false);
         persist({ stageId: st.id, record });
-        useRewards.getState().answer(false);
+        const missed = spanMiss(span, st);
+        // A first miss only pauses the run; a drop-back breaks it.
+        if (missed.outcome === 'drop') useRewards.getState().answer(false);
         const s = get().sitting;
-        const sitting = { ...s, lines: s.lines + 1, slips: s.slips + 1 };
-        const length = nextLength(st, line.length, false);
+        const sitting = { ...s, lines: s.lines + 1, slips: s.slips + 1, drops: s.drops + (missed.outcome === 'drop' ? 1 : 0) };
         set({
           record,
           sitting,
           phase: 'slip',
-          slip: { struck: bell, wanted: res.wanted, expected },
+          slip: { struck: bell, wanted: res.wanted, expected, outcome: missed.outcome, next: missed.span.length },
           recall: res.recall,
-          line: makeLine(length, st, lineRng.current),
+          ...withSpan(missed.span),
         });
-        if (sitting.slips >= SLIPS_PER_SITTING) later(SLIP_PAUSE, () => usePalace.getState().endSession());
+        if (sitting.drops >= DROPS_PER_SITTING) later(SLIP_PAUSE, () => usePalace.getState().endSession());
         else later(SLIP_PAUSE, () => playLine(250));
         return;
       }
@@ -281,12 +297,22 @@ export const useEcho = create<EchoState>()((set, get) => {
           clean: s.clean + 1,
           longest: Math.max(s.longest, line.length),
           slips: s.slips,
+          drops: s.drops,
           mastered: s.mastered || crossed,
           newBest: s.newBest || newBest,
         },
-        line: extendLine(line, st, lineRng.current),
+        ...withSpan(spanClean(span, st, draw(st)).span),
       });
       later(CLEAN_PAUSE, () => playLine(150));
+    },
+
+    newTune() {
+      if (!get().active) return;
+      unlockAudio();
+      clearTimers();
+      clearStrikes();
+      set({ ...withSpan(freshSpan(stage())), slip: null });
+      playLine(LEAD_IN);
     },
 
     again() {

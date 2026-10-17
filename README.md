@@ -19,15 +19,15 @@ You sit at a walnut desk with a gilt-framed card of rooms in front of you. Pick 
 ## The rooms
 
 ### I · Fretboard
-Name every note on a guitar neck. Brass marks a place; you name its note, find every place a note sounds, or reach its octave two strings over. Get it right and the string plucks at its true pitch. Thirty-two stages run in two books, naturals then sharps and flats, from a single string to the full twelve frets. Four more hold melodies: a public-domain tune sits on a card in note names and on a small stave, and you play it note by note at any place that sounds the note; the finished tune plays back on your own fingering. They run from opening phrases near the nut to whole tunes on the full neck, then from memory after one hearing. Spaced repetition picks the next question.
+Name every note on a guitar neck. Brass marks a place; you name its note, find every place a note sounds, or reach its octave two strings over. Get it right and the string plucks at its true pitch. Thirty-two stages run in two books, naturals then sharps and flats, from a single string to the full twelve frets. Four more hold melodies: a public-domain tune sits on a card in note names and on a small stave, and you play it note by note at any place that sounds the note; the finished tune plays back on your own fingering. They run from opening phrases near the nut to whole tunes on the full neck, then from memory, where you hear line 1 and play it back, then lines 1 and 2, and so on until you play the whole tune. Spaced repetition picks the next question.
 
 ### II · Echo
-A row of brass hand bells rings a line. You ring it back. A clean line grows by one stroke, a slip shrinks it by one, and three slips close the page. Later stages ring last first, quicken the beat, or strike two bells at once.
+A row of brass hand bells rings a line. You ring it back. You keep the same tune for the whole sitting, and each clean line adds one stroke to it. Miss once and the bells ring the same line again. Miss twice in a row and the line drops back two strokes, so you build up the same tune again. Three drop-backs close the page. New tune starts a fresh one. Later stages ring last first, quicken the beat, or strike two bells at once.
 
 <p align="center"><img src="docs/screenshots/echo.webp" alt="Echo: six brass hand bells on a walnut stand, the fourth lit while the line plays" width="100%"></p>
 
 ### III · Blocks
-Rosewood and ebony blocks lie scattered on an oxblood blotter. A line of them lights; you tap it back in order. Boards run from nine blocks to sixteen, and two stages rearrange the board before each line.
+Rosewood and ebony blocks lie scattered on an oxblood blotter. A line of them lights; you tap it back in order. The line builds up as in Echo: one more block after each clean line, the same line again after a miss, two blocks back after two misses in a row. Boards run from nine blocks to sixteen, and two stages rearrange the board after each clean line.
 
 <p align="center"><img src="docs/screenshots/blocks.webp" alt="Blocks: nine lacquered blocks on an oxblood blotter, two lit in brass" width="100%"></p>
 
@@ -43,14 +43,14 @@ Meet a cast of sitters, each an oil portrait in a gilt frame with a name and som
 </p>
 
 ### V · Ledger
-An oxblood account book lies open on the desk. A clerk writes a number in copperplate ink and blots the page, and you key it back on ivory keys. Digit span writes one figure a second. Two stages teach the Major system: the ten consonant sounds, then a peg word for every pair from 00 to 99, picked by spaced repetition and asked both ways. The long-number stages write up to thirty figures at once, with the pegs pencilled under each pair or left for you to find. The left-hand page keeps the sitting's account by hand.
+An oxblood account book lies open on the desk. A clerk writes a number in copperplate ink and blots the page, and you key it back on ivory keys. Digit span writes one figure a second. The number builds up as in Echo: each clean number adds to the same one, a miss writes it again, and two misses in a row take it back two steps. Two stages teach the Major system: the ten consonant sounds, then a peg word for every pair from 00 to 99, picked by spaced repetition and asked both ways. The long-number stages write up to thirty figures at once, with the pegs pencilled under each pair or left for you to find. The left-hand page keeps the sitting's account by hand.
 
 ### VI · N-Back
 Nine tiles sit in brass bezels on a walnut tray. One turns over each beat to show its pearl face. Call Tile when it matches the one n turns back. Stages run one, two and three back, then dual two back, where a bell rings with each tile and you call Bell as well. A run scores matches caught against matches missed and wrong calls.
 
 ## Rewards
 
-- **Flourish.** Five right in a row, in any room, writes a word in Pinyon Script: *Bravo*, then *Splendid*, *Superb*, *Bravissimo*. In Echo, Blocks and the Ledger's spans a clean line counts as one; in N-Back, each match caught.
+- **Flourish.** Five right in a row, in any room, writes a word in Pinyon Script: *Bravo*, then *Splendid*, *Superb*, *Bravissimo*. In Echo, Blocks and the Ledger's spans a clean line counts as one, and a first miss pauses the run without breaking it; in N-Back, each match caught.
 - **Gold leaf.** The same milestone throws torn gold scraps up from the place you answered. They flash as they turn and drift down.
 - **Chime.** A brass chime strikes at each milestone, a step higher on a pentatonic scale each time the run goes on.
 - **Combo meter.** A slim brass bar beside your run fills toward the next milestone.

@@ -67,6 +67,16 @@ export function makeSequence(length: number, stage: Pick<BlocksStage, 'blocks'>,
   return pool.slice(0, n);
 }
 
+/**
+ * The next block for a line: one not yet in it (a block lights once per line). On a full
+ * board it returns -1; callers stop at `maxLength`.
+ */
+export function nextBlock(line: readonly number[], stage: Pick<BlocksStage, 'blocks'>, rng: Rng): number {
+  const pool = Array.from({ length: stage.blocks }, (_, i) => i).filter((b) => !line.includes(b));
+  if (!pool.length) return -1;
+  return pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]!;
+}
+
 /** The blocks in the order the player taps them back. */
 export function expectedOrder(line: readonly number[], order: BlocksStage['order']): number[] {
   return order === 'reverse' ? [...line].reverse() : [...line];
@@ -92,17 +102,6 @@ export function tap(expected: readonly number[], done: number, block: number): T
 /** When each block of a line lights, in ms from the first. */
 export function schedule(stage: Pick<BlocksStage, 'tempo'>, length: number): number[] {
   return Array.from({ length }, (_, i) => i * stage.tempo);
-}
-
-/** Missed lines in a sitting before the page closes. */
-export const SLIPS_PER_SITTING = 3;
-
-/**
- * The length of the next line: one longer after a clean line (never past the board), one
- * shorter after a slip (never under the stage's start).
- */
-export function nextLength(stage: Pick<BlocksStage, 'start' | 'blocks'>, length: number, clean: boolean): number {
-  return clean ? Math.min(maxLength(stage), length + 1) : Math.max(stage.start, length - 1);
 }
 
 /** Saved progress: the longest clean line per stage, and lines attempted. */

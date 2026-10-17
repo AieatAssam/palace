@@ -3,6 +3,7 @@ import { haptic, knock, pluck, setSoundEnabled, unlockAudio } from './audio/engi
 import { type Question, makeQuestion } from './game/drills';
 import { type MelodyNote, fingering, soundsNote } from './game/melodies';
 import { type NoteName, type Position, samePosition } from './game/notes';
+import { type Span, type SpanOutcome, spanClean, spanMiss, startSpan } from './game/span';
 import { type Deck, ensureCards, gradeFromResponse, review } from './game/srs';
 import { type SavedState, type Settings, emptyState, loadState, saveState } from './game/storage';
 import { type Stage, inRegion, stageById, stageLabel, stageProgress } from './game/stages';
@@ -53,16 +54,25 @@ export const MELODY_SESSION_LENGTH = 3;
 
 /**
  * A melody under way. `preview`: the room plays it through first (from memory stages);
- * `play`: the player's turn, note `at` is wanted next; `playback`: the finished tune
+ * `play`: the player's turn, note `at` is wanted next; `missed`: from memory, a wrong note,
+ * the wanted one shown before the room plays the line again; `playback`: the finished tune
  * played back on the places the player chose; `done`: graded, the next tune is coming.
+ *
+ * From memory, the tune builds up a line at a time (`game/span.ts`): the room plays line 1,
+ * the player plays it back, then lines 1 and 2, and so on. A first miss plays the same lines
+ * again; a second miss in a row goes back two lines (never under one).
  */
-export type MelodyPhase = 'preview' | 'play' | 'playback' | 'done';
+export type MelodyPhase = 'preview' | 'play' | 'missed' | 'playback' | 'done';
 export interface MelodyRun {
   phase: MelodyPhase;
-  /** Notes played so far (the index of the one wanted next). */
+  /** Notes played so far in this pass (the index of the one wanted next). */
   at: number;
-  /** Wrong notes so far. */
+  /** Wrong notes so far, over the whole tune. */
   misses: number;
+  /** Lines of the tune in play (all of them, except while a from-memory tune builds up). */
+  span: Span<number>;
+  /** After a from-memory miss: what happens next, and the note that was wanted (index). */
+  slip: { outcome: SpanOutcome; wanted: number } | null;
   /** Where each note was played. */
   played: Position[];
   /** The note sounding in a preview or playback (index into the notes), or -1. */
@@ -74,9 +84,26 @@ export function melodyAllowance(length: number): number {
   return Math.floor(length / 8);
 }
 
-function freshRun(q: Question): MelodyRun {
-  return { phase: q.kind === 'melody' && q.recall ? 'preview' : 'play', at: 0, misses: 0, played: [], sounding: -1 };
+/** From memory, a tune builds up a line at a time; otherwise every line is in play. */
+function melodyRule(q: Question) {
+  const lines = q.kind === 'melody' ? q.lines.length : 0;
+  return { start: q.kind === 'melody' && q.recall ? 1 : lines, most: lines };
 }
+const lineIndex = (before: readonly number[]) => before.length;
+
+function freshRun(q: Question): MelodyRun {
+  return { phase: q.kind === 'melody' && q.recall ? 'preview' : 'play', at: 0, misses: 0, span: startSpan(melodyRule(q), lineIndex), slip: null, played: [], sounding: -1 };
+}
+
+/** The notes in play: the tune's first `span.length` lines. */
+export function melodyNotesInPlay(q: Question, run: MelodyRun): MelodyNote[] {
+  return q.kind === 'melody' ? q.lines.slice(0, run.span.length).flat() : [];
+}
+
+/** From memory: the pause after a miss, long enough to see the wanted note, before the room plays again. */
+const MELODY_SLIP_PAUSE = 1700;
+/** From memory: the pause after a clean pass before the room plays the longer one. */
+const MELODY_BUILD_PAUSE = 700;
 
 function emptySession(): SessionStats {
   return { answered: 0, correct: 0, streak: 0, best: 0, strengthened: [], slipped: [], mastered: [] };
@@ -256,15 +283,25 @@ export const usePalace = create<PalaceState>()((set, get) => {
     tuneTimers.push(setTimeout(() => stopTune(), t + 250));
   };
 
-  /** A from-memory tune: the room plays it once with the card showing, then the player's turn. */
-  const startPreview = () => {
+  /**
+   * A from-memory tune: the room plays the lines in play with the card showing, then the
+   * player's turn from the first note. The run (its span and misses) carries over.
+   */
+  const startPreview = (lead = 400) => {
     const q = get().question;
     if (q.kind !== 'melody') return;
-    const places = fingering(q.notes, stageById(get().saved.stageId));
-    set({ melody: { ...freshRun(q), phase: 'preview' } });
-    playTune(q.notes, places, q.tempo, 400, () => {
+    const notes = melodyNotesInPlay(q, get().melody);
+    const places = fingering(notes, stageById(get().saved.stageId));
+    set({ melody: { ...get().melody, phase: 'preview', at: 0, played: [], slip: null, sounding: -1 }, found: [], feedback: null });
+    playTune(notes, places, q.tempo, lead, () => {
       set({ melody: { ...get().melody, phase: 'play', sounding: -1 }, askedAt: now() });
     });
+  };
+
+  /** From memory: wait `pause`, then the room plays the lines in play again. */
+  const replayLater = (pause: number) => {
+    stopTune();
+    tuneTimers.push(setTimeout(() => startPreview(250), pause));
   };
 
   /** A melody note played: the right note anywhere in reach moves on; any other is a soft miss, try again. */
@@ -275,15 +312,35 @@ export const usePalace = create<PalaceState>()((set, get) => {
     if (!want) return;
     if (!soundsNote(p, want.midi)) {
       emitMiss(p);
-      set({ melody: { ...run, misses: run.misses + 1 }, feedback: { kind: 'miss', at: now(), position: p } });
+      if (!q.recall) {
+        set({ melody: { ...run, misses: run.misses + 1 }, feedback: { kind: 'miss', at: now(), position: p } });
+        return;
+      }
+      // From memory: show the wanted note on the card and the neck, then play the lines again.
+      const missed = spanMiss(run.span, melodyRule(q));
+      const shown = fingering(q.notes.slice(0, run.at + 1), stageById(get().saved.stageId))[run.at]!;
+      set({
+        melody: { ...run, phase: 'missed', misses: run.misses + 1, span: missed.span, slip: { outcome: missed.outcome, wanted: run.at } },
+        found: [shown],
+        feedback: { kind: 'miss', at: now(), position: p },
+      });
+      replayLater(MELODY_SLIP_PAUSE);
       return;
     }
     emitPluck(p);
     buzz(8);
     const played = [...run.played, p];
     const at = run.at + 1;
-    if (at < q.notes.length) {
+    if (at < melodyNotesInPlay(q, run).length) {
       set({ melody: { ...run, at, played }, found: [p], feedback: null });
+      return;
+    }
+    if (run.span.length < q.lines.length) {
+      // From memory, the lines in play are whole: one more line, and the room plays them all.
+      const grown = spanClean(run.span, melodyRule(q), lineIndex).span;
+      // The card says what comes next while the pause runs; no note counts until the room has played.
+      set({ melody: { ...run, phase: 'preview', at, played, span: grown }, found: [p], feedback: null });
+      replayLater(MELODY_BUILD_PAUSE);
       return;
     }
     // The tune is whole: hear it back on the player's own places, then grade it.

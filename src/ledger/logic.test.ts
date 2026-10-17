@@ -17,7 +17,6 @@ import {
   longestHeld,
   makeChoices,
   makeNumber,
-  nextLength,
   nextQuestion,
   parseRecord,
   pair,
@@ -148,24 +147,6 @@ describe('key', () => {
 
   it('misses with wanted -1 once nothing is left to key', () => {
     expect(key(expected, 3, 1)).toEqual({ kind: 'miss', done: 3, wanted: -1 });
-  });
-});
-
-describe('nextLength', () => {
-  it('steps longer after a clean number, never past the most', () => {
-    expect(nextLength(SPAN, 4, true)).toBe(5);
-    expect(nextLength(SPAN, SPAN.most - 1, true)).toBe(SPAN.most);
-    expect(nextLength(SPAN, SPAN.most, true)).toBe(SPAN.most);
-  });
-
-  it('steps shorter after a slip, never under the start', () => {
-    expect(nextLength(SPAN, 6, false)).toBe(5);
-    expect(nextLength(SPAN, SPAN.start, false)).toBe(SPAN.start);
-  });
-
-  it('uses the stage step, not a fixed one', () => {
-    expect(nextLength(LONG, 8, true)).toBe(8 + LONG.step);
-    expect(nextLength(LONG, 20, false)).toBe(20 - LONG.step);
   });
 });
 

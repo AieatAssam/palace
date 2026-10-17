@@ -122,3 +122,19 @@ Final strings, for review:
 - Tune sources: Beethoven, 1824 / French air, 1761 / French round / English ballad, 1580 / English ballad / American tune, 1829. The Beethoven year is the Ninth Symphony's (1824). The 1761 date is the first printing of "Ah! vous dirai-je, maman." Kept as they are, since drills.test.ts asserts "Beethoven, 1824". The 1829 date for the Amazing Grace tune was not verified offline; check it before the next copy pass.
 
 Reviewed and kept: the title and source forms (a date where one is known, a kind where it is not, so "English ballad" for Scarborough Fair stays undated rather than guessed), "The tune is whole." (it echoes "Whole tunes" on the Stages card), "Not that note. Try again." (the caption must begin with "Not that note"), "Next: E. Note 3 of 15." (the spoken form the e2e and screen readers rely on), the stage titles (each already under 18 characters, so the HUD meta line stays short), and the Melodies book name.
+
+## Build-up pass (night/seq-retry)
+
+Scope: the strings for the shared build-up rule (`src/game/span.ts`) in Echo, Blocks, the Ledger's digit spans and the Melody recall stage. Clarity came first, then the stop-slop read. One set of miss titles serves every room, so a player who learns them in one room reads them the same in the next.
+
+| Where | Before | After | Why |
+|---|---|---|---|
+| Miss title, first miss (all rooms) | Not that bell. / Not that block. / Wrong: digit N was X, not Y. / Not that note. Try again. | Not quite. Here it is again. | Says what happens next: the same line plays again. |
+| Miss title, second miss in a row | (none: every miss drew a new line) | Two misses. Back to N and building up again. | Names the length the player returns to and says the tune stays the same. Melody counts lines: "Back to 1 line". |
+| Miss title, the drop-back that ends the sitting | (none) | Two misses. That ends the sitting. | Plain cause and effect. |
+| Echo miss sub | It ran 1 · 4 · 2 … | Bell N was next. / Bells N and M were next. | Points at the one bell that went wrong. The green bell shows the same thing. |
+| Ledger miss sub | The right digit is in green | Digit N was X, not Y. The right digit is in green. | Keeps the old title's facts once the title becomes the shared one. |
+| Melody miss caption (recall) | Not that note. Try again. | Not quite. Here it is again. The note was E. | The room plays the lines again, so "try again" was no longer accurate. |
+| Melody preview (recall) | Listen, then play it from memory. | Listen to line 1, then play it from memory. / Listen to lines 1 to N, then play them from memory. | Tells the player how much of the tune to play. |
+| Slip dots aria-label | N of 3 slips / N of 3 mistakes | N of 3 drop-backs | Only drop-backs end a sitting now. Tooltip: "Two misses in a row drop you back. Three drop-backs end the sitting." |
+| New controls | none | New tune (Echo) / New line (Blocks) / New number (Ledger spans) | Starting a fresh sequence is now the player's choice. |

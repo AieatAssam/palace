@@ -9,7 +9,7 @@ import {
   emptyRecord,
   expectedOrder,
   makeSequence,
-  nextLength,
+  nextBlock,
   parseRecord,
   recordLine,
   schedule,
@@ -185,17 +185,33 @@ describe('schedule', () => {
   });
 });
 
-describe('nextLength', () => {
-  const stage = { start: 3, blocks: 9 } as const;
+describe('nextBlock', () => {
+  const stage = { blocks: 9 } as const;
 
-  it('adds one block after a clean line, never past the board', () => {
-    expect(nextLength(stage, 5, true)).toBe(6);
-    expect(nextLength(stage, 9, true)).toBe(9);
+  it('never repeats a block already in the line', () => {
+    for (let seed = 1; seed <= 200; seed++) {
+      const rng = mulberry32(seed);
+      const line: number[] = [];
+      while (line.length < stage.blocks) {
+        const b = nextBlock(line, stage, rng);
+        expect(b).toBeGreaterThanOrEqual(0);
+        expect(b).toBeLessThan(stage.blocks);
+        expect(line).not.toContain(b);
+        line.push(b);
+      }
+      expect(new Set(line).size).toBe(stage.blocks);
+    }
   });
 
-  it('takes one block off after a slip, never under the start', () => {
-    expect(nextLength(stage, 5, false)).toBe(4);
-    expect(nextLength(stage, 3, false)).toBe(3);
+  it('returns -1 on a full board', () => {
+    expect(nextBlock([0, 1, 2, 3, 4, 5, 6, 7, 8], stage, mulberry32(3))).toBe(-1);
+  });
+
+  it('can pick any block not in the line', () => {
+    const seen = new Set<number>();
+    const rng = mulberry32(9);
+    for (let i = 0; i < 300; i++) seen.add(nextBlock([0, 1], stage, rng));
+    expect([...seen].sort((x, y) => x - y)).toEqual([2, 3, 4, 5, 6, 7, 8]);
   });
 });
 

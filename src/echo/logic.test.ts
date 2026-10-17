@@ -7,10 +7,8 @@ import {
   echoProgress,
   echoStageById,
   expectedOrder,
-  extendLine,
   interval,
   makeLine,
-  nextLength,
   nextStep,
   parseRecord,
   recordLine,
@@ -166,24 +164,6 @@ describe('makeLine', () => {
   });
 });
 
-describe('extendLine', () => {
-  it('keeps the existing strokes and adds exactly one step', () => {
-    const line = makeLine(5, SIX, mulberry32(11));
-    const snapshot = line.map((s) => [...s]);
-    const longer = extendLine(line, SIX, mulberry32(12));
-    expect(longer).toHaveLength(6);
-    expect(longer.slice(0, 5)).toEqual(snapshot);
-  });
-
-  it('does not mutate the line it was given', () => {
-    const line = makeLine(5, SIX, mulberry32(11));
-    const snapshot = line.map((s) => [...s]);
-    extendLine(line, SIX, mulberry32(13));
-    expect(line).toHaveLength(5);
-    expect(line).toEqual(snapshot);
-  });
-});
-
 describe('expectedOrder', () => {
   const line: Line = [[1], [2, 4], [0]];
 
@@ -322,21 +302,6 @@ describe('interval and schedule', () => {
 
   it('gives an empty schedule for an empty line', () => {
     expect(schedule(FOUR, 0)).toEqual([]);
-  });
-});
-
-describe('nextLength', () => {
-  it('adds one step after a clean line', () => {
-    expect(nextLength(FOUR, 5, true)).toBe(6);
-  });
-
-  it('drops one step after a slip', () => {
-    expect(nextLength(FOUR, 5, false)).toBe(4);
-  });
-
-  it('never drops below the stage start after a slip', () => {
-    expect(nextLength(FOUR, FOUR.start, false)).toBe(FOUR.start);
-    expect(nextLength(CHORD, CHORD.start, false)).toBe(CHORD.start);
   });
 });
 

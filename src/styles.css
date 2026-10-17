@@ -1147,7 +1147,7 @@ button:focus-visible {
 }
 
 .echo-meta {
-  grid-template-columns: auto 1fr auto auto auto;
+  grid-template-columns: auto 1fr auto auto auto auto;
 }
 
 /* ---------------------------------------------------------------- Faces */

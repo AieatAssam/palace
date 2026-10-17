@@ -181,25 +181,91 @@ test.describe('Echo', () => {
     expect(sawPair).toBe(true);
   });
 
-  test('three slips end the sitting; Again starts over; End then Leave goes to the hub', async ({ page }) => {
+  /** Strike a bell the line does not want now. Returns the slip's outcome, read while the slip is still shown. */
+  async function strikeWrong(page: Page): Promise<string> {
+    await waitForRepeat(page);
+    const wanted = await page.evaluate(() => window.__palace!.echo.next());
+    const n = (await echoState(page)).stage.bells;
+    const wrong = Array.from({ length: n }, (_, k) => k + 1).find((b) => !wanted.includes(b))!;
+    await page.getByTestId(`echo-bell-${wrong}`).click();
+    let outcome: string | null = null;
+    // The slip clears after its pause, so read the outcome as soon as it shows.
+    await expect
+      .poll(async () => {
+        outcome = await page.evaluate(() => {
+          const e = window.__palace!.echo.state();
+          return e.phase === 'slip' ? (e.slip?.outcome ?? null) : null;
+        });
+        return outcome;
+      })
+      .not.toBeNull();
+    return outcome!;
+  }
+
+  test('a first miss replays the same line at the same length', async ({ page }) => {
     test.setTimeout(45_000);
-    await enterEcho(page, 'six');
+    await enterEcho(page, 'six', 7);
+    await waitForRepeat(page);
+    const before = await echoState(page);
+    expect(before.line).toHaveLength(3);
+
+    expect(await strikeWrong(page)).toBe('retry');
+    const slip = await echoState(page);
+    expect(slip.sitting.slips).toBe(1);
+    expect(slip.sitting.drops).toBe(0);
+
+    await waitForRepeat(page);
+    const again = await echoState(page);
+    expect(again.line).toEqual(before.line);
+    expect(again.tune).toEqual(before.tune);
+    expect(again.line).toHaveLength(3);
+    expect(again.missesInRow).toBe(1);
+    await expect(page.getByTestId('echo-slips')).toHaveAttribute('aria-label', '0 of 3 drop-backs');
+  });
+
+  test('a clean line keeps the streak; a first miss keeps it too; a second miss drops two bells back', async ({ page }) => {
+    test.setTimeout(90_000);
+    await enterEcho(page, 'six', 7);
+    await waitForRepeat(page);
+    expect(await ringBack(page)).toMatch(/^(clean|listen)$/);
+    await waitForRepeat(page);
+    const grown = await echoState(page);
+    expect(grown.line).toHaveLength(4);
+    expect((await page.evaluate(() => window.__palace!.rewards())).streak).toBe(1);
+
+    expect(await strikeWrong(page)).toBe('retry');
+    expect((await page.evaluate(() => window.__palace!.rewards())).streak).toBe(1);
+    await waitForRepeat(page);
+    expect((await echoState(page)).line).toEqual(grown.line);
+
+    expect(await strikeWrong(page)).toBe('drop');
+    await expect.poll(() => page.evaluate(() => window.__palace!.echo.state().sitting.drops)).toBe(1);
+    expect((await page.evaluate(() => window.__palace!.rewards())).streak).toBe(0);
+    await waitForRepeat(page);
+    const dropped = await echoState(page);
+    expect(dropped.line).toHaveLength(3);
+    expect(dropped.line).toEqual(grown.line.slice(0, 3));
+    expect(dropped.tune.slice(0, 4)).toEqual(grown.tune.slice(0, 4));
+    await expect(page.getByTestId('echo-slips')).toHaveAttribute('aria-label', '1 of 3 drop-backs');
+  });
+
+  test('three drop-backs end the sitting; Again starts over; End then Leave goes to the hub', async ({ page }) => {
+    test.setTimeout(120_000);
+    await enterEcho(page, 'six', 7);
     const sheet = page.getByTestId('session-sheet');
 
-    for (let i = 1; i <= 3; i++) {
+    // Each drop-back costs two misses in a row: the first replays the line, the second drops it.
+    for (let drop = 1; drop <= 3; drop++) {
+      expect(await strikeWrong(page)).toBe('retry');
       await waitForRepeat(page);
-      const wanted = await page.evaluate(() => window.__palace!.echo.next());
-      const n = (await echoState(page)).stage.bells;
-      const wrong = Array.from({ length: n }, (_, k) => k + 1).find((b) => !wanted.includes(b))!;
-      await page.getByTestId(`echo-bell-${wrong}`).click();
-
-      await expect.poll(() => page.evaluate(() => window.__palace!.echo.state().sitting.slips)).toBe(i);
-      await expect(page.getByTestId('echo-slips')).toHaveAttribute('aria-label', /\d of 3 slips/);
-      expect((await page.evaluate(() => window.__palace!.rewards())).streak).toBe(0);
+      expect(await strikeWrong(page)).toBe('drop');
+      await expect.poll(() => page.evaluate(() => window.__palace!.echo.state().sitting.drops)).toBe(drop);
+      await expect(page.getByTestId('echo-slips')).toHaveAttribute('aria-label', `${drop} of 3 drop-backs`);
     }
 
     await expect(sheet).toBeVisible();
-    expect((await echoState(page)).sitting.slips).toBe(3);
+    expect((await echoState(page)).sitting.slips).toBe(6);
+    expect((await echoState(page)).sitting.drops).toBe(3);
 
     // Again: a fresh sitting, back on the bells.
     await expect(page.getByTestId('session-again')).toHaveClass(/placed/);
@@ -208,6 +274,7 @@ test.describe('Echo', () => {
     await expect.poll(() => page.evaluate(() => window.__palace!.screen())).toBe('play');
     await waitForRepeat(page);
     expect((await echoState(page)).sitting.slips).toBe(0);
+    expect((await echoState(page)).sitting.drops).toBe(0);
 
     // End, then Leave returns to the hub.
     await page.getByTestId('session-end').click();
@@ -216,6 +283,24 @@ test.describe('Echo', () => {
     await page.getByTestId('session-leave').click();
     await expect(page.getByTestId('hub')).toBeVisible();
     await expect.poll(() => page.evaluate(() => window.__palace!.screen())).toBe('hub');
+  });
+
+  test('New tune draws a fresh tune at the start length and keeps the sitting', async ({ page }) => {
+    test.setTimeout(45_000);
+    await enterEcho(page, 'six', 7);
+    await waitForRepeat(page);
+    expect(await ringBack(page)).toMatch(/^(clean|listen)$/);
+    await waitForRepeat(page);
+    expect((await echoState(page)).line).toHaveLength(4);
+
+    await expect(page.getByTestId('echo-new')).toBeVisible();
+    await page.getByTestId('echo-new').click();
+    await expect.poll(() => echoState(page).then((s) => s.line.length)).toBe(3);
+    const fresh = await echoState(page);
+    expect(fresh.missesInRow).toBe(0);
+    expect(fresh.sitting.clean).toBe(1);
+    await waitForRepeat(page);
+    expect((await echoState(page)).line).toEqual(fresh.tune.slice(0, 3));
   });
 
   test('a tap while the room is playing the line does nothing', async ({ page }) => {

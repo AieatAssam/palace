@@ -1,7 +1,8 @@
 import type { MelodyQuestion } from '../game/drills';
 import type { MelodyNote } from '../game/melodies';
 import { letterOf } from '../game/melodies';
-import { type MelodyRun, usePalace } from '../store';
+import { missTitle } from '../game/span';
+import { type MelodyRun, melodyNotesInPlay, usePalace } from '../store';
 import { pretty, spokenNote } from './format';
 
 /** Staff geometry (SVG units): five lines `GAP` apart, the bottom line (E4 written) at y = BOTTOM. */
@@ -92,21 +93,38 @@ function Staff({ line, start, states }: { line: MelodyNote[]; start: number; sta
 }
 
 function statesOf(q: MelodyQuestion, run: MelodyRun): NoteState[] {
-  const hide = q.recall && run.phase === 'play';
+  const hide = q.recall && (run.phase === 'play' || run.phase === 'missed');
   return q.notes.map((_, i) => {
     if (run.sounding === i) return 'sounding';
     if (run.phase === 'preview' || run.phase === 'playback' || run.phase === 'done') return 'ahead';
+    // After a from-memory miss, the wanted note shows until the room plays the lines again.
+    if (run.phase === 'missed') return i === run.slip?.wanted ? 'now' : i < run.at ? 'played' : 'hidden';
     if (i < run.at) return 'played';
     if (hide) return 'hidden';
     return i === run.at ? 'now' : 'ahead';
   });
 }
 
+const lines = (n: number) => `${n} ${n === 1 ? 'line' : 'lines'}`;
+
+/** A from-memory preview: the lines the room plays, which the player then plays back. */
+function listenTo(q: MelodyQuestion, run: MelodyRun): string {
+  const n = run.span.length;
+  if (q.lines.length === 1) return 'Listen, then play it from memory.';
+  if (n === 1) return 'Listen to line 1, then play it from memory.';
+  return `Listen to lines 1 to ${n}, then play them from memory.`;
+}
+
 function caption(q: MelodyQuestion, run: MelodyRun, missed: boolean, clean: boolean | null): string {
-  const total = q.notes.length;
+  const total = melodyNotesInPlay(q, run).length;
   switch (run.phase) {
     case 'preview':
-      return q.recall ? 'Listen, then play it from memory.' : 'Listen.';
+      return q.recall ? listenTo(q, run) : 'Listen.';
+    case 'missed': {
+      const wanted = run.slip ? q.notes[run.slip.wanted] : undefined;
+      const title = missTitle(run.slip?.outcome ?? 'retry', run.span.length, false, lines);
+      return wanted ? `${title} The note was ${pretty(letterOf(wanted.midi))}.` : title;
+    }
     case 'playback':
       return 'Played back.';
     case 'done':
@@ -129,12 +147,12 @@ export function MelodyCard() {
   const feedback = usePalace((s) => s.feedback);
   if (q.kind !== 'melody') return null;
   const states = statesOf(q, run);
-  const focus = run.sounding >= 0 ? run.sounding : Math.min(run.at, q.notes.length - 1);
+  const focus = run.sounding >= 0 ? run.sounding : run.phase === 'missed' && run.slip ? run.slip.wanted : Math.min(run.at, q.notes.length - 1);
   const { line, start, number } = lineAt(q, focus);
-  const missed = run.phase === 'play' && feedback?.kind === 'miss';
+  const missed = (run.phase === 'play' || run.phase === 'missed') && feedback?.kind === 'miss';
   const clean = run.phase === 'done' ? feedback?.kind === 'correct' : null;
   const want = run.phase === 'play' ? q.notes[run.at] : undefined;
-  const said = want ? `Next: ${spokenNote(want.midi)}. Note ${run.at + 1} of ${q.notes.length}.` : caption(q, run, false, clean);
+  const said = want ? `Next: ${spokenNote(want.midi)}. Note ${run.at + 1} of ${melodyNotesInPlay(q, run).length}.` : caption(q, run, missed, clean);
   return (
     <section className="melody-card" role="group" aria-label={`Melody: ${q.title}`} data-testid="melody-card" data-phase={run.phase}>
       <header className="mc-head-row">

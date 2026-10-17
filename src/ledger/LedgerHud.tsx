@@ -2,7 +2,8 @@ import { useEffect } from 'react';
 import { ComboMeter } from '../rewards/ComboMeter';
 import { useRewards } from '../rewards/store';
 import { RoomsMark, StagesMark, useInsetReporter } from '../ui/Hud';
-import { DRILL_QUESTIONS, SLIPS_PER_SITTING, SOUND_HINTS, figuresFor, ledgerProgress, nextLength, pair, pegsFor, wordFor } from './logic';
+import { DROPS_PER_SITTING, missTitle } from '../game/span';
+import { DRILL_QUESTIONS, SOUND_HINTS, figuresFor, ledgerProgress, pair, pegsFor, wordFor } from './logic';
 import { useLedger } from './store';
 
 /** The figures of a drill item as the page shows them: "7", or "07" for a peg. */
@@ -21,6 +22,8 @@ function Prompt() {
   const q = useLedger((s) => s.question);
   const asked = useLedger((s) => s.sitting.asked);
   const slip = useLedger((s) => s.slip);
+  const next = useLedger((s) => s.span.length);
+  const ends = useLedger((s) => s.sitting.drops >= DROPS_PER_SITTING);
   let title = '';
   let sub = '';
   let tone = '';
@@ -36,11 +39,11 @@ function Prompt() {
       sub = `${done} of ${n} digits typed`;
     } else if (phase === 'clean') {
       title = `Right: all ${n} digits.`;
-      sub = `The next number has ${nextLength(st, n, true)} digits`;
+      sub = next > n ? `The next number has ${next} digits` : `The next number has ${next} digits again`;
       tone = 'correct';
     } else if (phase === 'slip') {
-      title = slip ? `Wrong: digit ${done + 1} was ${slip.wanted}, not ${slip.keyed}.` : 'Wrong digit.';
-      sub = 'The right digit is in green';
+      title = slip ? missTitle(slip.outcome, slip.next, ends) : 'Not quite.';
+      sub = slip ? `Digit ${done + 1} was ${slip.wanted}, not ${slip.keyed}. The right digit is in green.` : 'The right digit is in green.';
       tone = 'miss';
     }
   } else if (q) {
@@ -174,7 +177,8 @@ function useKeys(live: boolean) {
 function Meta() {
   const st = useLedger((s) => s.stage)();
   const record = useLedger((s) => s.record);
-  const slips = useLedger((s) => s.sitting.slips);
+  const drops = useLedger((s) => s.sitting.drops);
+  const newNumber = useLedger((s) => s.newNumber);
   const end = useLedger((s) => s.end);
   const prog = ledgerProgress(st, record);
   const span = st.kind === 'span';
@@ -193,13 +197,18 @@ function Meta() {
         <ComboMeter />
       </span>
       {span ? (
-        <span className="echo-slips" role="img" aria-label={`${slips} of ${SLIPS_PER_SITTING} mistakes`} data-testid="ledger-slips">
-          {Array.from({ length: SLIPS_PER_SITTING }, (_, i) => (
-            <span key={i} className={`echo-slip ${i < slips ? 'spent' : ''}`} />
+        <span className="echo-slips" role="img" aria-label={`${drops} of ${DROPS_PER_SITTING} drop-backs`} title="Two misses in a row drop you back. Three drop-backs end the sitting." data-testid="ledger-slips">
+          {Array.from({ length: DROPS_PER_SITTING }, (_, i) => (
+            <span key={i} className={`echo-slip ${i < drops ? 'spent' : ''}`} />
           ))}
         </span>
       ) : (
         <span />
+      )}
+      {span && (
+        <button className="meta-action" onClick={newNumber} data-testid="ledger-new">
+          New number
+        </button>
       )}
       <button className="meta-action" onClick={end} data-testid="session-end">
         End

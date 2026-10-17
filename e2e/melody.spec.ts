@@ -2,7 +2,7 @@ import { type Page, type Locator, expect, test } from '@playwright/test';
 
 type Pos = { string: number; fret: number };
 type Key = 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown';
-type Phase = 'preview' | 'play' | 'playback' | 'done';
+type Phase = 'preview' | 'play' | 'missed' | 'playback' | 'done';
 type MelodyState = {
   phase: Phase;
   stage: { id: string; title: string; strings: number[]; maxFret: number; recall: boolean };
@@ -11,6 +11,11 @@ type MelodyState = {
   lines: number[];
   at: number;
   misses: number;
+  /** Lines in play (from memory, a tune builds up a line at a time) and notes in play. */
+  span: number;
+  inPlay: number;
+  missesInRow: number;
+  slip: { outcome: string; wanted: number } | null;
   played: Pos[];
   sounding: number;
   shown: boolean;
@@ -187,6 +192,13 @@ async function playPlace(page: Page, places: Pos[]) {
 }
 
 /** Play the note wanted next on a place that sounds it; the run moves on (or the tune ends). */
+/** Every place on the neck that does not sound the wanted note's pitch class (the wanted note name carries an octave). */
+async function wrongPlaces(page: Page, w: Wanted): Promise<Pos[]> {
+  const wantedClass = w.note.replace(/\d+$/, '');
+  const all = await page.evaluate(() => window.__palace!.positions());
+  return all.filter((p) => p.note !== wantedClass).map((p) => ({ string: p.string, fret: p.fret }));
+}
+
 async function playWanted(page: Page) {
   const w = await wanted(page);
   if (!w) throw new Error('not the player’s turn');
@@ -305,6 +317,76 @@ test.describe('Fretboard melody', () => {
     expect((await melodyState(page)).at).toBe(1);
     // The first note has now been revealed in the names list.
     await expect(names.first()).not.toHaveText('·');
+  });
+
+  test('Melody from memory: the tune builds up a line at a time', async ({ page }) => {
+    test.setTimeout(120_000);
+    await enterMelody(page, 'mel-recall');
+    await expect.poll(async () => (await melodyState(page)).phase, { timeout: 15_000 }).toBe('preview');
+    await page.evaluate(() => window.__palace!.melody.endPreview());
+    await expect.poll(async () => (await melodyState(page)).phase, { timeout: 15_000 }).toBe('play');
+    await waitForSettledCamera(page);
+
+    // The first pass is a single line, from the first note.
+    const first = await melodyState(page);
+    expect(first.span).toBe(1);
+    expect(first.inPlay).toBe(first.lines[0]);
+    expect(first.lines.length).toBeGreaterThanOrEqual(2);
+    for (let i = 0; i < first.inPlay; i++) await playWanted(page);
+
+    // A finished line with more to come: one more line, and the room plays both again.
+    await expect.poll(async () => (await melodyState(page)).span, { timeout: 15_000 }).toBe(2);
+    await expect(page.getByTestId('melody-card')).toHaveAttribute('data-phase', 'preview', { timeout: 15_000 });
+    await expect.poll(async () => (await melodyState(page)).phase, { timeout: 30_000 }).toBe('play');
+    const built = await melodyState(page);
+    expect(built.span).toBe(2);
+    expect(built.inPlay).toBe(built.lines[0]! + built.lines[1]!);
+    expect(built.at).toBe(0);
+  });
+
+  test('Melody from memory: a wrong note shows the note and replays the same lines; two misses drop back', async ({ page }) => {
+    test.setTimeout(150_000);
+    await enterMelody(page, 'mel-recall');
+    await expect.poll(async () => (await melodyState(page)).phase, { timeout: 15_000 }).toBe('preview');
+    await page.evaluate(() => window.__palace!.melody.endPreview());
+    await expect.poll(async () => (await melodyState(page)).phase, { timeout: 15_000 }).toBe('play');
+    await waitForSettledCamera(page);
+
+    // Build to two lines first.
+    const first = await melodyState(page);
+    for (let i = 0; i < first.inPlay; i++) await playWanted(page);
+    await expect.poll(async () => (await melodyState(page)).span, { timeout: 15_000 }).toBe(2);
+    await expect.poll(async () => (await melodyState(page)).phase, { timeout: 30_000 }).toBe('play');
+
+    // First miss: the wanted note is shown, the same two lines are played again.
+    const w = await wanted(page);
+    if (!w) throw new Error('not the player’s turn');
+    await playPlace(page, await wrongPlaces(page, w));
+    await expect.poll(async () => (await melodyState(page)).phase, { timeout: 15_000 }).toBe('missed');
+    const missed = await melodyState(page);
+    expect(missed.shown).toBe(false);
+    expect(missed.span).toBe(2);
+    expect(missed.missesInRow).toBe(1);
+    expect(missed.slip?.outcome).toBe('retry');
+    await expect(page.getByTestId('melody-caption')).toContainText('Not quite. Here it is again.');
+    await expect(page.getByTestId('melody-caption')).toContainText('The note was');
+    await expect.poll(async () => (await melodyState(page)).phase, { timeout: 15_000 }).toBe('preview');
+    expect((await melodyState(page)).span).toBe(2);
+    await expect.poll(async () => (await melodyState(page)).phase, { timeout: 30_000 }).toBe('play');
+    expect((await melodyState(page)).at).toBe(0);
+
+    // Second miss in a row: back to one line (never under one), and the tune builds up again from there.
+    const w2 = await wanted(page);
+    if (!w2) throw new Error('not the player’s turn');
+    await playPlace(page, await wrongPlaces(page, w2));
+    await expect.poll(async () => (await melodyState(page)).phase, { timeout: 15_000 }).toBe('missed');
+    const dropped = await melodyState(page);
+    expect(dropped.slip?.outcome).toBe('drop');
+    expect(dropped.span).toBe(1);
+    expect(dropped.missesInRow).toBe(0);
+    await expect(page.getByTestId('melody-caption')).toContainText('Back to 1 line and building up again.');
+    await expect.poll(async () => (await melodyState(page)).phase, { timeout: 15_000 }).toBe('preview');
+    expect((await melodyState(page)).inPlay).toBe(first.inPlay);
   });
 
   test('Melody stages on the Stages card: picking a stage moves the tune there', async ({ page }) => {

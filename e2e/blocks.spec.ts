@@ -180,27 +180,69 @@ test.describe('Blocks', () => {
     expect((await blocksState(page)).sitting.slips).toBe(0);
   });
 
-  test('a wrong block is a slip; three slips end the sitting; Again starts over; End then Leave goes to the hub', async ({ page }) => {
-    // Three lines shown and missed, a slip pause each, and two card slides: the longest test here.
-    test.setTimeout(75_000);
+  /** Tap a block the line does not want now. Returns the slip's outcome, read while the slip is still shown. */
+  async function tapWrong(page: Page): Promise<string> {
+    await waitForRecall(page);
+    const wanted = await page.evaluate(() => window.__palace!.blocks.next());
+    const n = (await blocksState(page)).stage.blocks;
+    const wrong = Array.from({ length: n }, (_, k) => k + 1).find((b) => b !== wanted)!;
+    await page.getByTestId(`block-${wrong}`).click();
+    let outcome: string | null = null;
+    // The slip clears after its pause, so read the outcome as soon as it shows.
+    await expect
+      .poll(async () => {
+        outcome = await page.evaluate(() => {
+          const b = window.__palace!.blocks.state();
+          return b.phase === 'slip' ? (b.slip?.outcome ?? null) : null;
+        });
+        return outcome;
+      })
+      .not.toBeNull();
+    return outcome!;
+  }
+
+  test('a first miss shows the same line again; a second drops two blocks back; three drop-backs end the sitting; Again starts over; End then Leave goes to the hub', async ({ page }) => {
+    // Each drop-back is two misses, each with a slip pause and a replay: the longest test here.
+    test.setTimeout(120_000);
     await enterBlocks(page, 'span');
     const sheet = page.getByTestId('session-sheet');
 
-    for (let i = 1; i <= 3; i++) {
-      await waitForRecall(page);
-      const wanted = await page.evaluate(() => window.__palace!.blocks.next());
-      const n = (await blocksState(page)).stage.blocks;
-      const wrong = Array.from({ length: n }, (_, k) => k + 1).find((b) => b !== wanted)!;
-      await page.getByTestId(`block-${wrong}`).click();
+    // Build the line to four blocks, so a drop has somewhere to go back to.
+    await waitForRecall(page);
+    await tapBack(page);
+    await waitForRecall(page);
+    const grown = await blocksState(page);
+    expect(grown.line).toHaveLength(4);
+    expect((await page.evaluate(() => window.__palace!.rewards())).streak).toBe(1);
 
-      await expect.poll(() => page.evaluate(() => window.__palace!.blocks.state().sitting.slips)).toBe(i);
-      await expect(page.getByTestId('prompt')).toHaveText('Not that block.');
-      await expect(page.getByTestId('blocks-slips')).toHaveAttribute('aria-label', /\d of 3 slips/);
-      expect((await page.evaluate(() => window.__palace!.rewards())).streak).toBe(0);
+    // First miss: the same line, same length, streak kept.
+    expect(await tapWrong(page)).toBe('retry');
+    await expect(page.getByTestId('prompt')).toHaveText(/Not quite\. Here it is again\./);
+    expect((await page.evaluate(() => window.__palace!.rewards())).streak).toBe(1);
+    await waitForRecall(page);
+    expect((await blocksState(page)).line).toEqual(grown.line);
+
+    // Second miss in a row: back two blocks, the same prefix.
+    expect(await tapWrong(page)).toBe('drop');
+    await expect(page.getByTestId('blocks-slips')).toHaveAttribute('aria-label', '1 of 3 drop-backs');
+    expect((await page.evaluate(() => window.__palace!.rewards())).streak).toBe(0);
+    await waitForRecall(page);
+    const dropped = await blocksState(page);
+    expect(dropped.line).toEqual(grown.line.slice(0, 3));
+    expect(dropped.items.slice(0, 4)).toEqual(grown.items.slice(0, 4));
+
+    // Two more drop-backs end the sitting.
+    for (let drop = 2; drop <= 3; drop++) {
+      expect(await tapWrong(page)).toBe('retry');
+      await waitForRecall(page);
+      expect(await tapWrong(page)).toBe('drop');
+      await expect.poll(() => page.evaluate(() => window.__palace!.blocks.state().sitting.drops)).toBe(drop);
+      await expect(page.getByTestId('blocks-slips')).toHaveAttribute('aria-label', `${drop} of 3 drop-backs`);
+      if (drop < 3) await waitForRecall(page);
     }
 
     await expect(sheet).toBeVisible();
-    expect((await blocksState(page)).sitting.slips).toBe(3);
+    expect((await blocksState(page)).sitting.slips).toBe(6);
 
     // Again: a fresh sitting, back on the blocks.
     await expect(page.getByTestId('session-again')).toHaveClass(/placed/);
@@ -209,6 +251,7 @@ test.describe('Blocks', () => {
     await expect.poll(() => page.evaluate(() => window.__palace!.screen())).toBe('play');
     await waitForRecall(page);
     expect((await blocksState(page)).sitting.slips).toBe(0);
+    expect((await blocksState(page)).sitting.drops).toBe(0);
 
     // End, then Leave returns to the hub.
     await page.getByTestId('session-end').click();
@@ -217,6 +260,24 @@ test.describe('Blocks', () => {
     await page.getByTestId('session-leave').click();
     await expect(page.getByTestId('hub')).toBeVisible();
     await expect.poll(() => page.evaluate(() => window.__palace!.screen())).toBe('hub');
+  });
+
+  test('New line draws a fresh line at the start length and keeps the sitting', async ({ page }) => {
+    test.setTimeout(45_000);
+    await enterBlocks(page, 'span');
+    await waitForRecall(page);
+    await tapBack(page);
+    await waitForRecall(page);
+    expect((await blocksState(page)).line).toHaveLength(4);
+
+    await expect(page.getByTestId('blocks-new')).toBeVisible();
+    await page.getByTestId('blocks-new').click();
+    await expect.poll(async () => (await blocksState(page)).line.length).toBe(3);
+    const fresh = await blocksState(page);
+    expect(fresh.missesInRow).toBe(0);
+    expect(fresh.sitting.clean).toBe(1);
+    await waitForRecall(page);
+    expect((await blocksState(page)).line).toEqual(fresh.items.slice(0, 3));
   });
 
   test('a moving board is laid out afresh for each line and its blocks stay tappable', async ({ page }) => {
