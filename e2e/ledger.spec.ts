@@ -242,8 +242,9 @@ test.describe('Ledger', () => {
       const a = await ledgerAnswer(page);
       await page.keyboard.press(String((a as { figure: number }).figure));
     }
-    await expect.poll(() => page.evaluate(() => window.__palace!.ledger.state().phase)).toBe('clean');
-    expect((await ledgerState(page)).sitting.clean).toBe(1);
+    // 'clean' shows for under a second before the next number is written, so wait on the tally rather than the phase.
+    await expect.poll(async () => (await ledgerState(page)).sitting.clean).toBe(1);
+    expect((await ledgerState(page)).sitting.slips).toBe(0);
   });
 
   test('the pegs drill: four right answers alternate pick and key, then one wrong', async ({ page }) => {
@@ -255,7 +256,9 @@ test.describe('Ledger', () => {
       await waitForPhase(page, 'ask');
       kinds.push((await ledgerState(page)).question!.kind);
       await answerRight(page);
-      await waitForPhase(page, 'right');
+      // 'right' shows for under a second before the next question, so wait on the tally rather than the phase.
+      await expect.poll(async () => (await ledgerState(page)).sitting.asked, { timeout: 15_000 }).toBe(i);
+      expect((await ledgerState(page)).sitting.right).toBe(i);
     }
     // The sitting runs sixteen questions, so four is well short of the end.
     expect(kinds).toEqual(['pick', 'key', 'pick', 'key']);
