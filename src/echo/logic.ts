@@ -82,11 +82,6 @@ export function makeLine(length: number, stage: Pick<EchoStage, 'bells' | 'chord
   return line;
 }
 
-/** The line one step longer: the same strokes, and one more at the end. */
-export function extendLine(line: Line, stage: Pick<EchoStage, 'bells' | 'chords'>, rng: Rng): Step[] {
-  return [...line, nextStep(line, stage, rng)];
-}
-
 /** The steps in the order the player rings them back. */
 export function expectedOrder(line: Line, order: EchoStage['order']): Step[] {
   return order === 'reverse' ? [...line].reverse() : [...line];
@@ -148,14 +143,6 @@ export function interval(stage: Pick<EchoStage, 'tempo' | 'floor' | 'start'>, le
 export function schedule(stage: Pick<EchoStage, 'tempo' | 'floor' | 'start'>, length: number): number[] {
   const gap = interval(stage, length);
   return Array.from({ length }, (_, i) => i * gap);
-}
-
-/** Missed lines in a sitting before the page closes. */
-export const SLIPS_PER_SITTING = 3;
-
-/** The length of the next line: one longer after a clean line; one shorter (never under the start) after a slip. */
-export function nextLength(stage: Pick<EchoStage, 'start'>, length: number, clean: boolean): number {
-  return clean ? length + 1 : Math.max(stage.start, length - 1);
 }
 
 /** Saved progress: the longest clean line per stage, and lines rung. */

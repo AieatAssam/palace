@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { haptic, knock, tapBlock, unlockAudio } from '../audio/engine';
+import { DROPS_PER_SITTING, type Span, type SpanOutcome, line as inPlay, spanClean, spanMiss, startSpan } from '../game/span';
 import { useRewards } from '../rewards/store';
 import { onResetProgress, usePalace } from '../store';
 import { CAPTURE } from '../three/quality';
@@ -10,15 +11,12 @@ import {
   DRILL_QUESTIONS,
   FIRST_LEDGER_STAGE,
   LEDGER_STAGES,
-  SLIPS_PER_SITTING,
   cardId,
   emptyRecord,
   figuresFor,
   key,
   ledgerProgress,
   ledgerStageById,
-  makeNumber,
-  nextLength,
   nextQuestion,
   parseRecord,
   recordAnswer,
@@ -31,7 +29,11 @@ import {
  * once to study), the page is blotted, and the player keys it back.
  *
  *   rest → write (figures appear) [→ study (the whole number, until Ready)] → recall
- *        → clean | slip → write … until three slips close the page.
+ *        → clean | slip → write … until three drop-backs close the page.
+ *
+ * The number lasts the whole sitting (`game/span.ts`): a clean one grows by the stage's step,
+ * a first miss writes the same number again, a second miss in a row goes back two steps.
+ * Only New number or a new sitting draws a fresh one.
  *
  * A peg stage: questions on the Major system, picked by the spaced-repetition deck.
  *
@@ -42,11 +44,12 @@ export const LEDGER_KEY = 'palace.ledger.v1';
 export type LedgerPhase = 'rest' | 'write' | 'study' | 'recall' | 'clean' | 'slip' | 'ask' | 'right' | 'wrong';
 
 export interface LedgerSitting {
-  /** Span: numbers attempted and keyed back clean, the longest, slips. */
+  /** Span: numbers attempted and keyed back clean, the longest, misses and drop-backs (two misses in a row). */
   lines: number;
   clean: number;
   longest: number;
   slips: number;
+  drops: number;
   /** Drill: questions asked and answered right. */
   asked: number;
   right: number;
@@ -73,14 +76,16 @@ interface LedgerSave {
 
 interface LedgerState extends LedgerSave {
   phase: LedgerPhase;
+  /** Span: the sitting's number, already moved on to the next length during a clean or slip pause. */
+  span: Span<number>;
   /** Span: the number written. */
   digits: number[];
   /** Span: figures the ledger has written so far (all of them once written). */
   written: number;
   /** Figures keyed right so far (span recall, or a drill 'key' question). */
   done: number;
-  /** The figure keyed on a slip, and the one that was due. */
-  slip: { keyed: number; wanted: number } | null;
+  /** The figure keyed on a slip, the one that was due, and what happens next ('retry' or 'drop', to `next` figures). */
+  slip: { keyed: number; wanted: number; outcome: SpanOutcome; next: number } | null;
   question: DrillQuestion | null;
   /** Drill 'pick': the choice taken (index), or -1. Drill 'key': the wrong figure keyed, or -1. */
   chosen: number;
@@ -97,6 +102,8 @@ interface LedgerState extends LedgerSave {
   ready(): void;
   /** Drill 'pick': choice `i` taken. */
   pick(i: number): void;
+  /** Span: a fresh number at the stage's opening length (the sitting goes on). */
+  newNumber(): void;
   again(): void;
   end(): void;
 }
@@ -108,7 +115,7 @@ const RIGHT_PAUSE = 750;
 const WRONG_PAUSE = 2200;
 
 function emptySitting(knownBefore = 0): LedgerSitting {
-  return { lines: 0, clean: 0, longest: 0, slips: 0, asked: 0, right: 0, knownBefore, mastered: false, newBest: false };
+  return { lines: 0, clean: 0, longest: 0, slips: 0, drops: 0, asked: 0, right: 0, knownBefore, mastered: false, newBest: false };
 }
 
 function kv(): Storage | undefined {
@@ -167,6 +174,10 @@ export const useLedger = create<LedgerState>()((set, get) => {
   };
 
   /** The ledger writes the number; a timed stage hands it straight to the player, a studied one waits for Ready. */
+  const draw = () => Math.min(9, Math.floor(Math.random() * 10));
+  /** A fresh number at the stage's opening length (none for a peg stage). */
+  const freshSpan = (st: LedgerStage): Span<number> => (st.kind === 'span' ? startSpan(st, draw) : { items: [], length: 0, misses: 0 });
+
   const write = (delay: number) => {
     clearTimers();
     const st = stage();
@@ -205,9 +216,11 @@ export const useLedger = create<LedgerState>()((set, get) => {
   const resetSitting = () => {
     clearTimers();
     const st = stage();
+    const span = freshSpan(st);
     set({
       phase: 'rest',
-      digits: st.kind === 'span' ? makeNumber(st.start, Math.random) : [],
+      span,
+      digits: inPlay(span),
       written: 0,
       done: 0,
       slip: null,
@@ -248,10 +261,12 @@ export const useLedger = create<LedgerState>()((set, get) => {
   };
 
   const first = ledgerStageById(initial.stageId);
+  const firstSpan = freshSpan(first);
   return {
     ...initial,
     phase: 'rest',
-    digits: first.kind === 'span' ? makeNumber(first.start, Math.random) : [],
+    span: firstSpan,
+    digits: inPlay(firstSpan),
     written: 0,
     done: 0,
     slip: null,
@@ -288,7 +303,7 @@ export const useLedger = create<LedgerState>()((set, get) => {
         return;
       }
       const { sitting, phase } = get();
-      if (stage().kind === 'span' ? sitting.slips >= SLIPS_PER_SITTING : sitting.asked >= DRILL_QUESTIONS) return usePalace.getState().endSession();
+      if (stage().kind === 'span' ? sitting.drops >= DROPS_PER_SITTING : sitting.asked >= DRILL_QUESTIONS) return usePalace.getState().endSession();
       if (phase === 'ask') askedAt = performance.now();
       else begin(LEAD_IN);
     },
@@ -317,13 +332,22 @@ export const useLedger = create<LedgerState>()((set, get) => {
         buzz(30);
         const { record } = recordLine(get().record, st, digits.length, false);
         persist({ stageId: st.id, record });
-        useRewards.getState().answer(false);
+        const missed = spanMiss(get().span, st);
+        // A first miss only pauses the run; a drop-back breaks it.
+        if (missed.outcome === 'drop') useRewards.getState().answer(false);
         const s = get().sitting;
-        const sitting = { ...s, lines: s.lines + 1, slips: s.slips + 1 };
-        set({ record, sitting, phase: 'slip', slip: { keyed: digit, wanted: res.wanted }, log: logged(get().log, { figures: String(digits.length), words: 'figures', ok: false }) });
+        const sitting = { ...s, lines: s.lines + 1, slips: s.slips + 1, drops: s.drops + (missed.outcome === 'drop' ? 1 : 0) };
+        set({
+          record,
+          sitting,
+          span: missed.span,
+          phase: 'slip',
+          slip: { keyed: digit, wanted: res.wanted, outcome: missed.outcome, next: missed.span.length },
+          log: logged(get().log, { figures: String(digits.length), words: 'figures', ok: false }),
+        });
         later(SLIP_PAUSE, () => {
-          if (sitting.slips >= SLIPS_PER_SITTING) return usePalace.getState().endSession();
-          set({ digits: makeNumber(nextLength(st, digits.length, false), Math.random) });
+          if (sitting.drops >= DROPS_PER_SITTING) return usePalace.getState().endSession();
+          set({ digits: inPlay(get().span) });
           write(250);
         });
         return;
@@ -339,13 +363,14 @@ export const useLedger = create<LedgerState>()((set, get) => {
       const s = get().sitting;
       set({
         record,
+        span: spanClean(get().span, st, draw).span,
         done: res.done,
         phase: 'clean',
         sitting: { ...s, lines: s.lines + 1, clean: s.clean + 1, longest: Math.max(s.longest, digits.length), mastered: s.mastered || crossed, newBest: s.newBest || newBest },
         log: logged(get().log, { figures: String(digits.length), words: 'figures', ok: true }),
       });
       later(CLEAN_PAUSE, () => {
-        set({ digits: makeNumber(nextLength(st, digits.length, true), Math.random) });
+        set({ digits: inPlay(get().span) });
         write(150);
       });
     },
@@ -362,6 +387,15 @@ export const useLedger = create<LedgerState>()((set, get) => {
       const { phase, question, active } = get();
       if (!active || phase !== 'ask' || !question || question.kind !== 'pick' || i < 0 || i >= question.choices.length) return;
       settle(question.choices[i] === question.item, i);
+    },
+
+    newNumber() {
+      if (!get().active || stage().kind !== 'span') return;
+      unlockAudio();
+      clearTimers();
+      const span = freshSpan(stage());
+      set({ span, digits: inPlay(span), slip: null });
+      write(LEAD_IN);
     },
 
     again() {

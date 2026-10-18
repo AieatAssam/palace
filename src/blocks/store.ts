@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { blockChimeFreq } from '../audio/blocks';
 import { haptic, knock, tapBlock, unlockAudio } from '../audio/engine';
+import { DROPS_PER_SITTING, type Span, type SpanOutcome, line as inPlay, spanClean, spanMiss, startSpan } from '../game/span';
 import { useRewards } from '../rewards/store';
 import { onResetProgress, usePalace } from '../store';
 import { CAPTURE } from '../three/quality';
@@ -11,12 +12,11 @@ import {
   type BlocksStage,
   BLOCKS_STAGES,
   FIRST_BLOCKS_STAGE,
-  SLIPS_PER_SITTING,
   blocksStageById,
   emptyRecord,
   expectedOrder,
-  makeSequence,
-  nextLength,
+  maxLength,
+  nextBlock,
   parseRecord,
   recordLine,
   schedule,
@@ -30,7 +30,11 @@ import {
  * overlay drives from its `hidden` flag (play, with no card or settings over it).
  *
  * rest → show (the board lights the line) → recall (the player taps it back)
- *      → clean | slip → show … until three slips close the page.
+ *      → clean | slip → show … until three drop-backs close the page.
+ *
+ * The line lasts the whole sitting (`game/span.ts`): a clean line adds a block to it, a first
+ * miss shows the same line again, a second miss in a row goes back two blocks. Only New line
+ * or a new sitting draws a fresh one.
  */
 export const BLOCKS_KEY = 'palace.blocks.v1';
 
@@ -42,7 +46,9 @@ export interface BlocksSitting {
   clean: number;
   /** Blocks in the longest clean line this sitting. */
   longest: number;
+  /** Lines missed, and drop-backs (two misses in a row). */
   slips: number;
+  drops: number;
   /** The stage crossed its mastery bar this sitting. */
   mastered: boolean;
   /** The sitting beat the stage's best. */
@@ -55,6 +61,10 @@ export interface BlocksSlip {
   wanted: number;
   /** The line in the order it should have been tapped back. */
   expected: number[];
+  /** 'retry': the same line again; 'drop': back two steps. */
+  outcome: SpanOutcome;
+  /** Blocks in the line shown next. */
+  next: number;
 }
 
 interface BlocksSave {
@@ -64,6 +74,8 @@ interface BlocksSave {
 
 interface BlocksState extends BlocksSave {
   phase: BlocksPhase;
+  /** The sitting's line of blocks; `line` is the part in play. */
+  span: Span<number>;
   line: number[];
   /** Blocks tapped back so far in this line. */
   done: number;
@@ -81,6 +93,8 @@ interface BlocksState extends BlocksSave {
   setActive(on: boolean): void;
   /** A tap on block `block` (0-based), from a touch, a click or the keyboard. */
   press(block: number): void;
+  /** A fresh line at the stage's opening length (the sitting goes on). */
+  newLine(): void;
   /** Session sheet → a fresh sitting. */
   again(): void;
   end(): void;
@@ -93,7 +107,7 @@ const SLIP_PAUSE = 1700;
 export const SHIFT_MS = 650;
 
 function emptySitting(): BlocksSitting {
-  return { lines: 0, clean: 0, longest: 0, slips: 0, mastered: false, newBest: false };
+  return { lines: 0, clean: 0, longest: 0, slips: 0, drops: 0, mastered: false, newBest: false };
 }
 
 function kv(): Storage | undefined {
@@ -178,21 +192,25 @@ export const useBlocks = create<BlocksState>()((set, get) => {
     later(wait + (line.length - 1) * st.tempo + Math.max(420, st.tempo * 0.75), () => set({ phase: 'recall', showing: -1 }));
   };
 
-  const freshLine = (st: BlocksStage) => makeSequence(st.start, st, Math.random);
+  const rule = (st: BlocksStage) => ({ start: st.start, most: maxLength(st) });
+  const draw = (st: BlocksStage) => (before: readonly number[]) => nextBlock(before, st, Math.random);
+  /** A fresh line at the stage's opening length. */
+  const freshSpan = (st: BlocksStage) => startSpan(rule(st), draw(st));
+  const withSpan = (span: Span<number>) => ({ span, line: inPlay(span) });
 
   const resetSitting = () => {
     clearTimers();
     clearLights();
     const st = stage();
     shiftDue = false;
-    set({ line: freshLine(st), done: 0, phase: 'rest', showing: -1, slip: null, sitting: emptySitting(), seed: st.shifting ? freshSeed() : fixedSeed(st) });
+    set({ ...withSpan(freshSpan(st)), done: 0, phase: 'rest', showing: -1, slip: null, sitting: emptySitting(), seed: st.shifting ? freshSeed() : fixedSeed(st) });
   };
 
   const first = blocksStageById(initial.stageId);
   return {
     ...initial,
     phase: 'rest',
-    line: freshLine(first),
+    ...withSpan(freshSpan(first)),
     done: 0,
     showing: -1,
     seed: first.shifting ? freshSeed() : fixedSeed(first),
@@ -224,14 +242,14 @@ export const useBlocks = create<BlocksState>()((set, get) => {
         set({ phase: 'rest', done: 0, showing: -1 });
         return;
       }
-      if (get().sitting.slips >= SLIPS_PER_SITTING) return usePalace.getState().endSession();
+      if (get().sitting.drops >= DROPS_PER_SITTING) return usePalace.getState().endSession();
       playLine(LEAD_IN);
     },
 
     press(block) {
       unlockAudio();
       const st = stage();
-      const { phase, line, done, active } = get();
+      const { phase, line, span, done, active } = get();
       if (!active || block < 0 || block >= st.blocks) return;
       if (phase !== 'recall') return;
       const expected = expectedOrder(line, st.order);
@@ -244,18 +262,20 @@ export const useBlocks = create<BlocksState>()((set, get) => {
         buzz(30);
         const { record } = recordLine(get().record, st, line.length, false);
         persist({ stageId: st.id, record });
-        useRewards.getState().answer(false);
+        const missed = spanMiss(span, rule(st));
+        // A first miss only pauses the run; a drop-back breaks it.
+        if (missed.outcome === 'drop') useRewards.getState().answer(false);
         const s = get().sitting;
-        const sitting = { ...s, lines: s.lines + 1, slips: s.slips + 1 };
-        shiftDue = true;
+        const sitting = { ...s, lines: s.lines + 1, slips: s.slips + 1, drops: s.drops + (missed.outcome === 'drop' ? 1 : 0) };
+        // The board stays put for the retry, so the same line is shown in the same places.
         set({
           record,
           sitting,
           phase: 'slip',
-          slip: { tapped: block, wanted: res.wanted, expected },
-          line: makeSequence(nextLength(st, line.length, false), st, Math.random),
+          slip: { tapped: block, wanted: res.wanted, expected, outcome: missed.outcome, next: missed.span.length },
+          ...withSpan(missed.span),
         });
-        if (sitting.slips >= SLIPS_PER_SITTING) later(SLIP_PAUSE, () => usePalace.getState().endSession());
+        if (sitting.drops >= DROPS_PER_SITTING) later(SLIP_PAUSE, () => usePalace.getState().endSession());
         else later(SLIP_PAUSE, () => playLine(250));
         return;
       }
@@ -280,12 +300,23 @@ export const useBlocks = create<BlocksState>()((set, get) => {
           clean: s.clean + 1,
           longest: Math.max(s.longest, line.length),
           slips: s.slips,
+          drops: s.drops,
           mastered: s.mastered || crossed,
           newBest: s.newBest || newBest,
         },
-        line: makeSequence(nextLength(st, line.length, true), st, Math.random),
+        ...withSpan(spanClean(span, rule(st), draw(st)).span),
       });
       later(CLEAN_PAUSE, () => playLine(150));
+    },
+
+    newLine() {
+      if (!get().active) return;
+      unlockAudio();
+      clearTimers();
+      clearLights();
+      shiftDue = true;
+      set({ ...withSpan(freshSpan(stage())), slip: null });
+      playLine(LEAD_IN);
     },
 
     again() {

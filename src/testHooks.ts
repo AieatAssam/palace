@@ -17,7 +17,7 @@ import { NBACK_STAGES, type Channel, type NBackProgress, type Tally, isMatch, nb
 import { type NBackPhase, type NBackSitting, useNBack } from './nback/store';
 import { type Combo, type DailyRecord, comboOf } from './rewards/logic';
 import { useRewards } from './rewards/store';
-import { type MelodyPhase, type Screen, type SessionStats, usePalace } from './store';
+import { type MelodyPhase, type Screen, type SessionStats, melodyNotesInPlay, usePalace } from './store';
 import { type HighlightReport, type NeckWindow, cameraState, inspectHighlight, projectPosition, renderInfo, useNeckCursor, useNeckWindow } from './three/view';
 
 /**
@@ -96,6 +96,12 @@ export interface MelodyHooks {
     lines: number[];
     at: number;
     misses: number;
+    /** Lines in play (from memory, the tune builds up a line at a time), notes in play, misses in a row. */
+    span: number;
+    inPlay: number;
+    missesInRow: number;
+    /** After a from-memory miss: 'retry' or 'drop', and the wanted note's index. */
+    slip: { outcome: string; wanted: number } | null;
     played: Position[];
     sounding: number;
     /** The card shows the tune's notes (false while a from-memory tune is being played). */
@@ -122,9 +128,16 @@ export interface LedgerHooks {
     pegs: string[];
     question: { kind: 'pick' | 'key'; item: number; word: string; figures: number[]; choices: string[] } | null;
     log: LogEntry[];
+    /** Every figure the sitting's number has drawn, the length in play next (moves on at a clean or slip), misses in a row. */
+    items: number[];
+    spanLength: number;
+    missesInRow: number;
+    slip: { keyed: number; wanted: number; outcome: string; next: number } | null;
     sitting: LedgerSitting;
     active: boolean;
   };
+  /** The New number control (span stages). */
+  newNumber(): void;
   /** What the ledger wants now: the next figure to key, the choice (1–4) to pick, or null. */
   answer(): { figure: number } | { choice: number } | null;
   stages(): ({ id: string; title: string; kind: LedgerKind } & LedgerProgress)[];
@@ -186,9 +199,15 @@ export interface BlocksHooks {
     /** The step the board is lighting (0-based), or -1. */
     showing: number;
     seed: number;
+    /** Every block the sitting's line has drawn (the line in play is its first `line.length`), and misses in a row. */
+    items: number[];
+    missesInRow: number;
+    slip: { tapped: number; wanted: number; outcome: string; next: number } | null;
     sitting: BlocksSitting;
     active: boolean;
   };
+  /** The New line control. */
+  newLine(): void;
   /** The block the line wants next (null unless it is the player's turn). */
   next(): number | null;
   stages(): ({ id: string; title: string; blocks: number } & BlocksProgress)[];
@@ -214,9 +233,15 @@ export interface EchoHooks {
     partial: number[];
     /** The step the room is sounding as it plays the line (0-based), or -1. */
     sounding: number;
+    /** Every step the sitting's tune has drawn (the line in play is its first `line.length`), and misses in a row. */
+    tune: number[][];
+    missesInRow: number;
+    slip: { struck: number; wanted: number[]; outcome: string; next: number } | null;
     sitting: EchoSitting;
     active: boolean;
   };
+  /** The New tune control. */
+  newTune(): void;
   /** The bells the current step still wants (empty unless it is the player's turn). */
   next(): number[];
   stages(): ({ id: string; title: string; bells: number } & EchoProgress)[];
@@ -325,9 +350,13 @@ export function installTestHooks() {
           lines: q.lines.map((l) => l.length),
           at: run.at,
           misses: run.misses,
+          span: run.span.length,
+          inPlay: melodyNotesInPlay(q, run).length,
+          missesInRow: run.span.misses,
+          slip: run.slip && { ...run.slip },
           played: run.played.map((p) => ({ ...p })),
           sounding: run.sounding,
-          shown: !(q.recall && run.phase === 'play'),
+          shown: !(q.recall && (run.phase === 'play' || run.phase === 'missed')),
         };
       },
       wanted: () => {
@@ -370,6 +399,9 @@ export function installTestHooks() {
           done: e.recall.done,
           partial: e.recall.partial.map((b) => b + 1),
           sounding: e.sounding,
+          tune: one(e.span.items),
+          missesInRow: e.span.misses,
+          slip: e.slip && { struck: e.slip.struck + 1, wanted: e.slip.wanted.map((b) => b + 1), outcome: e.slip.outcome, next: e.slip.next },
           sitting: { ...e.sitting },
           active: e.active,
         };
@@ -379,6 +411,7 @@ export function installTestHooks() {
         if (e.phase !== 'repeat') return [];
         return wantedNow(expectedOrder(e.line, e.stage().order), e.recall).map((b) => b + 1);
       },
+      newTune: () => useEcho.getState().newTune(),
       stages: () => ECHO_STAGES.map((st) => ({ id: st.id, title: st.title, bells: st.bells, ...echoProgress(st, useEcho.getState().record) })),
       enter: (stageId) => {
         walkIn(() => useEcho.getState().chooseStage(stageId));
@@ -427,6 +460,10 @@ export function installTestHooks() {
           pegs: pegsFor(l.digits),
           question: q && { kind: q.kind, item: q.item, word: wordFor(st, q.item), figures: figuresFor(st, q.item), choices: q.choices.map((c) => wordFor(st, c)) },
           log: l.log.map((e) => ({ ...e })),
+          items: [...l.span.items],
+          spanLength: l.span.length,
+          missesInRow: l.span.misses,
+          slip: l.slip && { ...l.slip },
           sitting: { ...l.sitting },
           active: l.active,
         };
@@ -440,6 +477,7 @@ export function installTestHooks() {
         if (q.kind === 'pick') return { choice: q.choices.indexOf(q.item) + 1 };
         return { figure: figuresFor(st, q.item)[l.done]! };
       },
+      newNumber: () => useLedger.getState().newNumber(),
       stages: () => LEDGER_STAGES.map((st) => ({ id: st.id, title: st.title, kind: st.kind, ...ledgerProgress(st, useLedger.getState().record) })),
       enter: (stageId) => {
         walkIn(() => useLedger.getState().chooseStage(stageId));
@@ -484,6 +522,9 @@ export function installTestHooks() {
           done: b.done,
           showing: b.showing,
           seed: b.seed,
+          items: b.span.items.map((x) => x + 1),
+          missesInRow: b.span.misses,
+          slip: b.slip && { tapped: b.slip.tapped + 1, wanted: b.slip.wanted + 1, outcome: b.slip.outcome, next: b.slip.next },
           sitting: { ...b.sitting },
           active: b.active,
         };
@@ -495,6 +536,7 @@ export function installTestHooks() {
         return want === undefined ? null : want + 1;
       },
       stages: () => BLOCKS_STAGES.map((st) => ({ id: st.id, title: st.title, blocks: st.blocks, ...blocksProgress(st, useBlocks.getState().record) })),
+      newLine: () => useBlocks.getState().newLine(),
       bestSpan: () => ({ forward: bestSpan(useBlocks.getState().record, 'forward'), reverse: bestSpan(useBlocks.getState().record, 'reverse') }),
       rects: () => [...blockRects.entries()].sort((a, b) => a[0] - b[0]).map(([i, r]) => ({ block: i + 1, ...r })),
       enter: (stageId) => {

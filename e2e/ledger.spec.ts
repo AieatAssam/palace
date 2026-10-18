@@ -57,6 +57,26 @@ async function answerRight(page: Page) {
   }
 }
 
+/** Key a figure that is not the one due. Returns the slip's outcome, read while the slip is still shown. */
+async function keyWrong(page: Page): Promise<string> {
+  await waitForPhase(page, 'recall');
+  const a = await ledgerAnswer(page);
+  if (!a || !('figure' in a)) throw new Error('span recall wants no figure');
+  await page.getByTestId(`ledger-key-${(a.figure + 1) % 10}`).click();
+  let outcome: string | null = null;
+  // The slip clears after its pause, so read the outcome as soon as it shows.
+  await expect
+    .poll(async () => {
+      outcome = await page.evaluate(() => {
+        const l = window.__palace!.ledger.state();
+        return l.phase === 'slip' ? (l.slip?.outcome ?? null) : null;
+      });
+      return outcome;
+    })
+    .not.toBeNull();
+  return outcome!;
+}
+
 test.describe('Ledger', () => {
   test('from the title, through the hub and stage card, into a span of four figures', async ({ page }) => {
     test.setTimeout(45_000);
@@ -110,8 +130,100 @@ test.describe('Ledger', () => {
 
     await expect.poll(() => page.evaluate(() => window.__palace!.ledger.state().phase)).toBe('slip');
     expect((await ledgerState(page)).sitting.slips).toBe(1);
-    await expect(page.getByTestId('prompt')).toHaveText(`Wrong: digit ${before.done + 1} was ${figure}, not ${wrong}.`);
+    await expect(page.getByTestId('prompt')).toHaveText('Not quite. Here it is again.');
+    await expect(page.getByTestId('prompt-where')).toContainText(`Digit ${before.done + 1} was ${figure}, not ${wrong}.`);
     expect((await page.evaluate(() => window.__palace!.rewards())).streak).toBe(0);
+  });
+
+  test('a first miss writes the same number again at the same length, and keeps the streak', async ({ page }) => {
+    test.setTimeout(45_000);
+    await enterLedger(page, 'span');
+    await waitForPhase(page, 'recall');
+    expect(await keyBack(page)).toBe('clean');
+    await waitForPhase(page, 'recall');
+    expect((await page.evaluate(() => window.__palace!.rewards())).streak).toBe(1);
+    const before = await ledgerState(page);
+    expect(before.digits).toHaveLength(5);
+
+    expect(await keyWrong(page)).toBe('retry');
+    await waitForPhase(page, 'recall');
+    const again = await ledgerState(page);
+    expect(again.digits).toEqual(before.digits);
+    expect(again.spanLength).toBe(5);
+    expect(again.missesInRow).toBe(1);
+    expect((await page.evaluate(() => window.__palace!.rewards())).streak).toBe(1);
+    await expect(page.getByTestId('ledger-slips')).toHaveAttribute('aria-label', '0 of 3 drop-backs');
+  });
+
+  test('a second miss in a row drops back two figures with the same prefix', async ({ page }) => {
+    test.setTimeout(90_000);
+    await enterLedger(page, 'span');
+    await waitForPhase(page, 'recall');
+    expect(await keyBack(page)).toBe('clean');
+    await waitForPhase(page, 'recall');
+    expect(await keyBack(page)).toBe('clean');
+    await waitForPhase(page, 'recall');
+    const grown = await ledgerState(page);
+    expect(grown.digits).toHaveLength(6);
+
+    expect(await keyWrong(page)).toBe('retry');
+    await waitForPhase(page, 'recall');
+    expect(await keyWrong(page)).toBe('drop');
+    await expect.poll(() => page.evaluate(() => window.__palace!.ledger.state().sitting.drops)).toBe(1);
+    await expect(page.getByTestId('ledger-slips')).toHaveAttribute('aria-label', '1 of 3 drop-backs');
+    expect((await page.evaluate(() => window.__palace!.rewards())).streak).toBe(0);
+
+    await waitForPhase(page, 'recall');
+    const dropped = await ledgerState(page);
+    expect(dropped.digits).toHaveLength(4);
+    expect(dropped.items.slice(0, 6)).toEqual(grown.items.slice(0, 6));
+    expect(dropped.digits).toEqual(grown.items.slice(0, 4));
+  });
+
+  test('three drop-backs end the sitting; Again starts over', async ({ page }) => {
+    // Six misses, each with a slip pause and a number written out again: the longest test here.
+    test.setTimeout(150_000);
+    await enterLedger(page, 'span');
+    const sheet = page.getByTestId('session-sheet');
+
+    for (let drop = 1; drop <= 3; drop++) {
+      expect(await keyWrong(page)).toBe('retry');
+      expect(await keyWrong(page)).toBe('drop');
+      await expect.poll(() => page.evaluate(() => window.__palace!.ledger.state().sitting.drops)).toBe(drop);
+      await expect(page.getByTestId('ledger-slips')).toHaveAttribute('aria-label', `${drop} of 3 drop-backs`);
+      // Never under the start: the number stays at four figures.
+      expect((await ledgerState(page)).spanLength).toBe(4);
+    }
+
+    await expect(sheet).toBeVisible();
+    expect((await ledgerState(page)).sitting.slips).toBe(6);
+
+    await expect(page.getByTestId('session-again')).toHaveClass(/placed/);
+    await page.getByTestId('session-again').click();
+    await expect(sheet).toBeHidden();
+    await expect.poll(() => page.evaluate(() => window.__palace!.screen())).toBe('play');
+    await waitForPhase(page, 'recall');
+    expect((await ledgerState(page)).sitting.slips).toBe(0);
+    expect((await ledgerState(page)).sitting.drops).toBe(0);
+  });
+
+  test('New number draws a fresh number at the start length and keeps the sitting', async ({ page }) => {
+    test.setTimeout(45_000);
+    await enterLedger(page, 'span');
+    await waitForPhase(page, 'recall');
+    expect(await keyBack(page)).toBe('clean');
+    await waitForPhase(page, 'recall');
+    expect((await ledgerState(page)).digits).toHaveLength(5);
+
+    await expect(page.getByTestId('ledger-new')).toBeVisible();
+    await page.getByTestId('ledger-new').click();
+    await expect.poll(async () => (await ledgerState(page)).digits.length).toBe(4);
+    const fresh = await ledgerState(page);
+    expect(fresh.spanLength).toBe(4);
+    expect(fresh.missesInRow).toBe(0);
+    expect(fresh.sitting.clean).toBe(1);
+    await waitForPhase(page, 'recall');
+    expect((await ledgerState(page)).digits).toEqual(fresh.items.slice(0, 4));
   });
 
   test('long numbers are held as pegs, then keyed back from the keyboard', async ({ page }) => {
@@ -130,8 +242,9 @@ test.describe('Ledger', () => {
       const a = await ledgerAnswer(page);
       await page.keyboard.press(String((a as { figure: number }).figure));
     }
-    await expect.poll(() => page.evaluate(() => window.__palace!.ledger.state().phase)).toBe('clean');
-    expect((await ledgerState(page)).sitting.clean).toBe(1);
+    // 'clean' shows for under a second before the next number is written, so wait on the tally rather than the phase.
+    await expect.poll(async () => (await ledgerState(page)).sitting.clean).toBe(1);
+    expect((await ledgerState(page)).sitting.slips).toBe(0);
   });
 
   test('the pegs drill: four right answers alternate pick and key, then one wrong', async ({ page }) => {
@@ -143,7 +256,9 @@ test.describe('Ledger', () => {
       await waitForPhase(page, 'ask');
       kinds.push((await ledgerState(page)).question!.kind);
       await answerRight(page);
-      await waitForPhase(page, 'right');
+      // 'right' shows for under a second before the next question, so wait on the tally rather than the phase.
+      await expect.poll(async () => (await ledgerState(page)).sitting.asked, { timeout: 15_000 }).toBe(i);
+      expect((await ledgerState(page)).sitting.right).toBe(i);
     }
     // The sitting runs sixteen questions, so four is well short of the end.
     expect(kinds).toEqual(['pick', 'key', 'pick', 'key']);

@@ -4,7 +4,8 @@ import { ComboMeter } from '../rewards/ComboMeter';
 import { useRewards } from '../rewards/store';
 import { RoomsMark, StagesMark, useInsetReporter } from '../ui/Hud';
 import { bellDom, bellRects } from './fx';
-import { SLIPS_PER_SITTING, echoProgress, stepLabel } from './logic';
+import { DROPS_PER_SITTING, missTitle } from '../game/span';
+import { echoProgress, stepLabel } from './logic';
 import { useEcho } from './store';
 
 function Prompt() {
@@ -12,6 +13,7 @@ function Prompt() {
   const length = useEcho((s) => s.line.length);
   const done = useEcho((s) => s.recall.done);
   const slip = useEcho((s) => s.slip);
+  const ends = useEcho((s) => s.sitting.drops >= DROPS_PER_SITTING);
   const reverse = useEcho((s) => s.stage().order === 'reverse');
   let title = 'Listen.';
   let sub = `Line of ${length}`;
@@ -24,8 +26,8 @@ function Prompt() {
     sub = `Line of ${length - 1}`;
     tone = 'correct';
   } else if (phase === 'slip' && slip) {
-    title = 'Not that bell.';
-    sub = `It ran ${slip.expected.map(stepLabel).join(' · ')}`;
+    title = missTitle(slip.outcome, slip.next, ends);
+    sub = `${slip.wanted.length > 1 ? 'Bells' : 'Bell'} ${stepLabel(slip.wanted)} ${slip.wanted.length > 1 ? 'were' : 'was'} next.`;
     tone = 'miss';
   }
   return (
@@ -40,11 +42,12 @@ function Prompt() {
   );
 }
 
-/** One hairline: the stage, its best line against the mastery bar, the run, the slips, End. */
+/** One hairline: the stage, its best line against the mastery bar, the run, the drop-backs, New tune, End. */
 function Meta() {
   const stage = useEcho((s) => s.stage)();
   const record = useEcho((s) => s.record);
-  const slips = useEcho((s) => s.sitting.slips);
+  const drops = useEcho((s) => s.sitting.drops);
+  const newTune = useEcho((s) => s.newTune);
   const end = useEcho((s) => s.end);
   const prog = echoProgress(stage, record);
   return (
@@ -61,11 +64,14 @@ function Meta() {
         <RunNumeral />
         <ComboMeter />
       </span>
-      <span className="echo-slips" role="img" aria-label={`${slips} of ${SLIPS_PER_SITTING} slips`} data-testid="echo-slips">
-        {Array.from({ length: SLIPS_PER_SITTING }, (_, i) => (
-          <span key={i} className={`echo-slip ${i < slips ? 'spent' : ''}`} />
+      <span className="echo-slips" role="img" aria-label={`${drops} of ${DROPS_PER_SITTING} drop-backs`} title="Two misses in a row drop you back. Three drop-backs end the sitting." data-testid="echo-slips">
+        {Array.from({ length: DROPS_PER_SITTING }, (_, i) => (
+          <span key={i} className={`echo-slip ${i < drops ? 'spent' : ''}`} />
         ))}
       </span>
+      <button className="meta-action" onClick={newTune} data-testid="echo-new">
+        New tune
+      </button>
       <button className="meta-action" onClick={end} data-testid="session-end">
         End
       </button>

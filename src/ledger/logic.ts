@@ -119,13 +119,6 @@ export function key(expected: readonly number[], done: number, digit: number): K
   return { kind: next >= expected.length ? 'line' : 'step', done: next };
 }
 
-/** The next number's length: a step longer after a clean one (never past the most), a step shorter after a slip (never under the start). */
-export function nextLength(stage: Pick<LedgerStage, 'start' | 'step' | 'most'>, length: number, clean: boolean): number {
-  return clean ? Math.min(stage.most, length + stage.step) : Math.max(stage.start, length - stage.step);
-}
-
-/** Missed numbers in a sitting before the page closes. */
-export const SLIPS_PER_SITTING = 3;
 /** Questions in a sitting of a peg stage. */
 export const DRILL_QUESTIONS = 16;
 

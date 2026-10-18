@@ -246,8 +246,9 @@ test.describe('Faces', () => {
 
     const answer = (await page.evaluate(() => window.__palace!.faces.answer()))!;
     await page.keyboard.press(String(answer));
-    await expect.poll(() => phaseOf(page)).toBe('right');
-    expect((await facesState(page)).sitting.right).toBe(1);
+    // 'right' shows for under a second before the next face, so wait on the tally rather than the phase.
+    await expect.poll(async () => (await facesState(page)).sitting.right).toBe(1);
+    expect((await facesState(page)).sitting.slips).toBe(0);
   });
 
   test('casts are stable across reloads', async ({ page }) => {

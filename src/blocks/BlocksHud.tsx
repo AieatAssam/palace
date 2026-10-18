@@ -4,7 +4,8 @@ import { useRewards } from '../rewards/store';
 import { RoomsMark, StagesMark, useInsetReporter } from '../ui/Hud';
 import { blockDom, blockRects } from './fx';
 import { blockLayout } from './layout';
-import { SLIPS_PER_SITTING, blocksProgress } from './logic';
+import { DROPS_PER_SITTING, missTitle } from '../game/span';
+import { blocksProgress } from './logic';
 import { useBlocks } from './store';
 
 function Prompt() {
@@ -12,6 +13,8 @@ function Prompt() {
   const length = useBlocks((s) => s.line.length);
   const done = useBlocks((s) => s.done);
   const reverse = useBlocks((s) => s.stage().order === 'reverse');
+  const slip = useBlocks((s) => s.slip);
+  const ends = useBlocks((s) => s.sitting.drops >= DROPS_PER_SITTING);
   let title = 'Watch.';
   let sub = `Line of ${length}`;
   let tone = '';
@@ -22,9 +25,9 @@ function Prompt() {
     title = 'Every one.';
     sub = `Line of ${done}`;
     tone = 'correct';
-  } else if (phase === 'slip') {
-    title = 'Not that block.';
-    sub = 'The green block was next';
+  } else if (phase === 'slip' && slip) {
+    title = missTitle(slip.outcome, slip.next, ends);
+    sub = 'The green block was next.';
     tone = 'miss';
   }
   return (
@@ -52,11 +55,12 @@ function Caller() {
   );
 }
 
-/** One hairline: the stage, its best line against the mastery bar, the run, the slips, End. */
+/** One hairline: the stage, its best line against the mastery bar, the run, the drop-backs, New line, End. */
 function Meta() {
   const stage = useBlocks((s) => s.stage)();
   const record = useBlocks((s) => s.record);
-  const slips = useBlocks((s) => s.sitting.slips);
+  const drops = useBlocks((s) => s.sitting.drops);
+  const newLine = useBlocks((s) => s.newLine);
   const end = useBlocks((s) => s.end);
   const prog = blocksProgress(stage, record);
   return (
@@ -73,11 +77,14 @@ function Meta() {
         <RunNumeral />
         <ComboMeter />
       </span>
-      <span className="echo-slips" role="img" aria-label={`${slips} of ${SLIPS_PER_SITTING} slips`} data-testid="blocks-slips">
-        {Array.from({ length: SLIPS_PER_SITTING }, (_, i) => (
-          <span key={i} className={`echo-slip ${i < slips ? 'spent' : ''}`} />
+      <span className="echo-slips" role="img" aria-label={`${drops} of ${DROPS_PER_SITTING} drop-backs`} title="Two misses in a row drop you back. Three drop-backs end the sitting." data-testid="blocks-slips">
+        {Array.from({ length: DROPS_PER_SITTING }, (_, i) => (
+          <span key={i} className={`echo-slip ${i < drops ? 'spent' : ''}`} />
         ))}
       </span>
+      <button className="meta-action" onClick={newLine} data-testid="blocks-new">
+        New line
+      </button>
       <button className="meta-action" onClick={end} data-testid="session-end">
         End
       </button>
