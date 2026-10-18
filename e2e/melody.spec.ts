@@ -177,6 +177,24 @@ async function onScreen(page: Page, places: Pos[]): Promise<Placed[]> {
 
 /** Tap a place (pointer on either project). Falls back to the keyboard path when no place is on screen. */
 async function playPlace(page: Page, places: Pos[]) {
+  // On a phone the neck window follows each note sounded (the room's preview, the last tap), so
+  // project only once the camera has come to rest, or the tap lands where the place used to be.
+  // The settled flag is set inside a frame, so read it from a frame drawn after this check began:
+  // one already on screen predates the last pluck's new aim.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            new Promise<boolean>((done) => {
+              const from = window.__palace!.render().frames;
+              const wait = () => (window.__palace!.render().frames > from + 1 ? done(window.__palace!.cameraSettled()) : requestAnimationFrame(wait));
+              wait();
+            }),
+        ),
+      { timeout: 20_000 },
+    )
+    .toBe(true);
   const reachable = await onScreen(page, places);
   if (reachable.length) {
     const p = reachable[0]!;
@@ -202,9 +220,19 @@ async function wrongPlaces(page: Page, w: Wanted): Promise<Pos[]> {
 async function playWanted(page: Page) {
   const w = await wanted(page);
   if (!w) throw new Error('not the player’s turn');
-  const before = (await melodyState(page)).at;
+  const before = await melodyState(page);
   await playPlace(page, w.places);
-  await expect.poll(async () => (await melodyState(page)).at, { timeout: 15_000 }).toBeGreaterThan(before);
+  // The last note of a from-memory line holds `at` for under a second before the room replays
+  // from 0, so also count a grown span (or the tune going to playback) as moving on.
+  await expect
+    .poll(
+      async () => {
+        const s = await melodyState(page);
+        return s.at > before.at || s.span > before.span || s.phase === 'playback' || s.phase === 'done';
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
 }
 
 test.describe('Fretboard melody', () => {
